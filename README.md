@@ -57,9 +57,27 @@ El módulo `pricing` descarga el catálogo público de Compute Engine (Cloud Bil
 |---|---|---|
 | Windows 10/11 (x64 o ARM64) | `gcetools-…-setup.exe` (instalador) o `.zip` portable | WebView2 Runtime (ya incluido en Windows 10/11 actualizados; si falta, la app ofrece instalarlo) |
 | macOS 11+ (Intel y Apple Silicon) | `gceTools.app` en `.zip`, binario universal | — |
-| Linux x64 | `.tar.gz` | `libgtk-3-0` y `libwebkit2gtk-4.1-0` |
+| Debian 12+ / Ubuntu 22.04+ (x64) | `.deb` | Dependencias resueltas por `apt` |
+| Fedora 36+ / RHEL 9+ / openSUSE (x64) | `.rpm` | Dependencias resueltas por `dnf` / `zypper` |
+| Cualquier Linux x64 | `.AppImage` o `.tar.gz` | GTK 3 y WebKitGTK 4.1 instalados (vienen con GNOME en las distros actuales) |
 
 Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas programadas.
+
+En Linux:
+
+```bash
+sudo apt install ./gcetools-0.2.1-linux-amd64.deb
+```
+
+```bash
+sudo dnf install ./gcetools-0.2.1-linux-x86_64.rpm
+```
+
+```bash
+chmod +x gcetools-0.2.1-linux-x86_64.AppImage && ./gcetools-0.2.1-linux-x86_64.AppImage
+```
+
+El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
 
 **Mientras los binarios no estén firmados:**
 - **Windows:** SmartScreen avisa de "editor desconocido". Hay que pulsar "Más información" y luego "Ejecutar de todas formas".
@@ -79,7 +97,7 @@ El workflow [.github/workflows/build.yml](.github/workflows/build.yml) ejecuta l
 
 | Plataforma | Qué genera |
 |---|---|
-| Linux | `.tar.gz` |
+| Linux | `.deb`, `.rpm`, `.AppImage` y `.tar.gz` (script [build/linux/package.sh](build/linux/package.sh), con nfpm y appimagetool) |
 | Windows | `.zip` e instalador NSIS |
 | macOS | `.app` universal en `.zip` |
 
@@ -97,7 +115,7 @@ La app gráfica de macOS solo se puede compilar en un Mac (o en el runner `macos
 
 ## Requisitos de desarrollo
 
-- Go 1.23+ y Node 20+
+- Go 1.23+ y Node 22+ (CI usa Node 26)
 - CLI de Wails: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 - Dependencias del sistema (`wails doctor` las comprueba):
   - **Linux:** `libgtk-3-dev` y `libwebkit2gtk-4.1-dev` (Debian 13 / Ubuntu 24.04 solo traen la 4.1, de ahí `-tags webkit2_41`)
@@ -123,12 +141,13 @@ npm --prefix frontend run dev              # abre http://localhost:5173 con dato
 ### Línea de comandos (tareas programadas)
 
 ```bash
-gcetools scan --out inventario.xlsx
-gcetools scan --auth sa --key sa.json --query "parent:folders/123456" --out inv.zip --csv-sep ";"
-gcetools scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
+gcetools-cli scan --out inventario.xlsx
+gcetools-cli scan --auth sa --key sa.json --query "parent:folders/123456" --out inv.zip --csv-sep ";"
+gcetools-cli scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
+gcetools-cli version
 ```
 
-En Windows el binario de la GUI no escribe en la consola. Para tareas programadas compila `go build -o gcetools-cli.exe ./cmd/gcetools-cli`.
+`gcetools-cli` viene en todos los paquetes y funciona igual en Windows, macOS y Linux. En Linux y macOS el binario de la app también acepta `gcetools scan …`; en Windows no, porque la app gráfica no escribe en la consola.
 
 ## Permisos IAM
 
@@ -164,7 +183,7 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 
 ## Actualizaciones
 
-La app comprueba al iniciarse si hay una release más reciente en GitHub; la comprobación se puede desactivar en "Acerca de". En la línea de comandos: `gcetools version`. La consulta es un GET anónimo a la API pública de GitHub y no envía datos del usuario ni del inventario.
+La app comprueba al iniciarse si hay una release más reciente en GitHub; la comprobación se puede desactivar en "Acerca de". En la línea de comandos: `gcetools-cli version`. La consulta es un GET anónimo a la API pública de GitHub y no envía datos del usuario ni del inventario.
 
 ## Publicar una versión
 

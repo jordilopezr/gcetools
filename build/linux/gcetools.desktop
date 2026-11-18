@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=gceTools
+GenericName=Inventario de Compute Engine
+Comment=Inventario de Google Compute Engine al estilo RVTools
+Exec=gcetools
+Icon=gcetools
+Terminal=false
+Categories=Development;
+Keywords=GCP;GCE;Compute;Inventario;RVTools;
+StartupWMClass=gcetools

@@ -1,4 +1,4 @@
-# GCETools – set de iconos
+# gceTools – set de iconos
 
 | Carpeta | Contenido |
 |---|---|

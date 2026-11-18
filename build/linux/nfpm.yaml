@@ -1,0 +1,62 @@
+# Linux packages (.deb / .rpm) built with nfpm by build/linux/package.sh.
+# ${VERSION}, ${ARCH} and ${SRC} are substituted by package.sh.
+name: gcetools
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: semver
+section: utils
+priority: optional
+maintainer: Jordi Lopez Reyes
+description: |
+  Inventario de Google Compute Engine al estilo RVTools.
+  Recorre los proyectos accesibles y exporta VMs, discos, red, snapshots,
+  coste estimado y hallazgos de salud a XLSX, CSV o JSON.
+vendor: Jordi Lopez Reyes
+homepage: https://gcetools.jordilopezr.com
+license: GPL-3.0-only
+
+overrides:
+  deb:
+    depends:
+      - libgtk-3-0t64 | libgtk-3-0
+      - libwebkit2gtk-4.1-0
+  rpm:
+    depends:
+      - gtk3
+      - (webkit2gtk4.1 or libwebkit2gtk-4_1-0)
+
+contents:
+  - src: ${SRC}/gcetools
+    dst: /usr/bin/gcetools
+    file_info: {mode: 0755}
+  - src: ${SRC}/gcetools-cli
+    dst: /usr/bin/gcetools-cli
+    file_info: {mode: 0755}
+  - src: build/linux/gcetools.desktop
+    dst: /usr/share/applications/gcetools.desktop
+    file_info: {mode: 0644}
+  - src: assets/brand/linux/gcetools.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/gcetools.svg
+  - src: assets/brand/linux/gcetools-16.png
+    dst: /usr/share/icons/hicolor/16x16/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-24.png
+    dst: /usr/share/icons/hicolor/24x24/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-32.png
+    dst: /usr/share/icons/hicolor/32x32/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-48.png
+    dst: /usr/share/icons/hicolor/48x48/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-64.png
+    dst: /usr/share/icons/hicolor/64x64/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-256.png
+    dst: /usr/share/icons/hicolor/256x256/apps/gcetools.png
+  - src: assets/brand/linux/gcetools-512.png
+    dst: /usr/share/icons/hicolor/512x512/apps/gcetools.png
+  - src: LICENSE
+    dst: /usr/share/doc/gcetools/copyright
+    file_info: {mode: 0644}
+  - src: README.md
+    dst: /usr/share/doc/gcetools/README.md
+    file_info: {mode: 0644}
