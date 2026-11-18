@@ -1,0 +1,176 @@
+# Builds gceTools on native runners for Linux, Windows and macOS.
+# - Every push / PR: tests + builds, binaries uploaded as workflow artifacts.
+# - Tag v*: additionally publishes a GitHub Release with all packages.
+# macOS signing/notarization runs only if the APPLE_* secrets exist;
+# otherwise the .app is unsigned (see README, "Instalación").
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WAILS_VERSION: v2.17.1
+  NODE_VERSION: "22"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend build (needed by go:embed)
+        run: npm ci && npm run build
+        working-directory: frontend
+      - name: Linux GUI deps (for vet of the main package)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - run: go vet -tags webkit2_41 ./...
+      - run: go test -race -tags webkit2_41 ./...
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            os: ubuntu-24.04
+            platform: linux/amd64
+            tags: webkit2_41
+          - name: windows-amd64
+            os: windows-latest
+            platform: windows/amd64
+            nsis: true
+          - name: macos-universal
+            os: macos-latest
+            platform: darwin/universal
+    runs-on: ${{ matrix.os }}
+    env:
+      # Exposed at job level so the signing step's `if:` can test for it.
+      APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Linux deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: NSIS
+        if: matrix.nsis
+        run: choco install nsis -y --no-progress
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Version
+        id: v
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build GUI
+        shell: bash
+        run: |
+          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "-s -w")
+          [[ -n "${{ matrix.tags }}" ]] && args+=(-tags "${{ matrix.tags }}")
+          [[ "${{ matrix.nsis }}" == "true" ]] && args+=(-nsis)
+          wails build "${args[@]}"
+
+      - name: Build CLI
+        shell: bash
+        run: |
+          mkdir -p dist
+          ext=""; [[ "$RUNNER_OS" == "Windows" ]] && ext=".exe"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            for a in amd64 arm64; do GOARCH=$a CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/gcetools-cli-$a ./cmd/gcetools-cli; done
+            lipo -create -output "dist/gcetools-cli" dist/gcetools-cli-amd64 dist/gcetools-cli-arm64 && rm dist/gcetools-cli-*64
+          else
+            CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "dist/gcetools-cli${ext}" ./cmd/gcetools-cli
+          fi
+
+      - name: Sign and notarize (macOS, optional)
+        if: runner.os == 'macOS' && env.APPLE_CERT_P12 != ''
+        env:
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}  # "Developer ID Application: Org (TEAMID)"
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}    # app-specific password
+        run: |
+          # APPLE_CERT_P12 (job env): base64 of the "Developer ID Application" .p12
+          app=$(find build/bin -maxdepth 1 -name "*.app" | head -1)
+          kc=build.keychain; pw=$(uuidgen)
+          echo "$APPLE_CERT_P12" | base64 --decode > cert.p12
+          security create-keychain -p "$pw" $kc && security default-keychain -s $kc && security unlock-keychain -p "$pw" $kc
+          security import cert.p12 -k $kc -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" $kc
+          rm cert.p12
+          codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGN_IDENTITY" "$app"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGN_IDENTITY" dist/gcetools-cli
+          ditto -c -k --keepParent "$app" notarize.zip
+          xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$app"
+
+      - name: Package
+        shell: bash
+        run: |
+          v="${{ steps.v.outputs.version }}"; n="gcetools-$v-${{ matrix.name }}"
+          case "$RUNNER_OS" in
+            Linux)
+              cp build/bin/gcetools dist/ && cp README.md dist/
+              tar -C dist -czf "$n.tar.gz" . ;;
+            Windows)
+              cp build/bin/gcetools.exe dist/ && cp README.md dist/
+              7z a "$n.zip" ./dist/* > /dev/null
+              cp build/bin/*installer*.exe "$n-setup.exe" ;;
+            macOS)
+              cp -R "$(find build/bin -maxdepth 1 -name '*.app' | head -1)" dist/ && cp README.md dist/
+              ditto -c -k --keepParent dist "$n.zip" ;;
+          esac
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gcetools-${{ matrix.name }}
+          path: |
+            gcetools-*.tar.gz
+            gcetools-*.zip
+            gcetools-*-setup.exe
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "gceTools $GITHUB_REF_NAME" --generate-notes

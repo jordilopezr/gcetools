@@ -1,0 +1,314 @@
+// Package collect reads Compute Engine resources for one project and turns
+// them into inventory rows. One collector per resource type; each uses
+// aggregatedList where available so a project costs one call (plus pages)
+// per resource type regardless of how many zones it uses.
+//
+// Core collectors (Compute API) always run. Optional modules (OS Config,
+// Cloud Monitoring, Recommender) run only when their service is set; if their
+// API is disabled or not permitted the project is still reported as OK.
+package collect
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"gcetools/internal/model"
+
+	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
+	monitoring "google.golang.org/api/monitoring/v3"
+	osconfig "google.golang.org/api/osconfig/v1"
+	recommender "google.golang.org/api/recommender/v1"
+)
+
+// Services groups the API clients. Nil optional services disable their module.
+type Services struct {
+	Compute     *compute.Service
+	OSConfig    *osconfig.Service
+	Monitoring  *monitoring.Service
+	Recommender *recommender.Service
+	MetricsDays int // look-back window for gPerf (default 30)
+}
+
+// Stats summarises one project for the gProject sheet.
+type Stats struct {
+	Status     string
+	VMs        int64
+	VMsRunning int64
+	VCPU       int64
+	MemoryGB   float64
+	Disks      int64
+	DiskGB     float64
+}
+
+type vmRef struct {
+	name, zone, machineType, status string
+	vcpu                            int64
+	memoryGB                        float64
+}
+
+type collector struct {
+	ctx     context.Context
+	svc     *compute.Service
+	svcs    Services
+	project string
+	inv     *model.Inventory
+	now     time.Time
+
+	sheets  map[string]*model.Sheet
+	disks   map[string]*compute.Disk        // selfLink -> disk
+	mtypes  map[string]*compute.MachineType // zone/name -> type (nil = lookup failed)
+	vms     map[string]vmRef                // instance id -> summary (for metrics)
+	zones   map[string]bool                 // zones holding VMs or disks
+	regions map[string]bool                 // regions holding VMs, disks or addresses
+	stats   Stats
+}
+
+type step struct {
+	name     string
+	fn       func() error
+	optional bool
+}
+
+// Project runs every enabled collector against one project. report is called
+// with the collector name before it starts. Errors are recorded in inv.
+func Project(ctx context.Context, svcs Services, projectID string, inv *model.Inventory, report func(step string)) Stats {
+	c := &collector{
+		ctx: ctx, svc: svcs.Compute, svcs: svcs, project: projectID, inv: inv, now: time.Now(),
+		sheets:  map[string]*model.Sheet{},
+		disks:   map[string]*compute.Disk{},
+		mtypes:  map[string]*compute.MachineType{},
+		vms:     map[string]vmRef{},
+		zones:   map[string]bool{},
+		regions: map[string]bool{},
+	}
+	for _, s := range inv.Sheets {
+		c.sheets[s.Name] = s
+	}
+
+	steps := []step{
+		{name: "disks", fn: c.collectDisks}, // first: instances need the disk map
+		{name: "instances", fn: c.collectInstances},
+		{name: "snapshots", fn: c.collectSnapshots},
+		{name: "images", fn: c.collectImages},
+		{name: "migs", fn: c.collectMIGs},
+		{name: "templates", fn: c.collectTemplates},
+		{name: "reservations", fn: c.collectReservations},
+		{name: "commitments", fn: c.collectCommitments},
+		{name: "soletenant", fn: c.collectSoleTenant},
+		{name: "networks", fn: c.collectNetworks},
+		{name: "subnets", fn: c.collectSubnets},
+		{name: "firewalls", fn: c.collectFirewalls},
+		{name: "addresses", fn: c.collectAddresses},
+		{name: "quotas", fn: c.collectQuotas},
+	}
+	if svcs.OSConfig != nil {
+		steps = append(steps, step{name: "osconfig", fn: c.collectOSInventory, optional: true})
+	}
+	if svcs.Monitoring != nil {
+		steps = append(steps, step{name: "monitoring", fn: c.collectMetrics, optional: true})
+	}
+	if svcs.Recommender != nil {
+		steps = append(steps, step{name: "recommender", fn: c.collectRecommendations, optional: true})
+	}
+
+	failed := 0
+	var skipped []string
+	for i, st := range steps {
+		if ctx.Err() != nil {
+			c.stats.Status = "Cancelado"
+			return c.stats
+		}
+		report(st.name)
+		err := st.fn()
+		if err == nil {
+			continue
+		}
+		if ctx.Err() != nil {
+			c.stats.Status = "Cancelado"
+			return c.stats
+		}
+		kind, msg := Classify(err)
+		inv.AddError(model.ScanError{Project: projectID, Collector: st.name, Kind: kind, Message: msg})
+		if st.optional {
+			skipped = append(skipped, st.name)
+			continue
+		}
+		failed++
+		// If the very first call is refused, the rest will be too: stop early.
+		if i == 0 && kind != model.ErrOther {
+			c.stats.Status = map[model.ErrorKind]string{
+				model.ErrAPIDisabled: "Compute API deshabilitada",
+				model.ErrPermission:  "Sin permisos",
+				model.ErrNotFound:    "No encontrado",
+			}[kind]
+			return c.stats
+		}
+	}
+	switch {
+	case failed > 0:
+		c.stats.Status = fmt.Sprintf("Parcial (%d errores)", failed)
+	case len(skipped) > 0:
+		c.stats.Status = "OK (sin " + strings.Join(skipped, ", ") + ")"
+	default:
+		c.stats.Status = "OK"
+	}
+	return c.stats
+}
+
+// Classify maps an API error to a kind the UI can explain.
+func Classify(err error) (model.ErrorKind, string) {
+	var gerr *googleapi.Error
+	if !errors.As(err, &gerr) {
+		return model.ErrOther, err.Error()
+	}
+	msg := gerr.Message
+	if msg == "" {
+		msg = gerr.Error()
+	}
+	switch gerr.Code {
+	case 403:
+		for _, e := range gerr.Errors {
+			if e.Reason == "accessNotConfigured" {
+				return model.ErrAPIDisabled, msg
+			}
+		}
+		if strings.Contains(msg, "has not been used") || strings.Contains(msg, "is disabled") ||
+			strings.Contains(gerr.Body, "SERVICE_DISABLED") {
+			return model.ErrAPIDisabled, msg
+		}
+		return model.ErrPermission, msg
+	case 404:
+		return model.ErrNotFound, msg
+	}
+	return model.ErrOther, msg
+}
+
+func (c *collector) add(sheet string, r model.Row) {
+	c.sheets[sheet].Add(r)
+}
+
+// ---------- small helpers ----------
+
+// last returns the final path segment of a resource URL.
+func last(u string) string {
+	if i := strings.LastIndex(u, "/"); i >= 0 {
+		return u[i+1:]
+	}
+	return u
+}
+
+// projectOf extracts the project id from a resource URL.
+func projectOf(u string) string {
+	const marker = "/projects/"
+	i := strings.Index(u, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := u[i+len(marker):]
+	if j := strings.Index(rest, "/"); j >= 0 {
+		return rest[:j]
+	}
+	return rest
+}
+
+func regionOfZone(zone string) string {
+	if i := strings.LastIndex(zone, "-"); i > 0 {
+		return zone[:i]
+	}
+	return zone
+}
+
+func ts(s string) any {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	return t
+}
+
+func joinLast(urls []string) string {
+	out := make([]string, len(urls))
+	for i, u := range urls {
+		out[i] = last(u)
+	}
+	return strings.Join(out, "; ")
+}
+
+func labels(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + "=" + m[k]
+	}
+	return strings.Join(parts, "; ")
+}
+
+func encryption(k *compute.CustomerEncryptionKey) string {
+	switch {
+	case k == nil:
+		return "Google"
+	case k.KmsKeyName != "":
+		return "CMEK"
+	case k.Sha256 != "" || k.RsaEncryptedKey != "":
+		return "CSEK"
+	}
+	return "Google"
+}
+
+func round2(f float64) float64 {
+	return float64(int64(f*100+0.5)) / 100
+}
+
+func boolPtr(b *bool, def bool) bool {
+	if b == nil {
+		return def
+	}
+	return *b
+}
+
+// licenseCategory groups a license name into a billing-relevant family.
+func licenseCategory(name string) string {
+	n := strings.ToLower(name)
+	switch {
+	// Licenses added by migration/import tooling, not an OS: skip them for OS detection.
+	case strings.Contains(n, "vmmigration") || strings.Contains(n, "virtual-disk-import") ||
+		strings.Contains(n, "migrate-to-vms"):
+		return "Herramienta"
+	case strings.Contains(n, "sql"):
+		return "SQL Server"
+	case strings.Contains(n, "windows"):
+		return "Windows"
+	case strings.Contains(n, "rhel"):
+		return "RHEL"
+	case strings.Contains(n, "sles"):
+		return "SLES"
+	case strings.Contains(n, "ubuntu-pro"):
+		return "Ubuntu Pro"
+	case strings.Contains(n, "ubuntu"):
+		return "Ubuntu"
+	case strings.Contains(n, "debian"):
+		return "Debian"
+	case strings.Contains(n, "rocky"):
+		return "Rocky Linux"
+	case strings.Contains(n, "centos"):
+		return "CentOS"
+	case strings.HasPrefix(n, "cos"):
+		return "Container-Optimized OS"
+	}
+	return "Otra"
+}

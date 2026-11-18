@@ -1,0 +1,11 @@
+build/bin/
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+frontend/package.json.md5
+*.xlsx
+*.zip
+*.tar.gz
+*-key*.json
+sa*.json
+.DS_Store

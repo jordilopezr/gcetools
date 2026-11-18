@@ -1,0 +1,110 @@
+/* Material 3 color roles (blue seed) + typescale + shape.
+   Light is the default; dark follows the OS unless the user forces a theme. */
+:root {
+  --md-primary: #0b57d0;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #d3e3fd;
+  --md-on-primary-container: #041e49;
+  --md-secondary-container: #c2e7ff;
+  --md-on-secondary-container: #001d35;
+  --md-tertiary: #146c2e;
+  --md-tertiary-container: #c4eed0;
+  --md-on-tertiary-container: #072711;
+  --md-error: #b3261e;
+  --md-error-container: #f9dedc;
+  --md-on-error-container: #410e0b;
+  --md-warning-container: #ffdf99;
+  --md-on-warning-container: #261a00;
+  --md-surface: #f8fafd;
+  --md-surface-container-lowest: #ffffff;
+  --md-surface-container-low: #f3f6fc;
+  --md-surface-container: #f0f4f9;
+  --md-surface-container-high: #e9eef6;
+  --md-surface-container-highest: #dde3ea;
+  --md-on-surface: #1f1f1f;
+  --md-on-surface-variant: #444746;
+  --md-outline: #747775;
+  --md-outline-variant: #c4c7c5;
+  --md-inverse-surface: #303030;
+  --md-inverse-on-surface: #f2f2f2;
+  --md-scrim: rgb(0 0 0 / 0.32);
+
+  --md-font: "Roboto Flex Variable", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --md-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+
+  --md-shape-xs: 4px;
+  --md-shape-s: 8px;
+  --md-shape-m: 12px;
+  --md-shape-l: 16px;
+  --md-shape-xl: 28px;
+  --md-shape-full: 999px;
+
+  --md-elev-1: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --md-elev-2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --md-elev-3: 0 4px 8px 3px rgb(0 0 0 / 0.15), 0 1px 3px rgb(0 0 0 / 0.3);
+
+  --md-motion-standard: cubic-bezier(0.2, 0, 0, 1);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --md-primary: #a8c7fa;
+    --md-on-primary: #062e6f;
+    --md-primary-container: #0842a0;
+    --md-on-primary-container: #d3e3fd;
+    --md-secondary-container: #004a77;
+    --md-on-secondary-container: #c2e7ff;
+    --md-tertiary: #6dd58c;
+    --md-tertiary-container: #0f5223;
+    --md-on-tertiary-container: #c4eed0;
+    --md-error: #f2b8b5;
+    --md-error-container: #8c1d18;
+    --md-on-error-container: #f9dedc;
+    --md-warning-container: #5c4300;
+    --md-on-warning-container: #ffdf99;
+    --md-surface: #131314;
+    --md-surface-container-lowest: #0e0e0e;
+    --md-surface-container-low: #1b1b1b;
+    --md-surface-container: #1e1f20;
+    --md-surface-container-high: #282a2c;
+    --md-surface-container-highest: #333537;
+    --md-on-surface: #e3e3e3;
+    --md-on-surface-variant: #c4c7c5;
+    --md-outline: #8e918f;
+    --md-outline-variant: #444746;
+    --md-inverse-surface: #e3e3e3;
+    --md-inverse-on-surface: #303030;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --md-primary: #a8c7fa;
+  --md-on-primary: #062e6f;
+  --md-primary-container: #0842a0;
+  --md-on-primary-container: #d3e3fd;
+  --md-secondary-container: #004a77;
+  --md-on-secondary-container: #c2e7ff;
+  --md-tertiary: #6dd58c;
+  --md-tertiary-container: #0f5223;
+  --md-on-tertiary-container: #c4eed0;
+  --md-error: #f2b8b5;
+  --md-error-container: #8c1d18;
+  --md-on-error-container: #f9dedc;
+  --md-warning-container: #5c4300;
+  --md-on-warning-container: #ffdf99;
+  --md-surface: #131314;
+  --md-surface-container-lowest: #0e0e0e;
+  --md-surface-container-low: #1b1b1b;
+  --md-surface-container: #1e1f20;
+  --md-surface-container-high: #282a2c;
+  --md-surface-container-highest: #333537;
+  --md-on-surface: #e3e3e3;
+  --md-on-surface-variant: #c4c7c5;
+  --md-outline: #8e918f;
+  --md-outline-variant: #444746;
+  --md-inverse-surface: #e3e3e3;
+  --md-inverse-on-surface: #303030;
+  color-scheme: dark;
+}

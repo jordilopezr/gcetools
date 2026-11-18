@@ -1,0 +1,300 @@
+// Package core is the UI-agnostic engine shared by the desktop app and the
+// CLI: connect, discover projects, scan, and build the inventory.
+package core
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"gcetools/internal/auth"
+	"gcetools/internal/collect"
+	"gcetools/internal/health"
+	"gcetools/internal/model"
+	"gcetools/internal/pricing"
+
+	crm "google.golang.org/api/cloudresourcemanager/v3"
+	compute "google.golang.org/api/compute/v1"
+	monitoring "google.golang.org/api/monitoring/v3"
+	"google.golang.org/api/option"
+	osconfig "google.golang.org/api/osconfig/v1"
+	recommender "google.golang.org/api/recommender/v1"
+)
+
+const Version = "0.1.0"
+
+type Engine struct {
+	Session *auth.Session
+	Client  *http.Client
+}
+
+func NewEngine(s *auth.Session, rps float64) *Engine {
+	return &Engine{Session: s, Client: NewHTTPClient(s.TokenSource, rps)}
+}
+
+type Project struct {
+	ID      string            `json:"id"`
+	Number  string            `json:"number"`
+	Name    string            `json:"name"`
+	Parent  string            `json:"parent"`
+	State   string            `json:"state"`
+	Created string            `json:"created"`
+	Labels  map[string]string `json:"labels"`
+}
+
+// ListProjects returns every project the identity can see, optionally
+// narrowed by a Resource Manager search query (e.g. "parent:folders/123").
+func (e *Engine) ListProjects(ctx context.Context, query string) ([]Project, error) {
+	svc, err := crm.NewService(ctx, option.WithHTTPClient(e.Client))
+	if err != nil {
+		return nil, err
+	}
+	q := strings.TrimSpace(query)
+	if !strings.Contains(q, "state:") {
+		q = strings.TrimSpace("state:ACTIVE " + q)
+	}
+	var out []Project
+	err = svc.Projects.Search().Query(q).Context(ctx).Pages(ctx, func(r *crm.SearchProjectsResponse) error {
+		for _, p := range r.Projects {
+			out = append(out, Project{
+				ID: p.ProjectId, Number: strings.TrimPrefix(p.Name, "projects/"), Name: p.DisplayName,
+				Parent: p.Parent, State: p.State, Created: p.CreateTime, Labels: p.Labels,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		_, msg := collect.Classify(err)
+		return nil, fmt.Errorf("no se pudieron listar proyectos: %s", msg)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// Modules toggles the optional, non-Compute data sources.
+type Modules struct {
+	OSConfig    bool `json:"osconfig"`
+	Monitoring  bool `json:"monitoring"`
+	Recommender bool `json:"recommender"`
+	MetricsDays int  `json:"metricsDays"`
+	// Pricing estimates monthly list-price cost from the Cloud Billing Catalog.
+	Pricing  bool   `json:"pricing"`
+	Currency string `json:"currency"` // ISO 4217, default USD
+}
+
+func AllModules() Modules {
+	return Modules{OSConfig: true, Monitoring: true, Recommender: true, MetricsDays: 30}
+}
+
+type ScanOptions struct {
+	Concurrency int            `json:"concurrency"`
+	Health      health.Options `json:"health"`
+	Modules     Modules        `json:"modules"`
+}
+
+type Progress struct {
+	Total   int    `json:"total"`
+	Done    int    `json:"done"`
+	Project string `json:"project"`
+	Step    string `json:"step"`
+	VMs     int64  `json:"vms"`
+	Errors  int    `json:"errors"`
+	Message string `json:"message"`
+}
+
+// Scan inventories the given projects concurrently. It always returns an
+// inventory (possibly partial if ctx is cancelled).
+func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, onProgress func(Progress)) (*model.Inventory, error) {
+	if opt.Concurrency <= 0 {
+		opt.Concurrency = 8
+	}
+	if opt.Health.StoppedDays == 0 && opt.Health.SnapshotDays == 0 {
+		opt.Health = health.DefaultOptions()
+	}
+	svcs, err := e.services(ctx, opt.Modules)
+	if err != nil {
+		return nil, err
+	}
+
+	inv := collect.NewInventory()
+	inv.Meta = model.Meta{
+		Tool: "gceTools", Version: Version, Identity: e.Session.Identity,
+		AuthMethod: string(e.Session.Method), StartedAt: time.Now(), Projects: len(projects),
+	}
+
+	var (
+		mu    sync.Mutex
+		done  int
+		vms   int64
+		stats = make(map[string]collect.Stats, len(projects))
+	)
+	emit := func(p Progress) {
+		if onProgress == nil {
+			return
+		}
+		mu.Lock()
+		p.Total, p.Done, p.VMs = len(projects), done, vms
+		mu.Unlock()
+		p.Errors = inv.ErrorCount()
+		onProgress(p)
+	}
+
+	jobs := make(chan Project)
+	var wg sync.WaitGroup
+	for w := 0; w < opt.Concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range jobs {
+				st := collect.Project(ctx, svcs, p.ID, inv, func(step string) {
+					emit(Progress{Project: p.ID, Step: step})
+				})
+				mu.Lock()
+				stats[p.ID] = st
+				done++
+				vms += st.VMs
+				mu.Unlock()
+				emit(Progress{Project: p.ID, Step: "done", Message: st.Status})
+			}
+		}()
+	}
+feed:
+	for _, p := range projects {
+		select {
+		case jobs <- p:
+		case <-ctx.Done():
+			break feed
+		}
+	}
+	close(jobs)
+	wg.Wait()
+
+	inv.Meta.FinishedAt = time.Now()
+	inv.Meta.Cancelled = ctx.Err() != nil
+	e.finish(ctx, inv, projects, stats, opt)
+	return inv, nil
+}
+
+func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Project, stats map[string]collect.Stats, opt ScanOptions) {
+	ps := inv.Sheet(collect.SProject)
+	for _, p := range projects {
+		st, scanned := stats[p.ID]
+		status := st.Status
+		if !scanned {
+			status = "No escaneado"
+		}
+		if status == "OK" {
+			inv.Meta.ProjectsOK++
+		}
+		lbl := make([]string, 0, len(p.Labels))
+		for k, v := range p.Labels {
+			lbl = append(lbl, k+"="+v)
+		}
+		sort.Strings(lbl)
+		ps.Add(model.Row{
+			"projectId": p.ID, "number": p.Number, "name": p.Name, "parent": p.Parent, "state": p.State,
+			"scanStatus": status, "vms": st.VMs, "vmsRunning": st.VMsRunning, "vcpu": st.VCPU,
+			"memoryGB": float64(int64(st.MemoryGB*100+0.5)) / 100, "disks": st.Disks, "diskGB": st.DiskGB,
+			"labels": strings.Join(lbl, "; "),
+		})
+	}
+
+	var priced *pricing.Result
+	if opt.Modules.Pricing && ctx.Err() == nil {
+		cat, err := pricing.Load(ctx, opt.Modules.Currency, 24*time.Hour,
+			e.Client, withQuotaProject(e.Client, e.Session.QuotaProject))
+		if err != nil {
+			kind, msg := collect.Classify(err)
+			inv.AddError(model.ScanError{Project: "(todos)", Collector: "pricing", Kind: kind, Message: msg})
+		} else {
+			r := pricing.Apply(inv, pricing.NewIndex(cat))
+			priced = &r
+			inv.Meta.Currency = cat.Currency
+		}
+	}
+
+	health.Evaluate(inv, opt.Health, inv.Meta.FinishedAt)
+
+	es := inv.Sheet(collect.SErrors)
+	for _, er := range inv.Errors {
+		es.Add(model.Row{"project": er.Project, "collector": er.Collector, "kind": string(er.Kind), "message": er.Message})
+	}
+
+	inv.Meta.Errors = len(inv.Errors)
+	m := inv.Meta
+	meta := inv.Sheet(collect.SMeta)
+	for _, kv := range [][2]string{
+		{"Herramienta", m.Tool + " " + m.Version},
+		{"Identidad", m.Identity},
+		{"Método de autenticación", m.AuthMethod},
+		{"Scope OAuth", auth.Scope},
+		{"Módulos opcionales", modulesText(opt.Modules)},
+		{"Quota project", e.Session.QuotaProject},
+		{"Moneda de costes", m.Currency},
+		{"Base de los costes", map[bool]string{true: "Precio de lista on-demand del Cloud Billing Catalog, 730 h/mes; sin SUD, CUD ni descuentos negociados", false: "No estimados"}[priced != nil]},
+		{"Sin tarifa", unpricedText(priced)},
+		{"Inicio", m.StartedAt.Format(time.RFC3339)},
+		{"Fin", m.FinishedAt.Format(time.RFC3339)},
+		{"Duración", m.FinishedAt.Sub(m.StartedAt).Round(time.Second).String()},
+		{"Proyectos seleccionados", fmt.Sprint(m.Projects)},
+		{"Proyectos OK", fmt.Sprint(m.ProjectsOK)},
+		{"Errores", fmt.Sprint(m.Errors)},
+		{"Cancelado", map[bool]string{true: "Sí", false: "No"}[m.Cancelled]},
+	} {
+		meta.Add(model.Row{"property": kv[0], "value": kv[1]})
+	}
+}
+
+func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, error) {
+	var s collect.Services
+	var err error
+	if s.Compute, err = compute.NewService(ctx, option.WithHTTPClient(e.Client)); err != nil {
+		return s, err
+	}
+	s.MetricsDays = m.MetricsDays
+	if m.OSConfig {
+		if s.OSConfig, err = osconfig.NewService(ctx, option.WithHTTPClient(e.Client)); err != nil {
+			return s, err
+		}
+	}
+	if m.Monitoring {
+		if s.Monitoring, err = monitoring.NewService(ctx, option.WithHTTPClient(e.Client)); err != nil {
+			return s, err
+		}
+	}
+	if m.Recommender {
+		rc := withQuotaProject(e.Client, e.Session.QuotaProject)
+		if s.Recommender, err = recommender.NewService(ctx, option.WithHTTPClient(rc)); err != nil {
+			return s, err
+		}
+	}
+	return s, nil
+}
+
+func modulesText(m Modules) string {
+	var on []string
+	if m.OSConfig {
+		on = append(on, "OS Config")
+	}
+	if m.Monitoring {
+		on = append(on, fmt.Sprintf("Cloud Monitoring (%d días)", m.MetricsDays))
+	}
+	if m.Recommender {
+		on = append(on, "Recommender")
+	}
+	if len(on) == 0 {
+		return "ninguno"
+	}
+	return strings.Join(on, ", ")
+}
+
+func unpricedText(r *pricing.Result) string {
+	if r == nil || len(r.Unpriced) == 0 {
+		return ""
+	}
+	return strings.Join(r.Unpriced, "; ")
+}
