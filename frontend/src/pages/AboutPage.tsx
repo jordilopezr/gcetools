@@ -1,5 +1,6 @@
 import { api, type AboutInfo, type UpdateInfo } from '../lib/api'
 import { Icon } from '../components/ui'
+import appIcon from '../assets/gcetools-icon.svg'
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'done' | 'error'
@@ -38,9 +39,7 @@ export default function AboutPage({ about, update, onCheck, autoCheck, setAutoCh
   return (
     <div className="page" style={{ maxWidth: 880 }}>
       <div className="row" style={{ gap: 20 }}>
-        <div className="brand-mark" style={{ width: 72, height: 72, borderRadius: 20 }}>
-          <Icon name="dns" filled className="" />
-        </div>
+        <img src={appIcon} alt="Logotipo de gceTools" width={88} height={88} style={{ flexShrink: 0 }} />
         <div className="col" style={{ gap: 2 }}>
           <h1 className="headline-s">gceTools</h1>
           <span className="body-m muted">Inventario de Google Compute Engine al estilo RVTools</span>

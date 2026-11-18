@@ -11,12 +11,18 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// Window/taskbar icon on Linux (Windows and macOS take theirs from build/).
+//
+//go:embed build/linux-icon.png
+var linuxIcon []byte
 
 func main() {
 	// `gcetools scan ...` runs headless (Linux/macOS; on Windows use gcetools-cli).
@@ -53,6 +59,7 @@ func main() {
 		Mac: &mac.Options{
 			About: &mac.AboutInfo{Title: "gceTools", Message: "Inventario de Compute Engine al estilo RVTools"},
 		},
+		Linux: &linux.Options{Icon: linuxIcon, ProgramName: "gcetools"},
 		Windows: &windows.Options{
 			Theme: windows.SystemDefault, // title bar follows the OS light/dark setting
 		},

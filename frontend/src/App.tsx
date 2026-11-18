@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
 import { Icon, Snackbar, Menu } from './components/ui'
+import appIcon from './assets/gcetools-icon-small.svg' // simplified variant for small sizes
 import ConnectPage from './pages/ConnectPage'
 import ProjectsPage from './pages/ProjectsPage'
 import InventoryPage from './pages/InventoryPage'
@@ -101,7 +102,7 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark"><Icon name="dns" filled /></div>
+          <img className="brand-logo" src={appIcon} alt="" width={36} height={36} />
           <div>
             <div className="brand-name">gceTools</div>
           </div>

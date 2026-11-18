@@ -149,6 +149,7 @@ internal/health           Reglas de gHealth
 internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
 internal/cli              Comando `scan`
 frontend/                 React + TS, tokens Material 3, AG Grid
+assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
 
 Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escribe su colector y regístralo en `Project()` (collect.go). La UI y los exportadores la muestran sin más cambios.
