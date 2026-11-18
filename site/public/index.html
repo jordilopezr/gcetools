@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gceTools · Inventario de Google Compute Engine</title>
+  <meta name="description" content="Inventario de Google Compute Engine al estilo RVTools. Aplicación gratuita y de solo lectura para Windows, macOS y Linux que exporta a XLSX, CSV y JSON.">
+  <meta property="og:title" content="gceTools">
+  <meta property="og:description" content="Inventario de Google Compute Engine al estilo RVTools. Gratuito, de solo lectura, para Windows, macOS y Linux.">
+  <meta property="og:image" content="https://gcetools.jordilopezr.com/icon.png">
+  <meta property="og:url" content="https://gcetools.jordilopezr.com/">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="32" height="32"> gceTools</a>
+    <nav>
+      <a href="#funciones">Funciones</a>
+      <a href="#descargar">Descargar</a>
+      <a href="https://github.com/jordilopezr/gcetools">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="hero-icon" src="/icon.png" alt="Icono de gceTools" width="112" height="112">
+      <h1>El inventario de tus VMs de Google Cloud, en una hoja de cálculo</h1>
+      <p class="lead">gceTools recorre todos los proyectos a los que llega tu identidad y reúne VMs, discos, redes, snapshots, licencias y costes en pestañas al estilo RVTools. Lo exporta a XLSX, CSV o JSON.</p>
+      <div class="cta">
+        <a class="btn primary" id="cta-download" href="#descargar">Descargar gratis</a>
+        <a class="btn" href="https://github.com/jordilopezr/gcetools">Ver el código</a>
+      </div>
+      <p class="meta" id="version-line">Windows · macOS · Linux · Software libre (GPL-3.0)</p>
+    </section>
+
+    <section id="funciones" class="features">
+      <article>
+        <h2>Solo lectura</h2>
+        <p>Pide únicamente el scope <code>cloud-platform.read-only</code>. No crea, cambia ni borra nada en tus proyectos.</p>
+      </article>
+      <article>
+        <h2>Toda la organización</h2>
+        <p>Escanea en paralelo todos los proyectos visibles, o los que elijas por ID, carpeta o filtro.</p>
+      </article>
+      <article>
+        <h2>Coste estimado</h2>
+        <p>Precios de lista del catálogo público de Compute Engine para compute, GPU, licencias, discos, snapshots e IPs sin uso.</p>
+      </article>
+      <article>
+        <h2>Hallazgos de salud</h2>
+        <p>Detecta discos huérfanos, firewalls abiertos, service accounts por defecto, VMs paradas y más.</p>
+      </article>
+      <article>
+        <h2>Tu forma de autenticarte</h2>
+        <p>Credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación.</p>
+      </article>
+      <article>
+        <h2>También en consola</h2>
+        <p>Incluye <code>gcetools-cli</code> para tareas programadas y exportaciones automáticas.</p>
+      </article>
+    </section>
+
+    <section class="tabs">
+      <h2>Más de 20 pestañas</h2>
+      <p class="sub">Los nombres te resultarán familiares si vienes de RVTools.</p>
+      <ul class="chips">
+        <li>gInfo</li><li>gCPU</li><li>gMemory</li><li>gDisk</li><li>gNetwork</li><li>gDisks</li>
+        <li>gSnapshot</li><li>gLicense</li><li>gMIG</li><li>gTemplate</li><li>gVPC</li><li>gSubnet</li>
+        <li>gFirewall</li><li>gAddress</li><li>gImage</li><li>gReservation</li><li>gCommitment</li>
+        <li>gSoleTenant</li><li>gQuota</li><li>gTools</li><li>gPerf</li><li>gRecommend</li><li>gCost</li>
+        <li>gProject</li><li>gHealth</li><li>gErrors</li><li>gMetaData</li>
+      </ul>
+    </section>
+
+    <section id="descargar" class="download">
+      <h2>Descargar</h2>
+      <p class="sub" id="release-info">Última versión publicada en GitHub.</p>
+      <div class="cards">
+        <a class="card" data-asset="windows-amd64-setup.exe" href="https://github.com/jordilopezr/gcetools/releases/latest">
+          <strong>Windows</strong><span>Instalador · 10/11 x64</span>
+        </a>
+        <a class="card" data-asset="windows-amd64.zip" href="https://github.com/jordilopezr/gcetools/releases/latest">
+          <strong>Windows portable</strong><span>.zip · sin instalación</span>
+        </a>
+        <a class="card" data-asset="macos-universal.zip" href="https://github.com/jordilopezr/gcetools/releases/latest">
+          <strong>macOS</strong><span>11+ · Intel y Apple Silicon</span>
+        </a>
+        <a class="card" data-asset="linux-amd64.tar.gz" href="https://github.com/jordilopezr/gcetools/releases/latest">
+          <strong>Linux</strong><span>.tar.gz · x64</span>
+        </a>
+      </div>
+      <details>
+        <summary>Los binarios aún no están firmados</summary>
+        <p><strong>Windows:</strong> SmartScreen avisa de "editor desconocido". Pulsa "Más información" y luego "Ejecutar de todas formas".</p>
+        <p><strong>macOS:</strong> abre la app con clic derecho → Abrir, o quita la cuarentena con <code>xattr -dr com.apple.quarantine gceTools.app</code>.</p>
+        <p><strong>Linux:</strong> necesita <code>libgtk-3-0</code> y <code>libwebkit2gtk-4.1-0</code>.</p>
+      </details>
+      <p class="sub"><a href="https://github.com/jordilopezr/gcetools/releases">Todas las versiones</a></p>
+    </section>
+
+    <section class="perms">
+      <h2>Permisos necesarios</h2>
+      <p>Como mínimo <code>roles/compute.viewer</code> y <code>roles/browser</code>, mejor a nivel de organización o carpeta. Los módulos opcionales (gTools, gPerf, gRecommend) piden además sus roles de lectura. Los detalles están en el <a href="https://github.com/jordilopezr/gcetools#permisos-iam">README</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>gceTools es gratuito. Si te resulta útil, puedes <a href="https://buymeacoffee.com/jordimlopezr">invitarme a un café</a>.</p>
+    <p>© 2026 Jordi Lopez Reyes · <a href="https://github.com/jordilopezr/gcetools/blob/main/LICENSE">GPL-3.0</a> · <a href="https://github.com/jordilopezr/gcetools">GitHub</a></p>
+  </footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
