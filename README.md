@@ -66,15 +66,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.2.1-linux-amd64.deb
+sudo apt install ./gcetools-0.2.2-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.2.1-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.2.2-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.2.1-linux-x86_64.AppImage && ./gcetools-0.2.1-linux-x86_64.AppImage
+chmod +x gcetools-0.2.2-linux-x86_64.AppImage && ./gcetools-0.2.2-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
