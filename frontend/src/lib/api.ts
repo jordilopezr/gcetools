@@ -2,7 +2,7 @@
 // Wails (plain `npm run dev` in a browser) it falls back to a mock backend,
 // so the UI can be designed and reviewed without GCP credentials.
 import * as App from '../../wailsjs/go/main/App'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
+import { BrowserOpenURL, EventsOn } from '../../wailsjs/runtime/runtime'
 import { mockApi } from './mock'
 
 export type ColType = 'string' | 'int' | 'float' | 'bool' | 'datetime' | 'gb' | 'money'
@@ -25,6 +25,8 @@ export interface SessionInfo { identity: string; method: string; projectHint: st
 export interface ADCStatus { found: boolean; identity: string }
 export interface Modules { osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string }
 export interface ScanOptions { concurrency: number; health: { stoppedDays: number; snapshotDays: number }; modules: Modules }
+export interface AboutInfo { version: string; website: string; donate: string; license: string; licenseUrl: string; releases: string }
+export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
 export type AuthMethod = 'adc' | 'sa' | 'impersonate'
 export type ExportFormat = 'xlsx' | 'csv' | 'json'
 
@@ -43,6 +45,9 @@ export interface Api {
   onProgress(cb: (p: Progress) => void): () => void
   onDone(cb: (m: Meta) => void): () => void
   onError(cb: (msg: string) => void): () => void
+  appInfo(): Promise<AboutInfo>
+  checkUpdate(): Promise<UpdateInfo>
+  openURL(url: string): void
 }
 
 const wailsApi: Api = {
@@ -60,6 +65,9 @@ const wailsApi: Api = {
   onProgress: (cb) => EventsOn('scan:progress', cb),
   onDone: (cb) => EventsOn('scan:done', cb),
   onError: (cb) => EventsOn('scan:error', cb),
+  appInfo: () => App.AppInfo(),
+  checkUpdate: () => App.CheckUpdate(),
+  openURL: (url) => BrowserOpenURL(url),
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined

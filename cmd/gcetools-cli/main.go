@@ -11,6 +11,9 @@ import (
 
 func main() {
 	args := os.Args[1:]
+	if len(args) > 0 && (args[0] == "version" || args[0] == "--version") {
+		os.Exit(cli.Version())
+	}
 	if len(args) > 0 && args[0] == "scan" {
 		args = args[1:]
 	}

@@ -235,3 +235,8 @@ code.inline { font-family: var(--md-mono); font-size: 12.5px; background: var(--
 .stat { padding: 10px 14px; }
 .stat .v { font-size: 22px; line-height: 28px; }
 @media (min-height: 860px) { .stat .v { font-size: 28px; line-height: 36px; } .stat { padding: 14px 16px; } }
+
+.rail-dot {
+  position: absolute; top: 4px; right: 14px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--md-error); box-shadow: 0 0 0 2px var(--md-surface);
+}

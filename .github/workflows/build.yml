@@ -17,7 +17,7 @@ permissions:
 
 env:
   WAILS_VERSION: v2.17.1
-  NODE_VERSION: "22"
+  NODE_VERSION: "26" # Node.js 26 LTS for the frontend build
 
 jobs:
   test:
@@ -93,13 +93,20 @@ jobs:
         id: v
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
+          base=$(sed -n 's/^var Version = "\(.*\)"$/\1/p' internal/core/core.go)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF#refs/tags/v}"
+            if [[ "$v" != "$base" ]]; then echo "::error::El tag v$v no coincide con core.Version=$base"; exit 1; fi
+          else
+            v="$base-dev+${GITHUB_SHA::7}"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "ldflags=-s -w -X gcetools/internal/core.Version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Build GUI
         shell: bash
         run: |
-          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "-s -w")
+          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "${{ steps.v.outputs.ldflags }}")
           [[ -n "${{ matrix.tags }}" ]] && args+=(-tags "${{ matrix.tags }}")
           [[ "${{ matrix.nsis }}" == "true" ]] && args+=(-nsis)
           wails build "${args[@]}"
@@ -110,10 +117,10 @@ jobs:
           mkdir -p dist
           ext=""; [[ "$RUNNER_OS" == "Windows" ]] && ext=".exe"
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            for a in amd64 arm64; do GOARCH=$a CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/gcetools-cli-$a ./cmd/gcetools-cli; done
+            for a in amd64 arm64; do GOARCH=$a CGO_ENABLED=0 go build -trimpath -ldflags "${{ steps.v.outputs.ldflags }}" -o dist/gcetools-cli-$a ./cmd/gcetools-cli; done
             lipo -create -output "dist/gcetools-cli" dist/gcetools-cli-amd64 dist/gcetools-cli-arm64 && rm dist/gcetools-cli-*64
           else
-            CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "dist/gcetools-cli${ext}" ./cmd/gcetools-cli
+            CGO_ENABLED=0 go build -trimpath -ldflags "${{ steps.v.outputs.ldflags }}" -o "dist/gcetools-cli${ext}" ./cmd/gcetools-cli
           fi
 
       - name: Sign and notarize (macOS, optional)
@@ -145,14 +152,14 @@ jobs:
           v="${{ steps.v.outputs.version }}"; n="gcetools-$v-${{ matrix.name }}"
           case "$RUNNER_OS" in
             Linux)
-              cp build/bin/gcetools dist/ && cp README.md dist/
+              cp build/bin/gcetools dist/ && cp README.md LICENSE dist/
               tar -C dist -czf "$n.tar.gz" . ;;
             Windows)
-              cp build/bin/gcetools.exe dist/ && cp README.md dist/
+              cp build/bin/gcetools.exe dist/ && cp README.md LICENSE dist/
               7z a "$n.zip" ./dist/* > /dev/null
               cp build/bin/*installer*.exe "$n-setup.exe" ;;
             macOS)
-              cp -R "$(find build/bin -maxdepth 1 -name '*.app' | head -1)" dist/ && cp README.md dist/
+              cp -R "$(find build/bin -maxdepth 1 -name '*.app' | head -1)" dist/ && cp README.md LICENSE dist/
               ditto -c -k --keepParent dist "$n.zip" ;;
           esac
           ls -la

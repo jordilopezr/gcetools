@@ -14,6 +14,7 @@ import (
 	"gcetools/internal/auth"
 	"gcetools/internal/core"
 	"gcetools/internal/export"
+	"gcetools/internal/update"
 )
 
 const usage = `gcetools scan — inventario de Compute Engine sin interfaz gráfica
@@ -131,4 +132,19 @@ func Run(args []string) int {
 func fail(format string, a ...any) int {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", a...)
 	return 1
+}
+
+// Version prints the version and whether a newer release exists.
+func Version() int {
+	fmt.Printf("gceTools %s · licencia %s · %s\n", core.Version, update.License, update.Website)
+	info, err := update.Check(context.Background(), core.Version)
+	switch {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "No se pudo comprobar si hay versiones nuevas: %v\n", err)
+	case info.Available:
+		fmt.Printf("Hay una versión nueva: %s → %s\n", info.Latest, info.URL)
+	default:
+		fmt.Println("Estás en la última versión.")
+	}
+	return 0
 }

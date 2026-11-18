@@ -1,5 +1,7 @@
 # gceTools
 
+[![build](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml/badge.svg)](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml) · Licencia GPL-3.0 · [gcetools.jordilopezr.com](https://gcetools.jordilopezr.com)
+
 Inventario de Google Compute Engine al estilo RVTools: aplicación de escritorio para Windows, Linux y macOS, más un modo de línea de comandos.
 Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja por pestaña), CSV (ZIP) o JSON.
 
@@ -158,3 +160,29 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 - Cloud Asset Inventory para organizaciones grandes
 - Comparar dos snapshots JSON
 - Firma de Windows (Azure Trusted Signing o EV), DMG para macOS y AppImage o .deb para Linux
+
+## Actualizaciones
+
+La app comprueba al iniciarse si hay una release más reciente en GitHub; la comprobación se puede desactivar en "Acerca de". En la línea de comandos: `gcetools version`. La consulta es un GET anónimo a la API pública de GitHub y no envía datos del usuario ni del inventario.
+
+## Publicar una versión
+
+1. Actualiza la versión en `internal/core/core.go`, `wails.json` y `frontend/package.json`. El CI inyecta igualmente la versión del tag en el binario.
+2. Crea el tag y súbelo:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. El workflow publica la GitHub Release con los paquetes de Linux, Windows y macOS.
+
+## Apoyar el proyecto
+
+gceTools es gratuito. Si te resulta útil, puedes [invitarme a un café](https://buymeacoffee.com/jordimlopezr).
+
+## Licencia
+
+Copyright © 2026 Jordi Lopez Reyes.
+
+Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los términos de la **GNU General Public License v3.0** publicada por la Free Software Foundation. Se distribuye con la esperanza de que sea útil, pero **sin ninguna garantía**. Consulta el archivo [LICENSE](LICENSE) para más detalles.

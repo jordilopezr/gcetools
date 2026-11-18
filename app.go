@@ -11,6 +11,7 @@ import (
 	"gcetools/internal/core"
 	"gcetools/internal/export"
 	"gcetools/internal/model"
+	"gcetools/internal/update"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -238,4 +239,26 @@ func (a *App) eng() (*core.Engine, error) {
 		return nil, errors.New("no hay sesión: conéctate primero")
 	}
 	return a.engine, nil
+}
+
+// AboutInfo is what the "Acerca de" page shows.
+type AboutInfo struct {
+	Version    string `json:"version"`
+	Website    string `json:"website"`
+	Donate     string `json:"donate"`
+	License    string `json:"license"`
+	LicenseURL string `json:"licenseUrl"`
+	Releases   string `json:"releases"`
+}
+
+func (a *App) AppInfo() AboutInfo {
+	return AboutInfo{
+		Version: core.Version, Website: update.Website, Donate: update.Donate,
+		License: update.License, LicenseURL: update.LicenseURL, Releases: update.ReleaseURL,
+	}
+}
+
+// CheckUpdate asks GitHub for the latest release.
+func (a *App) CheckUpdate() (update.Info, error) {
+	return update.Check(a.ctx, core.Version)
 }

@@ -25,7 +25,10 @@ import (
 	recommender "google.golang.org/api/recommender/v1"
 )
 
-const Version = "0.1.0"
+// Version is overridden at release build time:
+//
+//	-ldflags "-X gcetools/internal/core.Version=1.2.3"
+var Version = "0.2.0"
 
 type Engine struct {
 	Session *auth.Session

@@ -139,6 +139,28 @@ export namespace main {
 	        this.identity = source["identity"];
 	    }
 	}
+	export class AboutInfo {
+	    version: string;
+	    website: string;
+	    donate: string;
+	    license: string;
+	    licenseUrl: string;
+	    releases: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AboutInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.website = source["website"];
+	        this.donate = source["donate"];
+	        this.license = source["license"];
+	        this.licenseUrl = source["licenseUrl"];
+	        this.releases = source["releases"];
+	    }
+	}
 	export class SessionInfo {
 	    identity: string;
 	    method: string;
@@ -322,6 +344,33 @@ export namespace model {
 	}
 	
 	
+
+}
+
+export namespace update {
+	
+	export class Info {
+	    current: string;
+	    latest: string;
+	    available: boolean;
+	    url: string;
+	    notes: string;
+	    published: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.available = source["available"];
+	        this.url = source["url"];
+	        this.notes = source["notes"];
+	        this.published = source["published"];
+	    }
+	}
 
 }
 

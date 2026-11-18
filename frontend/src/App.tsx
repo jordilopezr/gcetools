@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, errorText, type Inventory, type Progress, type SessionInfo } from './lib/api'
+import { api, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
 import { Icon, Snackbar, Menu } from './components/ui'
 import ConnectPage from './pages/ConnectPage'
 import ProjectsPage from './pages/ProjectsPage'
 import InventoryPage from './pages/InventoryPage'
+import AboutPage, { type UpdateState } from './pages/AboutPage'
 
-type Page = 'connect' | 'projects' | 'inventory'
+type Page = 'connect' | 'projects' | 'inventory' | 'about'
 type Theme = 'system' | 'light' | 'dark'
 
 export interface ScanState {
   running: boolean
   progress: Progress | null
   log: { project: string; status: string }[]
+}
+
+function loadAutoCheck(): boolean {
+  try { return localStorage.getItem('autoUpdateCheck') !== 'false' } catch { return true }
 }
 
 function loadTheme(): Theme {
@@ -25,6 +30,32 @@ export default function App() {
   const [scan, setScan] = useState<ScanState>({ running: false, progress: null, log: [] })
   const [snack, setSnack] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(loadTheme)
+  const [about, setAbout] = useState<AboutInfo | null>(null)
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
+  const [autoCheck, setAutoCheckState] = useState(loadAutoCheck)
+
+  const setAutoCheck = (v: boolean) => {
+    setAutoCheckState(v)
+    try { localStorage.setItem('autoUpdateCheck', String(v)) } catch { /* storage unavailable */ }
+  }
+
+  const checkUpdate = useCallback(async (silent: boolean) => {
+    setUpdate(u => ({ ...u, status: 'checking' }))
+    try {
+      const info = await api.checkUpdate()
+      setUpdate({ status: 'done', info })
+      if (info.available && silent) setSnack(`Hay una versión nueva de gceTools: ${info.latest}`)
+    } catch (e) {
+      setUpdate({ status: 'error', error: errorText(e) })
+    }
+  }, [])
+
+  useEffect(() => { api.appInfo().then(setAbout).catch(() => { /* non-fatal */ }) }, [])
+  useEffect(() => {
+    if (!autoCheck) return
+    const t = setTimeout(() => checkUpdate(true), 2500)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- once at startup
 
   useEffect(() => {
     const root = document.documentElement
@@ -63,6 +94,7 @@ export default function App() {
     { id: 'projects', icon: 'folder_open', label: 'Proyectos', enabled: !!session },
     { id: 'inventory', icon: 'table_view', label: 'Inventario', enabled: !!inventory },
   ]
+  const updateAvailable = update.status === 'done' && !!update.info?.available
   const themeIcon = theme === 'dark' ? 'dark_mode' : theme === 'light' ? 'light_mode' : 'contrast'
 
   return (
@@ -76,6 +108,13 @@ export default function App() {
           <span className="brand-sub">Inventario de Compute Engine</span>
         </div>
         <div className="spacer" />
+        {updateAvailable && (
+          <button className="assist" style={{ border: 0, cursor: 'pointer', background: 'var(--md-primary-container)', color: 'var(--md-on-primary-container)' }}
+            onClick={() => setPage('about')} title="Ver novedades y descargar">
+            <span className="avatar" style={{ background: 'var(--md-primary)' }}><Icon name="arrow_upward" size="sm" /></span>
+            Versión {update.info!.latest} disponible
+          </button>
+        )}
         {api.mock && <span className="badge sev-Media" title="Ejecutándose fuera de Wails con datos simulados">Modo demo</span>}
         <Menu trigger={open => (
           <button className="icon-btn" onClick={open} aria-label="Tema" title="Tema"><Icon name={themeIcon} /></button>
@@ -116,6 +155,15 @@ export default function App() {
             <span className="rail-label">{n.label}</span>
           </button>
         ))}
+        <span className="spacer" />
+        <button className={`rail-item ${page === 'about' ? 'active' : ''}`} onClick={() => setPage('about')}
+          aria-current={page === 'about' ? 'page' : undefined} style={{ marginBottom: 16 }}>
+          <span className="rail-pill" style={{ position: 'relative' }}>
+            <Icon name="info" />
+            {updateAvailable && <span className="rail-dot" aria-label="Actualización disponible" />}
+          </span>
+          <span className="rail-label">Acerca de</span>
+        </button>
       </nav>
 
       <main className="main">
@@ -124,6 +172,8 @@ export default function App() {
         {page === 'projects' && session && <ProjectsPage scan={scan} notify={notify}
           onScanStart={() => setScan({ running: true, progress: null, log: [] })} />}
         {page === 'inventory' && inventory && <InventoryPage inventory={inventory} notify={notify} />}
+        {page === 'about' && <AboutPage about={about} update={update} onCheck={() => checkUpdate(false)}
+          autoCheck={autoCheck} setAutoCheck={setAutoCheck} />}
       </main>
 
       <Snackbar message={snack} onClose={() => setSnack(null)} />
