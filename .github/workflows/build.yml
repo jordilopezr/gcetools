@@ -164,7 +164,7 @@ jobs:
           esac
           ls -la
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: gcetools-${{ matrix.name }}
           path: |
@@ -180,7 +180,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           path: out
           merge-multiple: true
