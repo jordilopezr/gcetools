@@ -8,7 +8,7 @@
   "frontend:dev:serverUrl": "auto",
   "info": {
     "productName": "gceTools",
-    "productVersion": "0.2.0",
+    "productVersion": "0.2.1",
     "comments": "Inventario de Google Compute Engine al estilo RVTools",
     "copyright": "Copyright © 2026 Jordi Lopez Reyes. Licencia GPL-3.0",
     "companyName": "Jordi Lopez Reyes"

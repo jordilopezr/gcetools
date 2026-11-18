@@ -122,12 +122,12 @@ export const mockApi: Api = {
   onDone: (cb) => on(listeners.done, cb),
   onError: (cb) => on(listeners.error, cb),
   appInfo: async () => ({
-    version: '0.2.0', website: 'https://gcetools.jordilopezr.com', donate: 'https://buymeacoffee.com/jordimlopezr',
+    version: '0.2.1', website: 'https://gcetools.jordilopezr.com', donate: 'https://buymeacoffee.com/jordimlopezr',
     license: 'GPL-3.0', licenseUrl: 'https://www.gnu.org/licenses/gpl-3.0.html', releases: 'https://github.com/jordilopezr/gcetools/releases',
   }),
   checkUpdate: async () => {
     await sleep(600)
-    return { current: '0.2.0', latest: '0.3.0', available: true, url: 'https://github.com/jordilopezr/gcetools/releases', notes: '- Ejemplo de notas de la versión', published: '2026-12-01T10:00:00Z' }
+    return { current: '0.2.1', latest: '0.3.0', available: true, url: 'https://github.com/jordilopezr/gcetools/releases', notes: '- Ejemplo de notas de la versión', published: '2026-12-01T10:00:00Z' }
   },
   openURL: (url) => { window.open(url, '_blank', 'noopener') },
 }

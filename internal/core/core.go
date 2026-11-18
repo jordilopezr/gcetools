@@ -28,7 +28,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.2.0"
+var Version = "0.2.1"
 
 type Engine struct {
 	Session *auth.Session
