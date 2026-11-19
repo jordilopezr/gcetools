@@ -26,12 +26,20 @@ export function CurrentSnapshot() {
   return window['go']['main']['App']['CurrentSnapshot']();
 }
 
+export function DeleteProfile(arg1) {
+  return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
 export function DetectADC() {
   return window['go']['main']['App']['DetectADC']();
 }
 
 export function Disconnect() {
   return window['go']['main']['App']['Disconnect']();
+}
+
+export function Discover(arg1) {
+  return window['go']['main']['App']['Discover'](arg1);
 }
 
 export function Export(arg1, arg2) {
@@ -46,6 +54,10 @@ export function GetInventory() {
   return window['go']['main']['App']['GetInventory']();
 }
 
+export function ListProfiles() {
+  return window['go']['main']['App']['ListProfiles']();
+}
+
 export function ListProjects(arg1) {
   return window['go']['main']['App']['ListProjects'](arg1);
 }
@@ -56,6 +68,10 @@ export function PickServiceAccountKey() {
 
 export function PickSnapshot() {
   return window['go']['main']['App']['PickSnapshot']();
+}
+
+export function SaveProfile(arg1) {
+  return window['go']['main']['App']['SaveProfile'](arg1);
 }
 
 export function StartScan(arg1, arg2) {

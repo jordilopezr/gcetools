@@ -176,7 +176,7 @@ export default function App() {
       <main className="main">
         {page === 'connect' && <ConnectPage session={session} notify={notify}
           onConnected={s => { setSession(s); setInventory(null); setPage('projects') }} />}
-        {page === 'projects' && session && <ProjectsPage scan={scan} notify={notify}
+        {page === 'projects' && session && <ProjectsPage session={session} scan={scan} notify={notify}
           onScanStart={() => setScan({ running: true, progress: null, log: [] })} />}
         {page === 'inventory' && inventory && <InventoryPage inventory={inventory} notify={notify} />}
         {page === 'compare' && <ComparePage state={compare} setState={setCompare} hasInventory={!!inventory} notify={notify} />}

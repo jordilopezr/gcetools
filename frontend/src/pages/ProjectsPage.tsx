@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, GridApi, SelectionChangedEvent } from 'ag-grid-community'
-import { api, errorText, type Modules, type Project } from '../lib/api'
+import { api, errorText, type Footprint, type HealthOptions, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
 import { gridTheme, Icon } from '../components/ui'
 import type { ScanState } from '../App'
 
 interface Props {
+  session: SessionInfo
   scan: ScanState
   onScanStart: () => void
   notify: (m: string) => void
@@ -18,7 +19,11 @@ const stepLabel: Record<string, string> = {
   quotas: 'cuotas', osconfig: 'inventario de SO', monitoring: 'métricas', recommender: 'recomendaciones',
 }
 
-export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
+const defaultHealth: HealthOptions = { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }
+const fpTotal = (f?: Footprint) => (f ? f.vms + f.disks + f.other : 0)
+const selectStyle = { height: 36, borderRadius: 8, border: '1px solid var(--md-outline)', background: 'transparent', color: 'inherit', padding: '0 8px' }
+
+export default function ProjectsPage({ session, scan, onScanStart, notify }: Props) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,13 +34,99 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
   const [concurrency, setConcurrency] = useState(8)
   const [modules, setModules] = useState<Modules>({ osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'USD' })
   const toggle = (k: 'osconfig' | 'monitoring' | 'recommender' | 'pricing') => setModules(m => ({ ...m, [k]: !m[k] }))
+  const [health, setHealth] = useState<HealthOptions>(defaultHealth)
   const gridApi = useRef<GridApi<Project> | null>(null)
 
-  const load = useCallback(async (q: string) => {
+  // profiles and Cloud Asset Inventory discovery
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [profileName, setProfileName] = useState('')
+  const [saving, setSaving] = useState<string | null>(null) // name typed while saving
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [scope, setScope] = useState('')
+  const [footprint, setFootprint] = useState<Record<string, Footprint> | null>(null)
+  const [discovering, setDiscovering] = useState(false)
+  const pending = useRef<string[] | 'all' | null>(null) // selection to apply once rows render
+
+  const load = useCallback(async (q: string): Promise<Project[]> => {
     setLoading(true); setError(null)
-    try { setProjects(await api.listProjects(q)) } catch (e) { setError(errorText(e)) } finally { setLoading(false) }
+    try { const list = await api.listProjects(q); setProjects(list); return list } catch (e) { setError(errorText(e)); return [] } finally { setLoading(false) }
   }, [])
   useEffect(() => { load('') }, [load])
+  useEffect(() => { api.listProfiles().then(setProfiles).catch(e => notify(errorText(e))) }, [notify])
+
+  useEffect(() => {
+    const want = pending.current
+    if (!want) return
+    pending.current = null
+    setTimeout(() => gridApi.current?.forEachNode(n => n.setSelected(want === 'all' || want.includes(n.data!.id))))
+  }, [projects])
+
+  // Suggest the organization (or first folder) the visible projects hang from.
+  const suggestion = useMemo(() => {
+    const parents = projects.map(p => p.parent).filter(Boolean)
+    return parents.find(p => p.startsWith('organizations/')) ?? parents.find(p => p.startsWith('folders/')) ?? ''
+  }, [projects])
+  useEffect(() => { if (!scope && suggestion) setScope(suggestion) }, [suggestion]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runDiscover = async (sc: string, restrictTo?: string[]) => {
+    setDiscovering(true)
+    try {
+      const fps = await api.discover(sc.trim())
+      const map = Object.fromEntries(fps.map(f => [f.projectId, f]))
+      const withCompute = fps.filter(f => fpTotal(f) > 0).map(f => f.projectId)
+      pending.current = restrictTo?.length ? withCompute.filter(id => restrictTo.includes(id)) : withCompute
+      setFootprint(map)
+      setProjects(cur => {
+        const known = new Set(cur.map(p => p.id))
+        const extra = fps.filter(f => !known.has(f.projectId)).map(f => ({
+          id: f.projectId, name: '(encontrado por Cloud Asset Inventory)', number: f.number, parent: '', state: '', created: '', labels: null,
+        }))
+        return [...cur, ...extra]
+      })
+      notify(`Cloud Asset Inventory: ${withCompute.length} proyectos con recursos de Compute en ${sc.trim()}`)
+    } catch (e) { notify(errorText(e)) } finally { setDiscovering(false) }
+  }
+
+  const applyProfile = async (name: string) => {
+    setProfileName(name); setConfirmDelete(false)
+    const p = profiles.find(x => x.name === name)
+    if (!p) return
+    const q = p.query ?? ''
+    setQuery(q); setModules(p.modules); setConcurrency(p.concurrency || 8)
+    setHealth({ ...defaultHealth, ...p.health }); setFootprint(null)
+    if (p.discover) setScope(p.discover)
+    const ids = p.projects ?? []
+    pending.current = ids.length ? ids : 'all'
+    const list = await load(q)
+    const missing = ids.filter(id => !list.some(x => x.id === id))
+    if (missing.length) {
+      pending.current = ids
+      setProjects(cur => [...missing.map(id => ({ id, name: '(del perfil)', number: '', parent: '', state: '', created: '', labels: null })), ...cur])
+    }
+    if (p.discover) await runDiscover(p.discover, ids)
+  }
+
+  const saveProfile = async (name: string) => {
+    const withCompute = footprint ? Object.values(footprint).filter(f => fpTotal(f) > 0).map(f => f.projectId).sort() : null
+    const sameAsDiscovery = withCompute && JSON.stringify([...selected].sort()) === JSON.stringify(withCompute)
+    const p: Profile = {
+      name: name.trim(), query, projects: selected.length === projects.length || sameAsDiscovery ? [] : selected,
+      discover: footprint ? scope.trim() : '', concurrency, modules, health,
+      auth: session.method, impersonate: session.method === 'impersonate' ? session.identity : '',
+    }
+    try {
+      await api.saveProfile(p)
+      setProfiles(await api.listProfiles()); setProfileName(p.name); setSaving(null)
+      notify(`Perfil "${p.name}" guardado`)
+    } catch (e) { notify(errorText(e)) }
+  }
+
+  const deleteProfile = async () => {
+    try {
+      await api.deleteProfile(profileName)
+      setProfiles(await api.listProfiles()); notify(`Perfil "${profileName}" eliminado`); setProfileName(''); setConfirmDelete(false)
+    } catch (e) { notify(errorText(e)) }
+  }
 
   const addManual = () => {
     const ids = manual.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean)
@@ -48,7 +139,7 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
   const start = async () => {
     try {
       onScanStart()
-      await api.startScan(selected, { concurrency, health: { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }, modules })
+      await api.startScan(selected, { concurrency, health, modules })
     } catch (e) { notify(errorText(e)) }
   }
 
@@ -57,8 +148,14 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
     { field: 'name', headerName: 'Nombre', flex: 2, minWidth: 180 },
     { field: 'number', headerName: 'Número', width: 150 },
     { field: 'parent', headerName: 'Padre', width: 170 },
-    { headerName: 'Labels', flex: 2, minWidth: 160, valueGetter: p => Object.entries(p.data?.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('; ') },
-  ], [])
+    ...(footprint ? [
+      { colId: 'caiVms', headerName: 'VMs (CAI)', width: 125, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.vms ?? 0, sort: 'desc' },
+      { colId: 'caiRunning', headerName: 'Encendidas', width: 115, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.running ?? 0 },
+      { colId: 'caiDisks', headerName: 'Discos', width: 100, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.disks ?? 0 },
+      { colId: 'caiOther', headerName: 'Otros', width: 95, type: 'rightAligned', headerTooltip: 'Snapshots, imágenes, templates, reservas y commitments', valueGetter: p => footprint[p.data!.id]?.other ?? 0 },
+    ] as ColDef<Project>[] : []),
+    { colId: 'labels', headerName: 'Labels', flex: 2, minWidth: 160, valueGetter: p => Object.entries(p.data?.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('; ') },
+  ], [footprint])
 
   const pct = scan.progress && scan.progress.total ? Math.round((scan.progress.done / scan.progress.total) * 100) : 0
 
@@ -78,6 +175,39 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
           <label htmlFor="q">Filtro Resource Manager (parent:folders/123)</label>
         </div>
         <button className="btn outlined" onClick={() => load(query)} disabled={loading}><Icon name="refresh" />Buscar</button>
+      </div>
+
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <span className="label-l muted" style={{ marginRight: 4 }}>Perfil</span>
+        <select value={profileName} onChange={e => applyProfile(e.target.value)} aria-label="Perfil de escaneo" style={selectStyle}>
+          <option value="">Sin perfil</option>
+          {profiles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+        </select>
+        {saving === null ? <>
+          <button className="btn text" onClick={() => setSaving(profileName)} title="Guarda proyectos, filtro, módulos y descubrimiento para repetir el escaneo"><Icon name="bookmark_add" />Guardar perfil</button>
+          {profileName && (confirmDelete
+            ? <><span className="body-m">¿Eliminar "{profileName}"?</span>
+                <button className="btn text" onClick={deleteProfile}>Eliminar</button>
+                <button className="btn text" onClick={() => setConfirmDelete(false)}>Cancelar</button></>
+            : <button className="icon-btn" onClick={() => setConfirmDelete(true)} aria-label="Eliminar perfil" title="Eliminar perfil"><Icon name="delete" /></button>)}
+        </> : <>
+          <div className="search" style={{ minWidth: 220 }}>
+            <Icon name="bookmark" />
+            <input autoFocus value={saving} onChange={e => setSaving(e.target.value)} placeholder="Nombre del perfil" aria-label="Nombre del perfil" maxLength={60}
+              onKeyDown={e => { if (e.key === 'Enter' && saving.trim()) saveProfile(saving); if (e.key === 'Escape') setSaving(null) }} />
+          </div>
+          <button className="btn filled" disabled={!saving.trim()} onClick={() => saveProfile(saving)}>Guardar</button>
+          <button className="btn text" onClick={() => setSaving(null)}>Cancelar</button>
+        </>}
+        <span className="spacer" />
+        <div className="search" style={{ minWidth: 300 }} title="Cloud Asset Inventory: una sola consulta para saber qué proyectos tienen VMs, discos, snapshots o imágenes. Requiere roles/cloudasset.viewer en ese ámbito.">
+          <Icon name="travel_explore" />
+          <input value={scope} onChange={e => setScope(e.target.value)} placeholder="organizations/123 o folders/456" aria-label="Ámbito de Cloud Asset Inventory"
+            onKeyDown={e => { if (e.key === 'Enter' && scope.trim()) runDiscover(scope) }} spellCheck={false} />
+        </div>
+        <button className="btn outlined" disabled={!scope.trim() || discovering} onClick={() => runDiscover(scope)}>
+          <Icon name="travel_explore" />{discovering ? 'Detectando…' : 'Detectar proyectos con Compute'}
+        </button>
       </div>
 
       {error && <div className="banner error"><Icon name="error" /><div className="selectable">{error}<br />
@@ -154,8 +284,7 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
         <span className="spacer" />
         <label className="row body-m" style={{ gap: 8 }}>
           Paralelismo
-          <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value))}
-            style={{ height: 36, borderRadius: 8, border: '1px solid var(--md-outline)', background: 'transparent', color: 'inherit', padding: '0 8px' }}>
+          <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} style={selectStyle}>
             {[2, 4, 8, 16, 32].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>

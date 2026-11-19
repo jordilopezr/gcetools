@@ -35,6 +35,7 @@ const help = `gceTools — inventario de Google Compute Engine
 Comandos:
   scan      escanea proyectos y exporta el inventario (gcetools scan --help)
   diff      compara dos snapshots JSON (gcetools diff --help)
+  profiles  lista los perfiles de escaneo guardados
   version   muestra la versión y si hay una más reciente
 `
 
@@ -49,6 +50,8 @@ func Dispatch(args []string) (code int, ok bool) {
 		return Run(args[1:]), true
 	case "diff":
 		return Diff(args[1:]), true
+	case "profiles":
+		return Profiles(), true
 	case "version", "--version":
 		return Version(), true
 	case "help", "--help", "-h":

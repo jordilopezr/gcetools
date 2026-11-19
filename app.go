@@ -13,6 +13,7 @@ import (
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
 	"gcetools/internal/model"
+	"gcetools/internal/profile"
 	"gcetools/internal/update"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -25,6 +26,7 @@ type App struct {
 
 	mu       sync.Mutex
 	keyJSON  []byte // service account key, memory only
+	keyPath  string // where it was read from (saved in profiles; never the content)
 	engine   *core.Engine
 	projects map[string]core.Project
 	inv      *model.Inventory
@@ -81,6 +83,7 @@ func (a *App) PickServiceAccountKey() (*auth.KeyInfo, error) {
 	a.mu.Lock()
 	clear(a.keyJSON)
 	a.keyJSON = data
+	a.keyPath = path
 	a.mu.Unlock()
 	return &info, nil
 }
@@ -365,4 +368,31 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 	}
 	a.diff = diff.Compare(x, y)
 	return a.diff, nil
+}
+
+// ---------- profiles & discovery ----------
+
+func (a *App) ListProfiles() ([]profile.Profile, error) { return profile.List() }
+
+// SaveProfile stores p. For service account keys only the file path is kept,
+// so the CLI can reuse the profile; the key itself is never written.
+func (a *App) SaveProfile(p profile.Profile) error {
+	if p.Auth == "sa" && p.KeyPath == "" {
+		a.mu.Lock()
+		p.KeyPath = a.keyPath
+		a.mu.Unlock()
+	}
+	return profile.Save(p)
+}
+
+func (a *App) DeleteProfile(name string) error { return profile.Delete(name) }
+
+// Discover asks Cloud Asset Inventory which projects in scope hold Compute
+// resources.
+func (a *App) Discover(scope string) ([]core.Footprint, error) {
+	eng, err := a.eng()
+	if err != nil {
+		return nil, err
+	}
+	return eng.Discover(a.ctx, scope)
 }

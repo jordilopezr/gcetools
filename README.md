@@ -36,6 +36,17 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 
 \* Módulos opcionales. Se activan en la pantalla de Proyectos o con `--modules`. Si la API está deshabilitada o falta el permiso, el módulo se omite: el proyecto queda como "OK (sin …)" y el motivo se registra en gErrors.
 
+### Perfiles y descubrimiento con Cloud Asset Inventory
+
+- **Perfiles:** en Proyectos → **Guardar perfil** se guardan el filtro, los proyectos seleccionados, los módulos, la moneda, el paralelismo, el ámbito de descubrimiento y el método de autenticación. Se aplican desde el selector "Perfil" o en consola con `--profile`. No guardan secretos: de una clave de service account solo se guarda la ruta del archivo. Se almacenan en `profiles.json` dentro de la carpeta de configuración del usuario (`~/.config/gcetools` en Linux, `%AppData%\gcetools` en Windows, `~/Library/Application Support/gcetools` en macOS), con permisos 0600.
+- **Detectar proyectos con Compute:** una sola consulta a Cloud Asset Inventory sobre una organización o carpeta (`organizations/123`, `folders/456`) devuelve qué proyectos tienen VMs, discos, snapshots, imágenes, templates, reservas o commitments, y solo esos se seleccionan. En organizaciones con cientos o miles de proyectos evita escanear los que no usan Compute Engine. Necesita `roles/cloudasset.viewer` en ese ámbito y la Cloud Asset API habilitada en el quota project (o en el proyecto de la service account).
+
+```bash
+gcetools-cli scan --discover organizations/123456 --out inventario.json
+gcetools-cli scan --profile produccion --out inventario.xlsx
+gcetools-cli profiles
+```
+
 ### Comparar inventarios
 
 Exporta cada escaneo como **Snapshot JSON** y compáralos en la página **Comparar** (no necesita conexión a Google Cloud) o con `gcetools-cli diff`. El informe tiene cinco pestañas:
@@ -86,15 +97,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.3.0-linux-amd64.deb
+sudo apt install ./gcetools-0.4.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.3.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.4.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.3.0-linux-x86_64.AppImage && ./gcetools-0.3.0-linux-x86_64.AppImage
+chmod +x gcetools-0.4.0-linux-x86_64.AppImage && ./gcetools-0.4.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
@@ -166,6 +177,8 @@ gcetools-cli scan --auth sa --key sa.json --query "parent:folders/123456" --out 
 gcetools-cli scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
 gcetools-cli scan --out "inventario-$(date +%F).json"     # snapshot para comparar después
 gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
+gcetools-cli scan --profile produccion --discover organizations/123456
+gcetools-cli profiles
 gcetools-cli version
 ```
 
@@ -176,6 +189,7 @@ gcetools-cli version
 - Mínimos: `roles/compute.viewer` y `roles/browser` (a nivel de organización o carpeta para tener visión global).
 - gTools: `roles/osconfig.inventoryViewer`, con la API de OS Config habilitada en el proyecto y el agente en las VMs.
 - gPerf: `roles/monitoring.viewer`.
+- Descubrimiento con Cloud Asset Inventory: `roles/cloudasset.viewer` en la organización o carpeta.
 - gRecommend: `roles/recommender.computeViewer`. Con credenciales de usuario, Google exige un quota project: se usa el `quota_project_id` de ADC (`gcloud auth application-default set-quota-project <proyecto>`), que debe tener la Recommender API habilitada.
 - Sin `resourcemanager.projects.list` se pueden añadir proyectos a mano por ID.
 
@@ -190,7 +204,8 @@ internal/health           Reglas de gHealth
 internal/diff             Comparación de dos inventarios (altas, bajas y cambios)
 internal/pricing          Catálogo de Cloud Billing y cálculo de coste estimado
 internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
-internal/cli              Comandos `scan`, `diff` y `version`
+internal/cli              Comandos `scan`, `diff`, `profiles` y `version`
+internal/profile          Perfiles de escaneo guardados
 frontend/                 React + TS, tokens Material 3, AG Grid
 assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
@@ -200,8 +215,7 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 ## Pendiente
 
 - Inicio de sesión OAuth en el navegador sin gcloud (necesita un OAuth client ID de la organización)
-- Guardar perfiles con el llavero del sistema
-- Cloud Asset Inventory para organizaciones grandes
+- Colector completo basado en Cloud Asset Inventory (hoy CAI solo se usa para descubrir proyectos)
 - Costes reales desde la exportación de facturación a BigQuery
 - Firma de Windows (Azure Trusted Signing o EV) y DMG para macOS
 

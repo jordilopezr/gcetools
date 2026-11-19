@@ -4,6 +4,7 @@ import {main} from '../models';
 import {update} from '../models';
 import {model} from '../models';
 import {core} from '../models';
+import {profile} from '../models';
 import {auth} from '../models';
 
 export function AppInfo():Promise<main.AboutInfo>;
@@ -18,9 +19,13 @@ export function Connect(arg1:string,arg2:string):Promise<main.SessionInfo>;
 
 export function CurrentSnapshot():Promise<main.SnapshotInfo>;
 
+export function DeleteProfile(arg1:string):Promise<void>;
+
 export function DetectADC():Promise<main.ADCStatus>;
 
 export function Disconnect():Promise<void>;
+
+export function Discover(arg1:string):Promise<Array<core.Footprint>>;
 
 export function Export(arg1:string,arg2:string):Promise<string>;
 
@@ -28,11 +33,15 @@ export function ExportDiff(arg1:string,arg2:string):Promise<string>;
 
 export function GetInventory():Promise<model.Inventory>;
 
+export function ListProfiles():Promise<Array<profile.Profile>>;
+
 export function ListProjects(arg1:string):Promise<Array<core.Project>>;
 
 export function PickServiceAccountKey():Promise<auth.KeyInfo>;
 
 export function PickSnapshot():Promise<main.SnapshotInfo>;
+
+export function SaveProfile(arg1:profile.Profile):Promise<void>;
 
 export function StartScan(arg1:Array<string>,arg2:core.ScanOptions):Promise<void>;
 

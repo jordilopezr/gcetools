@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"time"
 
 	"gcetools/internal/auth"
 	"gcetools/internal/core"
 	"gcetools/internal/export"
+	"gcetools/internal/health"
+	"gcetools/internal/profile"
 	"gcetools/internal/update"
 )
 
@@ -26,6 +29,11 @@ Ejemplos:
   gcetools scan --out inventario.xlsx
   gcetools scan --auth sa --key ./sa.json --query "parent:folders/123456" --out inv.zip
   gcetools scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
+  gcetools scan --discover organizations/123456 --out inventario.json
+  gcetools scan --profile produccion --out inventario.xlsx
+
+Con --profile se usan los valores guardados en la app (Proyectos → Perfil);
+las opciones que pases explícitamente tienen prioridad.
 
 Opciones:
 `
@@ -46,8 +54,35 @@ func Run(args []string) int {
 	modules := fs.String("modules", "osconfig,monitoring,recommender,pricing", "módulos opcionales separados por comas (\"none\" para desactivarlos)")
 	metricsDays := fs.Int("metrics-days", 30, "días de métricas de Cloud Monitoring")
 	currency := fs.String("currency", "USD", "moneda de los costes estimados (USD, EUR, CLP…)")
+	disc := fs.String("discover", "", "escanea solo proyectos con recursos de Compute según Cloud Asset Inventory (organizations/N, folders/N)")
+	profName := fs.String("profile", "", "perfil guardado (gcetools profiles los lista)")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	var prof *profile.Profile
+	if *profName != "" {
+		p, err := profile.Get(*profName)
+		if err != nil {
+			return fail("%v", err)
+		}
+		prof = &p
+		def := func(flagName string, dst *string, v string) {
+			if !set[flagName] && v != "" {
+				*dst = v
+			}
+		}
+		def("auth", method, p.Auth)
+		def("key", keyPath, p.KeyPath)
+		def("impersonate", target, p.Impersonate)
+		def("query", query, p.Query)
+		def("projects", projects, strings.Join(p.Projects, ","))
+		def("discover", disc, p.Discover)
+		if !set["concurrency"] && p.Concurrency > 0 {
+			*conc = p.Concurrency
+		}
+		fmt.Fprintf(os.Stderr, "Perfil: %s\n", p.Name)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -69,15 +104,40 @@ func Run(args []string) int {
 	eng := core.NewEngine(sess, *rps)
 
 	var list []core.Project
-	if *projects != "" {
+	switch {
+	case *projects != "":
 		for _, id := range strings.Split(*projects, ",") {
 			if id = strings.TrimSpace(id); id != "" {
 				list = append(list, core.Project{ID: id})
 			}
 		}
-	} else {
+	case *disc != "" && *query == "":
+		// discovery alone: no need to enumerate every project first
+	default:
 		if list, err = eng.ListProjects(ctx, *query); err != nil {
 			return fail("%v", err)
+		}
+	}
+	if *disc != "" {
+		fps, err := eng.Discover(ctx, *disc)
+		if err != nil {
+			return fail("%v", err)
+		}
+		if list == nil {
+			for _, f := range fps {
+				list = append(list, core.Project{ID: f.ProjectID, Number: f.Number})
+			}
+		} else {
+			found := map[string]bool{}
+			for _, f := range fps {
+				found[f.ProjectID] = true
+			}
+			before := len(list)
+			list = slices.DeleteFunc(list, func(p core.Project) bool { return !found[p.ID] })
+			fmt.Fprintf(os.Stderr, "Cloud Asset Inventory: %d de %d proyectos tienen recursos de Compute\n", len(list), before)
+		}
+		if *projects == "" && *query == "" {
+			fmt.Fprintf(os.Stderr, "Cloud Asset Inventory: %d proyectos con recursos de Compute en %s\n", len(list), *disc)
 		}
 	}
 	if len(list) == 0 {
@@ -86,6 +146,22 @@ func Run(args []string) int {
 	fmt.Fprintf(os.Stderr, "Escaneando %d proyectos…\n", len(list))
 
 	mods := core.Modules{MetricsDays: *metricsDays, Currency: *currency}
+	hopt := health.DefaultOptions()
+	if prof != nil {
+		if !set["modules"] {
+			*modules = "none" // the profile's modules replace the default list
+			mods = prof.Modules
+		}
+		if !set["metrics-days"] && prof.Modules.MetricsDays > 0 {
+			mods.MetricsDays = prof.Modules.MetricsDays
+		}
+		if !set["currency"] && prof.Modules.Currency != "" {
+			mods.Currency = prof.Modules.Currency
+		}
+		if prof.Health.StoppedDays > 0 || prof.Health.SnapshotDays > 0 {
+			hopt = prof.Health
+		}
+	}
 	for _, m := range strings.Split(*modules, ",") {
 		switch strings.TrimSpace(m) {
 		case "osconfig":
@@ -101,7 +177,7 @@ func Run(args []string) int {
 			return fail("módulo desconocido %q (osconfig, monitoring, recommender, pricing)", m)
 		}
 	}
-	inv, err := eng.Scan(ctx, list, core.ScanOptions{Concurrency: *conc, Modules: mods}, func(p core.Progress) {
+	inv, err := eng.Scan(ctx, list, core.ScanOptions{Concurrency: *conc, Modules: mods, Health: hopt}, func(p core.Progress) {
 		if p.Step == "done" {
 			fmt.Fprintf(os.Stderr, "[%d/%d] %-30s %s\n", p.Done, p.Total, p.Project, p.Message)
 		}
@@ -146,5 +222,38 @@ func Version() int {
 	default:
 		fmt.Println("Estás en la última versión.")
 	}
+	return 0
+}
+
+// Profiles lists the saved profiles.
+func Profiles() int {
+	path, _ := profile.Path()
+	all, err := profile.List()
+	if err != nil {
+		return fail("%v", err)
+	}
+	if len(all) == 0 {
+		fmt.Printf("No hay perfiles guardados. Créalos en la app (Proyectos → Guardar perfil) o edita %s\n", path)
+		return 0
+	}
+	for _, p := range all {
+		var what []string
+		switch {
+		case len(p.Projects) > 0:
+			what = append(what, fmt.Sprintf("%d proyectos", len(p.Projects)))
+		case p.Query != "":
+			what = append(what, "filtro "+p.Query)
+		default:
+			what = append(what, "todos los proyectos visibles")
+		}
+		if p.Discover != "" {
+			what = append(what, "descubrimiento CAI en "+p.Discover)
+		}
+		if p.Auth != "" && p.Auth != "adc" {
+			what = append(what, "auth "+p.Auth)
+		}
+		fmt.Printf("%-24s %s\n", p.Name, strings.Join(what, " · "))
+	}
+	fmt.Printf("\n%s\n", path)
 	return 0
 }

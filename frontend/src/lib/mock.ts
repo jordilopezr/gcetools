@@ -1,5 +1,5 @@
 // Mock backend for UI work in a plain browser (no Wails, no GCP).
-import type { Api, Column, Inventory, Meta, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
+import type { Api, Column, Footprint, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
 
 const projects: Project[] = [
   ['acme-prod-erp', 'ERP producción', 'folders/1201'], ['acme-prod-web', 'Web producción', 'folders/1201'],
@@ -136,6 +136,11 @@ const snapshots: SnapshotInfo[] = [
   { path: '/home/demo/gcetools-20261118-0900.json', name: 'gcetools-20261118-0900.json', startedAt: '2026-11-18T09:00:00Z', identity: 'demo@example.com', version: '0.3.0', projects: 6, vms: 59 },
 ]
 let picks = 0
+let profiles: Profile[] = [{
+  name: 'Producción', query: '', projects: ['acme-prod-erp', 'acme-prod-web'], concurrency: 8,
+  modules: { osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'EUR' },
+  health: { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }, updated: '2026-11-10T09:00:00Z',
+}]
 const known = new Map<string, SnapshotInfo>()
 
 type Cb<T> = (v: T) => void
@@ -204,4 +209,21 @@ export const mockApi: Api = {
     return buildDiff(sa, sb)
   },
   exportDiff: async (f) => `/home/demo/gcetools-diff.${f === 'csv' ? 'zip' : f}`,
+  listProfiles: async () => [...profiles].sort((a, b) => a.name.localeCompare(b.name)),
+  saveProfile: async (p) => {
+    if (!p.name.trim()) throw new Error('el perfil necesita un nombre')
+    profiles = [...profiles.filter(x => x.name.toLowerCase() !== p.name.toLowerCase()), { ...p, updated: new Date().toISOString() }]
+  },
+  deleteProfile: async (n) => { profiles = profiles.filter(x => x.name.toLowerCase() !== n.toLowerCase()) },
+  discover: async (scope) => {
+    await sleep(700)
+    if (!/^(organizations|folders)\/\d+$|^projects\//.test(scope)) throw new Error(`ámbito no válido "${scope}": usa organizations/123, folders/456 o projects/mi-proyecto`)
+    const fp: Footprint[] = [
+      { projectId: 'acme-prod-erp', number: '482917300000', vms: 9, running: 8, disks: 14, other: 6 },
+      { projectId: 'acme-prod-web', number: '482917307919', vms: 12, running: 12, disks: 12, other: 2 },
+      { projectId: 'acme-data-lake', number: '482917331676', vms: 4, running: 3, disks: 7, other: 0 },
+      { projectId: 'acme-legacy-batch', number: '482917399999', vms: 2, running: 0, disks: 3, other: 1 },
+    ]
+    return fp
+  },
 }

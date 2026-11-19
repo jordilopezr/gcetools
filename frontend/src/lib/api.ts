@@ -24,7 +24,14 @@ export interface KeyInfo { clientEmail: string; projectId: string; keyId: string
 export interface SessionInfo { identity: string; method: string; projectHint: string }
 export interface ADCStatus { found: boolean; identity: string }
 export interface Modules { osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string }
-export interface ScanOptions { concurrency: number; health: { stoppedDays: number; snapshotDays: number; imageDays: number }; modules: Modules }
+export interface HealthOptions { stoppedDays: number; snapshotDays: number; imageDays: number }
+export interface ScanOptions { concurrency: number; health: HealthOptions; modules: Modules }
+export interface Footprint { projectId: string; number: string; vms: number; running: number; disks: number; other: number }
+export interface Profile {
+  name: string; auth?: string; keyPath?: string; impersonate?: string
+  query?: string; projects?: string[]; discover?: string
+  concurrency?: number; modules: Modules; health: HealthOptions; updated?: string
+}
 export interface AboutInfo { version: string; website: string; donate: string; license: string; licenseUrl: string; releases: string }
 export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
 export interface SnapshotInfo { path: string; name: string; startedAt: string; identity: string; version: string; projects: number; vms: number }
@@ -53,6 +60,10 @@ export interface Api {
   currentSnapshot(): Promise<SnapshotInfo | null>
   compare(before: string, after: string): Promise<Inventory>
   exportDiff(format: ExportFormat, csvSep: string): Promise<string>
+  listProfiles(): Promise<Profile[]>
+  saveProfile(p: Profile): Promise<void>
+  deleteProfile(name: string): Promise<void>
+  discover(scope: string): Promise<Footprint[]>
 }
 
 /** Pseudo-path that selects the inventory in memory (see app.go). */
@@ -80,6 +91,10 @@ const wailsApi: Api = {
   currentSnapshot: async () => ((await App.CurrentSnapshot()) as unknown as SnapshotInfo) ?? null,
   compare: async (a, b) => (await App.Compare(a, b)) as unknown as Inventory,
   exportDiff: (f, sep) => App.ExportDiff(f, sep),
+  listProfiles: async () => ((await App.ListProfiles()) as unknown as Profile[]) ?? [],
+  saveProfile: (p) => App.SaveProfile(p as never),
+  deleteProfile: (n) => App.DeleteProfile(n),
+  discover: async (scope) => ((await App.Discover(scope)) as unknown as Footprint[]) ?? [],
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined
