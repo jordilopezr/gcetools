@@ -12,6 +12,7 @@ import (
 	"gcetools/internal/core"
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
+	"gcetools/internal/health"
 	"gcetools/internal/model"
 	"gcetools/internal/profile"
 	"gcetools/internal/update"
@@ -373,6 +374,9 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 // ---------- profiles & discovery ----------
 
 func (a *App) ListProfiles() ([]profile.Profile, error) { return profile.List() }
+
+// HealthRules is the gHealth rule catalog for the settings panel.
+func (a *App) HealthRules() []health.Rule { return health.Rules }
 
 // SaveProfile stores p. For service account keys only the file path is kept,
 // so the CLI can reuse the profile; the key itself is never written.

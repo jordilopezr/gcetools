@@ -67,6 +67,38 @@ gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
 gcetools-cli diff --fail-on-relevant base.json hoy.json   # código de salida 3 si hay cambios relevantes
 ```
 
+### Reglas de salud configurables
+
+Cada regla de gHealth tiene un ID estable (`gcetools-cli rules` las lista). En **Proyectos → Reglas de salud** se pueden desactivar y ajustar sus umbrales (días de parada, antigüedad de snapshots e imágenes, CPU, RAM, cuotas, vencimiento de CUD); la configuración se guarda en el perfil.
+
+Para exceptuar recursos concretos sin desactivar la regla, usa labels en la VM, el disco, el template o el proyecto:
+
+| Label | Efecto |
+|---|---|
+| `gcetools-ignore=<id>` | Omite esa regla para el recurso |
+| `gcetools-ignore-<id>=true` | Igual, y permite combinar varias reglas |
+| `gcetools-ignore=all` | Omite todas las reglas para el recurso |
+
+Por ejemplo, un proyecto con el label `gcetools-ignore=snapshot-schedule` no genera avisos de discos sin snapshot schedule (útil si los backups los hace Veeam o Backup and DR). gMetaData indica cuántos hallazgos se ocultaron y qué reglas estaban desactivadas.
+
+```bash
+gcetools-cli rules
+gcetools-cli scan --disable-rules snapshot-schedule,no-labels
+```
+
+### Coste real (BigQuery Billing Export)
+
+Opcional. Con la [exportación de facturación a BigQuery](https://cloud.google.com/billing/docs/how-to/export-data-bigquery) activada, gceTools lee el coste **neto** de Compute Engine de un mes (con CUD, SUD, créditos y descuentos) y lo pone junto al estimado de lista:
+
+- **gCostReal:** por proyecto, coste bruto, créditos, neto, estimado de lista y diferencia. Con la exportación **detallada** (`gcp_billing_export_resource_v1_…`) separa lo atribuido a VMs y discos de lo no atribuido (red/egress, IPs, snapshots, commitments, recursos ya borrados).
+- **gInfo y gDisks:** columna "Coste real mes (BigQuery)" por VM y por disco (solo con la exportación detallada).
+- **Coste de la consulta:** es la única función de gceTools que puede costar dinero, porque BigQuery cobra los datos leídos (1 TiB gratis al mes por cuenta de facturación). gceTools filtra por las particiones del mes, hace antes una estimación gratuita (*dry run*) y no ejecuta la consulta si leería más del límite (50 GB por defecto). gMetaData muestra los GB leídos.
+- **Permisos:** `roles/bigquery.jobUser` en el proyecto de la tabla y `roles/bigquery.dataViewer` en el dataset.
+
+```bash
+gcetools-cli scan --billing-table finops-prj.billing.gcp_billing_export_resource_v1_XXXXXX_XXXXXX_XXXXXX --billing-month 202610
+```
+
 ### Coste estimado
 
 El módulo `pricing` descarga el catálogo público de Compute Engine (Cloud Billing Catalog API). Lo guarda en caché 24 horas en `~/.cache/gcetools/` o en su equivalente en Windows y macOS, y calcula precios de lista on-demand a 730 h/mes en la moneda elegida (`--currency USD|EUR|CLP…`). Añade columnas de coste a gInfo, gDisks, gSnapshot, gImage, gAddress y gProject, y genera la pestaña gCost.
@@ -87,7 +119,7 @@ El módulo `pricing` descarga el catálogo público de Compute Engine (Cloud Bil
 | Sistema | Paquete | Requisitos |
 |---|---|---|
 | Windows 10/11 (x64 o ARM64) | `gcetools-…-setup.exe` (instalador) o `.zip` portable | WebView2 Runtime (ya incluido en Windows 10/11 actualizados; si falta, la app ofrece instalarlo) |
-| macOS 11+ (Intel y Apple Silicon) | `gceTools.app` en `.zip`, binario universal | — |
+| macOS 11+ (Intel y Apple Silicon) | `.dmg` (arrastrar a Aplicaciones) o `.zip` con `gcetools-cli`; binario universal | — |
 | Debian 12+ / Ubuntu 22.04+ (x64) | `.deb` | Dependencias resueltas por `apt` |
 | Fedora 36+ / RHEL 9+ / openSUSE (x64) | `.rpm` | Dependencias resueltas por `dnf` / `zypper` |
 | Cualquier Linux x64 | `.AppImage` o `.tar.gz` | GTK 3 y WebKitGTK 4.1 instalados (vienen con GNOME en las distros actuales) |
@@ -97,15 +129,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.4.0-linux-amd64.deb
+sudo apt install ./gcetools-0.5.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.4.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.5.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.4.0-linux-x86_64.AppImage && ./gcetools-0.4.0-linux-x86_64.AppImage
+chmod +x gcetools-0.5.0-linux-x86_64.AppImage && ./gcetools-0.5.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
@@ -130,7 +162,7 @@ El workflow [.github/workflows/build.yml](.github/workflows/build.yml) ejecuta l
 |---|---|
 | Linux | `.deb`, `.rpm`, `.AppImage` y `.tar.gz` (script [build/linux/package.sh](build/linux/package.sh), con nfpm y appimagetool) |
 | Windows | `.zip` e instalador NSIS |
-| macOS | `.app` universal en `.zip` |
+| macOS | `.dmg` y `.zip` con la `.app` universal |
 
 Cada build se publica como artefacto. Al subir un tag `v*` se crea además una GitHub Release.
 
@@ -186,7 +218,7 @@ gcetools-cli version
 
 ## Coste de uso de las APIs
 
-gceTools solo hace lecturas. Casi todas las APIs que usa son gratuitas; la única que puede facturar es Cloud Monitoring, con un tramo gratuito que en la práctica no se agota.
+gceTools solo hace lecturas. Casi todas las APIs que usa son gratuitas; pueden facturar Cloud Monitoring, con un tramo gratuito que en la práctica no se agota, y BigQuery si activas el coste real.
 
 | API | Para qué | Coste |
 |---|---|---|
@@ -196,6 +228,7 @@ gceTools solo hace lecturas. Casi todas las APIs que usa son gratuitas; la únic
 | Recommender | Recomendaciones | Gratis |
 | Cloud Asset Inventory | Descubrir proyectos con Compute | Gratis (cuota: 400 búsquedas/min por proyecto) |
 | Cloud Monitoring | Métricas de CPU y RAM (gPerf) | 0,50 USD por millón de series devueltas; el primer millón al mes por cuenta de facturación es gratis |
+| BigQuery | Coste real (opcional, desactivado por defecto) | Por datos leídos (1 TiB gratis al mes); gceTools estima antes y respeta un límite de GB |
 | OS Config | SO y agentes (gTools) | Leer es gratis. VM Manager cobra por VM con agente activo (0,003 USD/h, 100 VMs gratis por cuenta de facturación), pero eso depende de tener el agente, no de gceTools |
 | GitHub | Buscar actualizaciones | Gratis |
 
@@ -207,6 +240,7 @@ Como referencia, un escaneo pide unas 2 series de Monitoring por VM (CPU y RAM):
 - gTools: `roles/osconfig.inventoryViewer`, con la API de OS Config habilitada en el proyecto y el agente en las VMs.
 - gPerf: `roles/monitoring.viewer`.
 - Descubrimiento con Cloud Asset Inventory: `roles/cloudasset.viewer` en la organización o carpeta.
+- Coste real: `roles/bigquery.jobUser` en el proyecto de la tabla de facturación y `roles/bigquery.dataViewer` en su dataset.
 - gRecommend: `roles/recommender.computeViewer`. Con credenciales de usuario, Google exige un quota project: se usa el `quota_project_id` de ADC (`gcloud auth application-default set-quota-project <proyecto>`), que debe tener la Recommender API habilitada.
 - Sin `resourcemanager.projects.list` se pueden añadir proyectos a mano por ID.
 
@@ -223,6 +257,7 @@ internal/pricing          Catálogo de Cloud Billing y cálculo de coste estimad
 internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
 internal/cli              Comandos `scan`, `diff`, `profiles` y `version`
 internal/profile          Perfiles de escaneo guardados
+internal/billing          Coste real desde la exportación de facturación a BigQuery
 frontend/                 React + TS, tokens Material 3, AG Grid
 assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
@@ -233,8 +268,7 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 
 - Inicio de sesión OAuth en el navegador sin gcloud (necesita un OAuth client ID de la organización)
 - Colector completo basado en Cloud Asset Inventory (hoy CAI solo se usa para descubrir proyectos)
-- Costes reales desde la exportación de facturación a BigQuery
-- Firma de Windows (Azure Trusted Signing o EV) y DMG para macOS
+- Firma de los ejecutables de Windows
 
 ## Actualizaciones
 

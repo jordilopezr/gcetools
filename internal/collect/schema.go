@@ -27,6 +27,7 @@ const (
 	SPerf     = "gPerf"
 	SRecomm   = "gRecommend"
 	SCost     = "gCost"
+	SCostReal = "gCostReal"
 	SProject  = "gProject"
 	SHealth   = "gHealth"
 	SErrors   = "gErrors"
@@ -72,6 +73,7 @@ func NewInventory() *model.Inventory {
 			c("mig", "MIG", S, 22), c("hostname", "Hostname", S, 24), c("selfLink", "Self link", S, 40),
 			c("costCompute", "Compute+GPU/mes (si encendida)", M, 14), c("costLicense", "Licencias/mes", M, 11),
 			c("costDisks", "Discos/mes", M, 11), c("costMonthly", "Coste/mes actual", M, 12), c("costNote", "Notas de coste", S, 24),
+			c("costReal", "Coste real mes (BigQuery)", M, 13),
 		),
 		sheet(SCPU, "CPU", "Detalle de CPU por VM (vCPU)",
 			c("project", "Proyecto", S, 24), c("name", "VM", S, 28), c("zone", "Zona", S, 16),
@@ -109,7 +111,7 @@ func NewInventory() *model.Inventory {
 			c("sourceImage", "Imagen origen", S, 30), c("sourceSnapshot", "Snapshot origen", S, 24),
 			c("snapshotSchedule", "Snapshot schedule", S, 22), c("replicaZones", "Réplicas", S, 22),
 			c("architecture", "Arquitectura", S, 10), c("labels", "Labels", S, 30),
-			c("costMonthly", "Coste/mes", M, 10),
+			c("costMonthly", "Coste/mes", M, 10), c("costReal", "Coste real mes (BigQuery)", M, 13),
 		),
 		sheet(SSnapshot, "Snapshots", "Snapshots de disco (vSnapshot)",
 			c("project", "Proyecto", S, 24), c("name", "Snapshot", S, 30), c("sourceDisk", "Disco origen", S, 28),
@@ -223,6 +225,13 @@ func NewInventory() *model.Inventory {
 			c("images", "Imágenes", M, 10), c("ips", "IPs sin uso", M, 10), c("total", "Total/mes", M, 12),
 			c("currency", "Moneda", S, 7),
 		),
+		sheet(SCostReal, "Coste real", "Coste neto real de Compute Engine según la exportación de facturación a BigQuery",
+			c("project", "Proyecto", S, 26), c("month", "Mes", S, 8), c("gross", "Coste bruto", M, 12),
+			c("credits", "Créditos (CUD, SUD, descuentos)", M, 14), c("net", "Coste neto", M, 12),
+			c("attributed", "Atribuido a VMs y discos", M, 13), c("unattributed", "No atribuido (red, IPs, snapshots, commitments…)", M, 16),
+			c("estimate", "Estimado lista", M, 12), c("diff", "Neto − estimado", M, 12), c("diffPct", "Diferencia (%)", F, 10),
+			c("currency", "Moneda", S, 7),
+		),
 		sheet(SProject, "Proyectos", "Proyectos escaneados (vSource)",
 			c("projectId", "Proyecto", S, 26), c("number", "Número", S, 14), c("name", "Nombre", S, 26),
 			c("parent", "Padre", S, 22), c("state", "Estado", S, 9), c("scanStatus", "Resultado escaneo", S, 22),
@@ -233,7 +242,7 @@ func NewInventory() *model.Inventory {
 		),
 		sheet(SHealth, "Salud", "Hallazgos de buenas prácticas (vHealth)",
 			c("severity", "Severidad", S, 9), c("category", "Categoría", S, 14), c("rule", "Regla", S, 34),
-			c("project", "Proyecto", S, 24), c("resource", "Recurso", S, 30), c("location", "Ubicación", S, 16),
+			c("ruleId", "ID de regla", S, 18), c("project", "Proyecto", S, 24), c("resource", "Recurso", S, 30), c("location", "Ubicación", S, 16),
 			c("detail", "Detalle", S, 50),
 		),
 		sheet(SErrors, "Errores", "Proyectos o APIs que no se pudieron leer",

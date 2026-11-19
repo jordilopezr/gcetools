@@ -4,6 +4,7 @@ import {main} from '../models';
 import {update} from '../models';
 import {model} from '../models';
 import {core} from '../models';
+import {health} from '../models';
 import {profile} from '../models';
 import {auth} from '../models';
 
@@ -32,6 +33,8 @@ export function Export(arg1:string,arg2:string):Promise<string>;
 export function ExportDiff(arg1:string,arg2:string):Promise<string>;
 
 export function GetInventory():Promise<model.Inventory>;
+
+export function HealthRules():Promise<Array<health.Rule>>;
 
 export function ListProfiles():Promise<Array<profile.Profile>>;
 

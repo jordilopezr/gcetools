@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gcetools/internal/auth"
+	"gcetools/internal/billing"
 	"gcetools/internal/collect"
 	"gcetools/internal/health"
 	"gcetools/internal/model"
@@ -28,7 +29,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.4.0"
+var Version = "0.5.0"
 
 type Engine struct {
 	Session *auth.Session
@@ -87,6 +88,11 @@ type Modules struct {
 	// Pricing estimates monthly list-price cost from the Cloud Billing Catalog.
 	Pricing  bool   `json:"pricing"`
 	Currency string `json:"currency"` // ISO 4217, default USD
+	// Billing reads the real net cost from a Cloud Billing export in BigQuery
+	// (empty table = off). The only module that can cost money: see billing.
+	BillingTable string `json:"billingTable"`
+	BillingMonth string `json:"billingMonth"` // YYYYMM; empty = previous month
+	BillingMaxGB int    `json:"billingMaxGB"` // refuse queries above this; 0 = 50 GB
 }
 
 func AllModules() Modules {
@@ -114,9 +120,6 @@ type Progress struct {
 func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, onProgress func(Progress)) (*model.Inventory, error) {
 	if opt.Concurrency <= 0 {
 		opt.Concurrency = 8
-	}
-	if opt.Health.StoppedDays == 0 && opt.Health.SnapshotDays == 0 {
-		opt.Health = health.DefaultOptions()
 	}
 	svcs, err := e.services(ctx, opt.Modules)
 	if err != nil {
@@ -220,7 +223,24 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		}
 	}
 
-	health.Evaluate(inv, opt.Health, inv.Meta.FinishedAt)
+	var billed *billing.Data
+	var billedRes billing.Result
+	if opt.Modules.BillingTable != "" && ctx.Err() == nil {
+		var ids []string
+		for _, p := range projects {
+			ids = append(ids, p.ID)
+		}
+		d, err := billing.Load(ctx, e.Client, billing.Config{Table: opt.Modules.BillingTable, Month: opt.Modules.BillingMonth,
+			MaxGB: opt.Modules.BillingMaxGB}, ids, time.Now())
+		if err != nil {
+			kind, msg := collect.Classify(err)
+			inv.AddError(model.ScanError{Project: "(todos)", Collector: "billing", Kind: kind, Message: msg})
+		} else {
+			billed, billedRes = d, billing.Apply(inv, d)
+		}
+	}
+
+	hres := health.Evaluate(inv, opt.Health, inv.Meta.FinishedAt)
 
 	es := inv.Sheet(collect.SErrors)
 	for _, er := range inv.Errors {
@@ -240,6 +260,9 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		{"Moneda de costes", m.Currency},
 		{"Base de los costes", map[bool]string{true: "Precio de lista on-demand del Cloud Billing Catalog, 730 h/mes; sin SUD, CUD ni descuentos negociados", false: "No estimados"}[priced != nil]},
 		{"Sin tarifa", unpricedText(priced)},
+		{"Coste real (BigQuery)", billingText(billed, billedRes)},
+		{"Reglas de salud desactivadas", strings.Join(hres.Disabled, ", ")},
+		{"Hallazgos ocultos por labels gcetools-ignore", fmt.Sprint(hres.Suppressed)},
 		{"Inicio", m.StartedAt.Format(time.RFC3339)},
 		{"Fin", m.FinishedAt.Format(time.RFC3339)},
 		{"Duración", m.FinishedAt.Sub(m.StartedAt).Round(time.Second).String()},
@@ -289,10 +312,28 @@ func modulesText(m Modules) string {
 	if m.Recommender {
 		on = append(on, "Recommender")
 	}
+	if m.Pricing {
+		on = append(on, "coste estimado")
+	}
+	if m.BillingTable != "" {
+		on = append(on, "coste real (BigQuery)")
+	}
 	if len(on) == 0 {
 		return "ninguno"
 	}
 	return strings.Join(on, ", ")
+}
+
+func billingText(d *billing.Data, r billing.Result) string {
+	if d == nil {
+		return ""
+	}
+	kind := "exportación estándar: solo por proyecto"
+	if d.Detailed {
+		kind = fmt.Sprintf("exportación detallada: %.0f%% atribuido a VMs y discos", 100*r.Attributed/max(r.Net, 0.01))
+	}
+	return fmt.Sprintf("%s, mes %s, neto %.2f %s (%s); BigQuery leyó %.2f GB", d.Table, d.Month, r.Net, d.Currency,
+		kind, float64(d.BytesRead)/1e9)
 }
 
 func unpricedText(r *pricing.Result) string {

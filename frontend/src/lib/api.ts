@@ -23,8 +23,16 @@ export interface Progress { total: number; done: number; project: string; step: 
 export interface KeyInfo { clientEmail: string; projectId: string; keyId: string }
 export interface SessionInfo { identity: string; method: string; projectHint: string }
 export interface ADCStatus { found: boolean; identity: string }
-export interface Modules { osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string }
-export interface HealthOptions { stoppedDays: number; snapshotDays: number; imageDays: number }
+export interface Modules {
+  osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string
+  billingTable?: string; billingMonth?: string; billingMaxGB?: number
+}
+export interface HealthOptions {
+  stoppedDays: number; snapshotDays: number; imageDays: number
+  cpuLowPct: number; cpuHighPct: number; memHighPct: number; quotaPct: number; cudDays: number
+  disabled: string[]
+}
+export interface HealthRule { id: string; title: string; category: string; severity: string; param?: string; labels: string }
 export interface ScanOptions { concurrency: number; health: HealthOptions; modules: Modules }
 export interface Footprint { projectId: string; number: string; vms: number; running: number; disks: number; other: number }
 export interface Profile {
@@ -64,6 +72,7 @@ export interface Api {
   saveProfile(p: Profile): Promise<void>
   deleteProfile(name: string): Promise<void>
   discover(scope: string): Promise<Footprint[]>
+  healthRules(): Promise<HealthRule[]>
 }
 
 /** Pseudo-path that selects the inventory in memory (see app.go). */
@@ -95,6 +104,7 @@ const wailsApi: Api = {
   saveProfile: (p) => App.SaveProfile(p as never),
   deleteProfile: (n) => App.DeleteProfile(n),
   discover: async (scope) => ((await App.Discover(scope)) as unknown as Footprint[]) ?? [],
+  healthRules: async () => ((await App.HealthRules()) as unknown as HealthRule[]) ?? [],
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined

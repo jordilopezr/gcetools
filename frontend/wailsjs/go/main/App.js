@@ -54,6 +54,10 @@ export function GetInventory() {
   return window['go']['main']['App']['GetInventory']();
 }
 
+export function HealthRules() {
+  return window['go']['main']['App']['HealthRules']();
+}
+
 export function ListProfiles() {
   return window['go']['main']['App']['ListProfiles']();
 }

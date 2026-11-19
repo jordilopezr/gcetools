@@ -5,7 +5,7 @@ import SheetBrowser, { fmtDate } from '../components/SheetBrowser'
 
 interface Props { inventory: Inventory; notify: (m: string) => void }
 
-const primarySheets = ['gInfo', 'gHealth', 'gCost', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
+const primarySheets = ['gInfo', 'gHealth', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
 
 export default function InventoryPage({ inventory, notify }: Props) {
   const sheets = useMemo(() => {
@@ -29,6 +29,10 @@ export default function InventoryPage({ inventory, notify }: Props) {
       ...(inventory.meta.currency ? [{
         k: `Coste/mes lista (${inventory.meta.currency})`,
         v: Math.round(rows('gCost').filter(r => r.project !== 'TOTAL').reduce((a, r) => a + (Number(r.total) || 0), 0)),
+      }] : []),
+      ...(rows('gCostReal').length ? [{
+        k: `Coste real/mes ${String(rows('gCostReal')[0]?.month ?? '')} (${String(rows('gCostReal')[0]?.currency ?? '')})`,
+        v: Math.round(Number(rows('gCostReal').find(r => r.project === 'TOTAL')?.net) || 0),
       }] : []),
       ...(rows('gRecommend').length ? [{
         k: `Ahorro estimado/mes (${String(rows('gRecommend').find(r => r.currency)?.currency ?? 'USD')})`,

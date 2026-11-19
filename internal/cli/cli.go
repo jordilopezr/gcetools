@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gcetools/internal/auth"
+	"gcetools/internal/billing"
 	"gcetools/internal/core"
 	"gcetools/internal/export"
 	"gcetools/internal/health"
@@ -31,6 +32,7 @@ Ejemplos:
   gcetools scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
   gcetools scan --discover organizations/123456 --out inventario.json
   gcetools scan --profile produccion --out inventario.xlsx
+  gcetools scan --billing-table finops-prj.billing.gcp_billing_export_resource_v1_XXXX --out inventario.xlsx
 
 Con --profile se usan los valores guardados en la app (Proyectos → Perfil);
 las opciones que pases explícitamente tienen prioridad.
@@ -56,11 +58,25 @@ func Run(args []string) int {
 	currency := fs.String("currency", "USD", "moneda de los costes estimados (USD, EUR, CLP…)")
 	disc := fs.String("discover", "", "escanea solo proyectos con recursos de Compute según Cloud Asset Inventory (organizations/N, folders/N)")
 	profName := fs.String("profile", "", "perfil guardado (gcetools profiles los lista)")
+	billTable := fs.String("billing-table", "", "tabla de exportación de facturación en BigQuery (proyecto.dataset.tabla) para el coste real")
+	billMonth := fs.String("billing-month", "", "mes de facturación AAAAMM (por defecto, el mes anterior)")
+	billMaxGB := fs.Int("billing-max-gb", 50, "no ejecutar la consulta de BigQuery si leería más GB que esto")
+	disableRules := fs.String("disable-rules", "", "reglas de gHealth a desactivar, separadas por comas (gcetools rules las lista)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if *billTable != "" {
+		if _, _, _, err := billing.ParseTable(*billTable); err != nil {
+			return fail("%v", err)
+		}
+	}
+	for _, id := range strings.Split(*disableRules, ",") { // validate before asking for credentials
+		if id = strings.TrimSpace(id); id != "" && !slices.ContainsFunc(health.Rules, func(r health.Rule) bool { return r.ID == id }) {
+			return fail("regla desconocida %q (gcetools rules las lista)", id)
+		}
+	}
 	var prof *profile.Profile
 	if *profName != "" {
 		p, err := profile.Get(*profName)
@@ -158,9 +174,24 @@ func Run(args []string) int {
 		if !set["currency"] && prof.Modules.Currency != "" {
 			mods.Currency = prof.Modules.Currency
 		}
-		if prof.Health.StoppedDays > 0 || prof.Health.SnapshotDays > 0 {
-			hopt = prof.Health
+		hopt = prof.Health // zero fields fall back to defaults in health.Evaluate
+	}
+	if set["disable-rules"] {
+		hopt.Disabled = nil
+		for _, id := range strings.Split(*disableRules, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				hopt.Disabled = append(hopt.Disabled, id)
+			}
 		}
+	}
+	if set["billing-table"] || mods.BillingTable == "" {
+		mods.BillingTable = *billTable
+	}
+	if set["billing-month"] || mods.BillingMonth == "" {
+		mods.BillingMonth = *billMonth
+	}
+	if set["billing-max-gb"] || mods.BillingMaxGB == 0 {
+		mods.BillingMaxGB = *billMaxGB
 	}
 	for _, m := range strings.Split(*modules, ",") {
 		switch strings.TrimSpace(m) {
@@ -255,5 +286,22 @@ func Profiles() int {
 		fmt.Printf("%-24s %s\n", p.Name, strings.Join(what, " · "))
 	}
 	fmt.Printf("\n%s\n", path)
+	return 0
+}
+
+// RulesList prints the gHealth rules and how to except a resource.
+func RulesList() int {
+	for _, r := range health.Rules {
+		param := ""
+		if r.Param != "" {
+			param = " [umbral: " + r.Param + "]"
+		}
+		fmt.Printf("%-24s %-6s %-20s %s%s\n", r.ID, r.Severity, r.Category, r.Title, param)
+	}
+	fmt.Print(`
+Desactivar en un escaneo:   gcetools scan --disable-rules snapshot-schedule,no-labels
+Excepción por recurso:      label gcetools-ignore=<id> (o gcetools-ignore-<id>=true, o gcetools-ignore=all)
+                            en la VM, el disco, el template o el proyecto
+`)
 	return 0
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, GridApi, SelectionChangedEvent } from 'ag-grid-community'
-import { api, errorText, type Footprint, type HealthOptions, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
+import { api, errorText, type Footprint, type HealthOptions, type HealthRule, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
 import { gridTheme, Icon } from '../components/ui'
 import type { ScanState } from '../App'
 
@@ -19,7 +19,9 @@ const stepLabel: Record<string, string> = {
   quotas: 'cuotas', osconfig: 'inventario de SO', monitoring: 'métricas', recommender: 'recomendaciones',
 }
 
-const defaultHealth: HealthOptions = { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }
+const defaultHealth: HealthOptions = { stoppedDays: 30, snapshotDays: 90, imageDays: 180, cpuLowPct: 10, cpuHighPct: 90, memHighPct: 90, quotaPct: 80, cudDays: 60, disabled: [] }
+const paramUnit: Record<string, string> = { stoppedDays: 'días', snapshotDays: 'días', imageDays: 'días', cudDays: 'días', cpuLowPct: '%', cpuHighPct: '%', memHighPct: '%', quotaPct: '%' }
+type NumericHealth = Exclude<keyof HealthOptions, 'disabled'>
 const fpTotal = (f?: Footprint) => (f ? f.vms + f.disks + f.other : 0)
 const selectStyle = { height: 36, borderRadius: 8, border: '1px solid var(--md-outline)', background: 'transparent', color: 'inherit', padding: '0 8px' }
 
@@ -35,6 +37,27 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
   const [modules, setModules] = useState<Modules>({ osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'USD' })
   const toggle = (k: 'osconfig' | 'monitoring' | 'recommender' | 'pricing') => setModules(m => ({ ...m, [k]: !m[k] }))
   const [health, setHealth] = useState<HealthOptions>(defaultHealth)
+  const [rules, setRules] = useState<HealthRule[]>([])
+  const [showRules, setShowRules] = useState(false)
+  const [showBilling, setShowBilling] = useState(false)
+  const months = useMemo(() => {
+    const out: { v: string; label: string }[] = []
+    const d = new Date()
+    for (let i = 1; i <= 6; i++) {
+      const m = new Date(d.getFullYear(), d.getMonth() - i, 1)
+      out.push({ v: `${m.getFullYear()}${String(m.getMonth() + 1).padStart(2, '0')}`, label: m.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) })
+    }
+    return out
+  }, [])
+  useEffect(() => { api.healthRules().then(setRules).catch(() => { /* panel stays empty */ }) }, [])
+  const toggleRule = (id: string) => setHealth(h => ({
+    ...h, disabled: h.disabled.includes(id) ? h.disabled.filter(x => x !== id) : [...h.disabled, id],
+  }))
+  const rulesByCategory = useMemo(() => {
+    const m = new Map<string, HealthRule[]>()
+    for (const r of rules) m.set(r.category, [...(m.get(r.category) ?? []), r])
+    return [...m.entries()]
+  }, [rules])
   const gridApi = useRef<GridApi<Project> | null>(null)
 
   // profiles and Cloud Asset Inventory discovery
@@ -93,7 +116,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     if (!p) return
     const q = p.query ?? ''
     setQuery(q); setModules(p.modules); setConcurrency(p.concurrency || 8)
-    setHealth({ ...defaultHealth, ...p.health }); setFootprint(null)
+    setHealth({ ...defaultHealth, ...p.health, disabled: p.health?.disabled ?? [] }); setFootprint(null)
     if (p.discover) setScope(p.discover)
     const ids = p.projects ?? []
     pending.current = ids.length ? ids : 'all'
@@ -269,7 +292,91 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           </select>
         )}
         <span className="body-s muted">Si la API no está habilitada en un proyecto, el módulo se omite sin marcarlo como error.</span>
+        <span className="spacer" />
+        <button className={`chip ${modules.billingTable ? 'selected' : ''}`} onClick={() => setShowBilling(v => !v)} aria-expanded={showBilling}
+          title="Coste neto real del mes (con CUD, SUD y descuentos) desde la exportación de facturación a BigQuery">
+          <Icon name={modules.billingTable ? 'check' : 'receipt_long'} size="sm" />Coste real (BigQuery)
+          <Icon name={showBilling ? 'expand_less' : 'expand_more'} size="sm" />
+        </button>
+        <button className={`chip ${showRules ? 'selected' : ''}`} onClick={() => setShowRules(v => !v)} aria-expanded={showRules}>
+          <Icon name="rule" size="sm" />Reglas de salud{health.disabled.length > 0 ? ` · ${health.disabled.length} desactivadas` : ''}
+          <Icon name={showRules ? 'expand_less' : 'expand_more'} size="sm" />
+        </button>
       </div>
+
+      {showBilling && (
+        <div className="card outlined col" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+            <div className="search" style={{ minWidth: 460, flex: 1 }}>
+              <Icon name="table" />
+              <input value={modules.billingTable ?? ''} spellCheck={false} aria-label="Tabla de exportación de facturación"
+                onChange={e => setModules(m => ({ ...m, billingTable: e.target.value.trim() }))}
+                placeholder="proyecto.dataset.gcp_billing_export_resource_v1_XXXXXX_XXXXXX_XXXXXX" />
+            </div>
+            <label className="row body-m" style={{ gap: 8 }}>Mes
+              <select value={modules.billingMonth ?? ''} onChange={e => setModules(m => ({ ...m, billingMonth: e.target.value }))} style={selectStyle}>
+                <option value="">Mes anterior (al escanear)</option>
+                {months.map(m => <option key={m.v} value={m.v}>{m.label}</option>)}
+              </select>
+            </label>
+            <label className="row body-m" style={{ gap: 8 }}>Límite
+              <input type="number" min={1} max={10000} value={modules.billingMaxGB || 50}
+                onChange={e => setModules(m => ({ ...m, billingMaxGB: Math.max(1, Number(e.target.value) || 50) }))}
+                aria-label="Límite de GB leídos" style={{ ...selectStyle, width: 80 }} /> GB
+            </label>
+            {modules.billingTable && <button className="btn text" onClick={() => setModules(m => ({ ...m, billingTable: '' }))}>Desactivar</button>}
+          </div>
+          <span className="body-s muted">
+            Añade la columna "Coste real mes" en gInfo y gDisks (con la exportación <b>detallada</b>) y la pestaña gCostReal con el neto frente al estimado.
+            Es el único módulo con coste: BigQuery cobra los datos leídos (1 TiB gratis al mes). gceTools hace antes una estimación gratuita y no ejecuta la consulta si supera el límite.
+            Permisos: <span className="mono">roles/bigquery.jobUser</span> en el proyecto de la tabla y <span className="mono">roles/bigquery.dataViewer</span> en el dataset.
+          </span>
+        </div>
+      )}
+
+      {showRules && (
+        <div className="card outlined col" style={{ gap: 12, maxHeight: 360, overflow: 'auto' }}>
+          <div className="row" style={{ gap: 8 }}>
+            <span className="title-s">Reglas de gHealth</span>
+            <span className="body-s muted">
+              Se guardan en el perfil. Para exceptuar un recurso concreto, ponle el label <span className="mono">gcetools-ignore=&lt;id&gt;</span> (o <span className="mono">gcetools-ignore=all</span>) en la VM, el disco, el template o el proyecto.
+            </span>
+            <span className="spacer" />
+            <button className="btn text" onClick={() => setHealth(defaultHealth)}><Icon name="restart_alt" />Valores por defecto</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '4px 24px' }}>
+            {rulesByCategory.map(([cat, list]) => (
+              <div key={cat} className="col" style={{ gap: 2 }}>
+                <span className="label-l muted" style={{ marginTop: 6 }}>{cat}</span>
+                {list.map(r => {
+                  const on = !health.disabled.includes(r.id)
+                  const param = r.param as NumericHealth | undefined
+                  return (
+                    <div key={r.id} className="row" style={{ gap: 8, minHeight: 34 }}>
+                      <label className="row body-m" style={{ gap: 8, cursor: 'pointer', flex: 1, minWidth: 0 }} title={`ID: ${r.id} · excepción en: ${r.labels}`}>
+                        <input type="checkbox" checked={on} onChange={() => toggleRule(r.id)}
+                          style={{ width: 18, height: 18, accentColor: 'var(--md-primary)', flexShrink: 0 }} />
+                        <span style={{ opacity: on ? 1 : 0.55 }}>{r.title}</span>
+                        <span className={`badge sev-${r.severity}`}>{r.severity}</span>
+                        <span className="mono body-s muted">{r.id}</span>
+                      </label>
+                      {param && (
+                        <label className="row body-s" style={{ gap: 4 }}>
+                          <input type="number" min={1} max={param.endsWith('Pct') ? 100 : 3650} value={health[param]} disabled={!on}
+                            onChange={e => { const v = Number(e.target.value); if (v > 0) setHealth(h => ({ ...h, [param]: v })) }}
+                            aria-label={`Umbral de ${r.title}`}
+                            style={{ width: 64, height: 28, borderRadius: 6, border: '1px solid var(--md-outline-variant)', background: 'transparent', color: 'inherit', padding: '0 6px' }} />
+                          {paramUnit[param]}
+                        </label>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="toolbar">
         <div className="search">

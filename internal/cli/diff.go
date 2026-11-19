@@ -36,6 +36,7 @@ Comandos:
   scan      escanea proyectos y exporta el inventario (gcetools scan --help)
   diff      compara dos snapshots JSON (gcetools diff --help)
   profiles  lista los perfiles de escaneo guardados
+  rules     lista las reglas de gHealth y cómo exceptuar recursos
   version   muestra la versión y si hay una más reciente
 `
 
@@ -52,6 +53,8 @@ func Dispatch(args []string) (code int, ok bool) {
 		return Diff(args[1:]), true
 	case "profiles":
 		return Profiles(), true
+	case "rules":
+		return RulesList(), true
 	case "version", "--version":
 		return Version(), true
 	case "help", "--help", "-h":

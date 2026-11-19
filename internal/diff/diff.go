@@ -47,9 +47,9 @@ type spec struct {
 var specs = []spec{
 	{sheet: collect.SInfo, keys: []string{"project", "zone", "name"}, project: "project", loc: "zone",
 		summary: []string{"machineType", "status", "os", "externalIP"},
-		ignore:  []string{"lastStart", "lastStop", "cpuPlatform", "costNote"}, collector: "instances"},
+		ignore:  []string{"lastStart", "lastStop", "cpuPlatform", "costNote", "costReal"}, collector: "instances"},
 	{sheet: collect.SDisks, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
-		summary: []string{"type", "sizeGB", "users"}, ignore: []string{"lastAttach", "lastDetach"}, collector: "disks"},
+		summary: []string{"type", "sizeGB", "users"}, ignore: []string{"lastAttach", "lastDetach", "costReal"}, collector: "disks"},
 	{sheet: collect.SDisk, keys: []string{"project", "zone", "vm", "deviceName"}, project: "project", loc: "zone",
 		summary: []string{"disk", "type", "sizeGB"}, collector: "instances"},
 	{sheet: collect.SNetwork, keys: []string{"project", "zone", "vm", "nic"}, project: "project", loc: "zone",
@@ -227,6 +227,18 @@ func Compare(a, b Input) *model.Inventory {
 			}
 			return m, order
 		}
+		// Only columns both scans have: a column added in a newer version must
+		// not show up as a change on every row.
+		inA := map[string]bool{}
+		for _, col := range sa.Columns {
+			inA[col.Key] = true
+		}
+		var common []model.Column
+		for _, col := range cols {
+			if inA[col.Key] {
+				common = append(common, col)
+			}
+		}
 		ma, oa := index(sa)
 		mb, ob := index(sb)
 
@@ -304,7 +316,7 @@ func Compare(a, b Input) *model.Inventory {
 				continue
 			}
 			modified := false
-			for _, col := range cols {
+			for _, col := range common {
 				if slices.Contains(sp.keys, col.Key) || slices.Contains(sp.ignore, col.Key) ||
 					(col.Type == model.TMoney && !money) {
 					continue

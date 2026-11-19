@@ -1,6 +1,8 @@
 package health
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -105,5 +107,104 @@ func TestSeverityOrder(t *testing.T) {
 			t.Fatalf("findings not sorted by severity: %v", rows)
 		}
 		last = o
+	}
+}
+
+func TestRulesCatalog(t *testing.T) {
+	seen := map[string]bool{}
+	for _, r := range Rules {
+		if seen[r.ID] {
+			t.Errorf("duplicate rule id %s", r.ID)
+		}
+		seen[r.ID] = true
+	}
+	// every ID the evaluator emits must be in the catalog (and so in the UI)
+	data, err := os.ReadFile("health.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range regexp.MustCompile(`add\(finding\{"([a-z0-9-]+)"`).FindAllStringSubmatch(string(data), -1) {
+		if !seen[m[1]] {
+			t.Errorf("rule %s emitted but missing from Rules", m[1])
+		}
+	}
+}
+
+func TestDisabledAndExceptions(t *testing.T) {
+	build := func() *model.Inventory {
+		inv := collect.NewInventory()
+		add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
+		add(collect.SProject, model.Row{"projectId": "veeam", "labels": "gcetools-ignore=snapshot-schedule"})
+		add(collect.SProject, model.Row{"projectId": "p"})
+		for _, vm := range []struct{ p, n, labels string }{
+			{"p", "plain", "app=x"},
+			{"p", "ignored-one", "app=x; gcetools-ignore=public-ip"},
+			{"p", "ignored-stack", "gcetools-ignore-public-ip=true; gcetools-ignore-snapshot-schedule=yes"},
+			{"p", "ignored-all", "gcetools-ignore=all"},
+			{"veeam", "proxy", "app=veeam"},
+		} {
+			add(collect.SInfo, model.Row{"project": vm.p, "name": vm.n, "zone": "z", "status": "RUNNING", "externalIP": "1.2.3.4",
+				"secureBoot": true, "deletionProtection": true, "labels": vm.labels})
+			add(collect.SDisks, model.Row{"project": vm.p, "name": vm.n + "-boot", "location": "z", "users": vm.n})
+		}
+		return inv
+	}
+	count := func(rows []model.Row, id, resource string) int {
+		n := 0
+		for _, r := range rows {
+			if r["ruleId"] == id && (resource == "" || r["resource"] == resource) {
+				n++
+			}
+		}
+		return n
+	}
+
+	inv := build()
+	res := Evaluate(inv, DefaultOptions(), time.Now())
+	rows := findings(inv)
+	if count(rows, "public-ip", "plain") != 1 || count(rows, "public-ip", "ignored-one") != 0 ||
+		count(rows, "public-ip", "ignored-stack") != 0 || count(rows, "public-ip", "proxy") != 1 {
+		t.Errorf("public-ip exceptions wrong: %v", rows)
+	}
+	if count(rows, "snapshot-schedule", "proxy") != 0 || count(rows, "snapshot-schedule", "ignored-stack") != 0 ||
+		count(rows, "snapshot-schedule", "plain") != 1 {
+		t.Errorf("project/stacked snapshot exceptions wrong: %v", rows)
+	}
+	for _, r := range rows {
+		if r["resource"] == "ignored-all" {
+			t.Errorf("gcetools-ignore=all must hide everything: %v", r)
+		}
+	}
+	if res.Suppressed != 6 || res.Findings != len(rows) {
+		t.Errorf("result = %+v (rows %d)", res, len(rows))
+	}
+
+	inv = build()
+	opt := DefaultOptions()
+	opt.Disabled = []string{"public-ip", "no-such-rule"}
+	res = Evaluate(inv, opt, time.Now())
+	if count(findings(inv), "public-ip", "") != 0 || len(res.Disabled) != 1 || res.Disabled[0] != "public-ip" {
+		t.Errorf("disabled: %+v", res)
+	}
+}
+
+func TestThresholds(t *testing.T) {
+	inv := collect.NewInventory()
+	inv.Sheet(collect.SPerf).Add(model.Row{"project": "p", "vm": "a", "zone": "z", "status": "RUNNING", "samples": 500.0,
+		"cpuP95": 15.0, "opsAgent": true})
+	inv.Sheet(collect.SQuota).Add(model.Row{"project": "p", "metric": "CPUS", "region": "r", "usagePct": 70.0})
+
+	Evaluate(inv, DefaultOptions(), time.Now())
+	if len(findings(inv)) != 0 {
+		t.Fatalf("defaults should not fire: %v", findings(inv))
+	}
+	inv.Sheet(collect.SHealth).Rows = nil
+	opt := Options{CPULowPct: 20, QuotaPct: 60} // zero fields fall back to defaults
+	Evaluate(inv, opt, time.Now())
+	if _, ok := has(findings(inv), "VM infrautilizada (CPU p95 < 20%)", "a"); !ok {
+		t.Errorf("cpu threshold: %v", findings(inv))
+	}
+	if _, ok := has(findings(inv), "Cuota regional", "CPUS"); !ok {
+		t.Errorf("quota threshold: %v", findings(inv))
 	}
 }

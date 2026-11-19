@@ -170,8 +170,12 @@ jobs:
               7z a "$n.zip" ./dist/* > /dev/null
               cp build/bin/*installer*.exe "$n-setup.exe" ;;
             macOS)
-              cp -R "$(find build/bin -maxdepth 1 -name '*.app' | head -1)" dist/ && cp README.md LICENSE dist/
-              ditto -c -k --keepParent dist "$n.zip" ;;
+              app="$(find build/bin -maxdepth 1 -name '*.app' | head -1)"
+              cp -R "$app" dist/ && cp README.md LICENSE dist/
+              ditto -c -k --keepParent dist "$n.zip"
+              # DMG: drag gceTools.app onto the Applications shortcut
+              mkdir -p dmg && cp -R "$app" dmg/ && ln -s /Applications dmg/Applications
+              hdiutil create -volname "gceTools ${v%%-*}" -srcfolder dmg -ov -format UDZO -fs HFS+ "$n.dmg" ;;
           esac
           ls -la
 
@@ -185,6 +189,7 @@ jobs:
             gcetools-*.deb
             gcetools-*.rpm
             gcetools-*.AppImage
+            gcetools-*.dmg
           if-no-files-found: error
 
   release:

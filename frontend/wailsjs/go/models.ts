@@ -50,6 +50,9 @@ export namespace core {
 	    metricsDays: number;
 	    pricing: boolean;
 	    currency: string;
+	    billingTable: string;
+	    billingMonth: string;
+	    billingMaxGB: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Modules(source);
@@ -63,6 +66,9 @@ export namespace core {
 	        this.metricsDays = source["metricsDays"];
 	        this.pricing = source["pricing"];
 	        this.currency = source["currency"];
+	        this.billingTable = source["billingTable"];
+	        this.billingMonth = source["billingMonth"];
+	        this.billingMaxGB = source["billingMaxGB"];
 	    }
 	}
 	export class Project {
@@ -132,6 +138,12 @@ export namespace health {
 	    stoppedDays: number;
 	    snapshotDays: number;
 	    imageDays: number;
+	    cpuLowPct: number;
+	    cpuHighPct: number;
+	    memHighPct: number;
+	    quotaPct: number;
+	    cudDays: number;
+	    disabled: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Options(source);
@@ -142,6 +154,34 @@ export namespace health {
 	        this.stoppedDays = source["stoppedDays"];
 	        this.snapshotDays = source["snapshotDays"];
 	        this.imageDays = source["imageDays"];
+	        this.cpuLowPct = source["cpuLowPct"];
+	        this.cpuHighPct = source["cpuHighPct"];
+	        this.memHighPct = source["memHighPct"];
+	        this.quotaPct = source["quotaPct"];
+	        this.cudDays = source["cudDays"];
+	        this.disabled = source["disabled"];
+	    }
+	}
+	export class Rule {
+	    id: string;
+	    title: string;
+	    category: string;
+	    severity: string;
+	    param?: string;
+	    labels: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Rule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.category = source["category"];
+	        this.severity = source["severity"];
+	        this.param = source["param"];
+	        this.labels = source["labels"];
 	    }
 	}
 

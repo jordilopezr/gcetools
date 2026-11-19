@@ -1,5 +1,5 @@
 // Mock backend for UI work in a plain browser (no Wails, no GCP).
-import type { Api, Column, Footprint, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
+import type { Api, Column, Footprint, HealthRule, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
 
 const projects: Project[] = [
   ['acme-prod-erp', 'ERP producción', 'folders/1201'], ['acme-prod-web', 'Web producción', 'folders/1201'],
@@ -135,11 +135,14 @@ const snapshots: SnapshotInfo[] = [
   { path: '/home/demo/gcetools-20261018-0900.json', name: 'gcetools-20261018-0900.json', startedAt: '2026-10-18T09:00:00Z', identity: 'demo@example.com', version: '0.2.2', projects: 6, vms: 58 },
   { path: '/home/demo/gcetools-20261118-0900.json', name: 'gcetools-20261118-0900.json', startedAt: '2026-11-18T09:00:00Z', identity: 'demo@example.com', version: '0.3.0', projects: 6, vms: 59 },
 ]
+// Mirrors health.Rules (internal/health/health.go).
+const healthRules: HealthRule[] = [{"id": "orphan-disk", "title": "Disco huérfano", "category": "Coste", "severity": "Alta", "labels": "disco o proyecto"}, {"id": "stopped-vm", "title": "VM parada más de N días", "category": "Coste", "severity": "Media", "param": "stoppedDays", "labels": "VM o proyecto"}, {"id": "unused-ip", "title": "IP externa reservada sin uso", "category": "Coste", "severity": "Media", "labels": "proyecto"}, {"id": "unused-reservation", "title": "Reserva con capacidad sin usar", "category": "Coste", "severity": "Media", "labels": "proyecto"}, {"id": "cud-expiring", "title": "Commitment (CUD) que vence pronto sin renovación", "category": "Coste", "severity": "Media", "param": "cudDays", "labels": "proyecto"}, {"id": "cpu-low", "title": "VM infrautilizada (CPU p95 baja)", "category": "Coste", "severity": "Media", "param": "cpuLowPct", "labels": "VM o proyecto"}, {"id": "old-family", "title": "Familia de máquina antigua (N1)", "category": "Coste", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "old-snapshots", "title": "Snapshots manuales antiguos", "category": "Coste", "severity": "Baja", "param": "snapshotDays", "labels": "proyecto"}, {"id": "firewall-open", "title": "Regla de firewall abierta a Internet", "category": "Seguridad", "severity": "Alta", "labels": "proyecto"}, {"id": "default-sa", "title": "Service account por defecto de Compute", "category": "Seguridad", "severity": "Media", "labels": "VM o proyecto"}, {"id": "public-ip", "title": "VM con IP pública", "category": "Seguridad", "severity": "Media", "labels": "VM o proyecto"}, {"id": "no-secure-boot", "title": "Secure Boot deshabilitado", "category": "Seguridad", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "template-image", "title": "Template con imagen obsoleta, deprecada o antigua", "category": "Seguridad", "severity": "Media", "param": "imageDays", "labels": "template o proyecto"}, {"id": "snapshot-schedule", "title": "VM con discos sin snapshot schedule", "category": "Protección de datos", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "cpu-high", "title": "CPU saturada", "category": "Rendimiento", "severity": "Media", "param": "cpuHighPct", "labels": "VM o proyecto"}, {"id": "mem-high", "title": "Memoria saturada", "category": "Rendimiento", "severity": "Media", "param": "memHighPct", "labels": "VM o proyecto"}, {"id": "boot-pd-standard", "title": "Disco de arranque pd-standard", "category": "Rendimiento", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "quota", "title": "Cuota regional casi agotada", "category": "Capacidad", "severity": "Media", "param": "quotaPct", "labels": "proyecto"}, {"id": "no-labels", "title": "VM sin labels", "category": "Gobierno", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "stopped-no-disks", "title": "VM parada sin discos", "category": "Gobierno", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "no-deletion-protection", "title": "Deletion protection deshabilitada", "category": "Operación", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "no-ops-agent", "title": "Sin Ops Agent", "category": "Operación", "severity": "Baja", "labels": "VM o proyecto"}]
+
 let picks = 0
 let profiles: Profile[] = [{
   name: 'Producción', query: '', projects: ['acme-prod-erp', 'acme-prod-web'], concurrency: 8,
   modules: { osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'EUR' },
-  health: { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }, updated: '2026-11-10T09:00:00Z',
+  health: { stoppedDays: 30, snapshotDays: 90, imageDays: 180, cpuLowPct: 10, cpuHighPct: 90, memHighPct: 90, quotaPct: 80, cudDays: 60, disabled: ['snapshot-schedule'] }, updated: '2026-11-10T09:00:00Z',
 }]
 const known = new Map<string, SnapshotInfo>()
 
@@ -226,4 +229,5 @@ export const mockApi: Api = {
     ]
     return fp
   },
+  healthRules: async () => healthRules,
 }

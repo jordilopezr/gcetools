@@ -34,6 +34,7 @@ const apiCosts: [string, string, string][] = [
   ['Cloud Asset Inventory', 'Descubrir proyectos con Compute', 'Gratis'],
   ['Cloud Monitoring', 'Métricas de CPU y RAM', '0,50 USD por millón de series; 1 millón gratis al mes'],
   ['OS Config', 'SO y agentes', 'Leer es gratis (VM Manager cobra por agente activo, no por gceTools)'],
+  ['BigQuery', 'Coste real (opcional, desactivado por defecto)', 'Por datos leídos (1 TiB gratis al mes); gceTools estima antes y respeta un límite de GB'],
   ['GitHub', 'Buscar actualizaciones', 'Gratis'],
 ]
 
@@ -125,7 +126,7 @@ export default function AboutPage({ about, update, onCheck, autoCheck, setAutoCh
       <details className="card filled">
         <summary className="title-s" style={{ cursor: 'pointer' }}>Coste de uso de las APIs de Google Cloud</summary>
         <p className="body-m" style={{ margin: '12px 0 8px' }}>
-          gceTools solo hace lecturas. Casi todas las APIs son gratuitas; la única que puede facturar es Cloud Monitoring, con un tramo gratuito que en la práctica no se agota.
+          gceTools solo hace lecturas. Casi todas las APIs son gratuitas; pueden facturar Cloud Monitoring, con un tramo gratuito que en la práctica no se agota, y BigQuery si activas el coste real.
         </p>
         <table className="body-m" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
