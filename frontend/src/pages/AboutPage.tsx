@@ -26,6 +26,17 @@ const credits: [string, string, string][] = [
   ['Material Symbols', 'Apache-2.0', 'https://fonts.google.com/icons'],
 ]
 
+const apiCosts: [string, string, string][] = [
+  ['Compute Engine', 'VMs, discos, red, snapshots…', 'Gratis (solo cuotas por minuto)'],
+  ['Resource Manager', 'Listar proyectos', 'Gratis'],
+  ['Cloud Billing Catalog', 'Coste estimado (caché de 24 h)', 'Gratis'],
+  ['Recommender', 'Recomendaciones', 'Gratis'],
+  ['Cloud Asset Inventory', 'Descubrir proyectos con Compute', 'Gratis'],
+  ['Cloud Monitoring', 'Métricas de CPU y RAM', '0,50 USD por millón de series; 1 millón gratis al mes'],
+  ['OS Config', 'SO y agentes', 'Leer es gratis (VM Manager cobra por agente activo, no por gceTools)'],
+  ['GitHub', 'Buscar actualizaciones', 'Gratis'],
+]
+
 function fmtDate(iso?: string) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -110,6 +121,34 @@ export default function AboutPage({ about, update, onCheck, autoCheck, setAutoCh
           La comprobación consulta la última release publicada en GitHub. No envía ningún dato tuyo ni de tu inventario.
         </span>
       </div>
+
+      <details className="card filled">
+        <summary className="title-s" style={{ cursor: 'pointer' }}>Coste de uso de las APIs de Google Cloud</summary>
+        <p className="body-m" style={{ margin: '12px 0 8px' }}>
+          gceTools solo hace lecturas. Casi todas las APIs son gratuitas; la única que puede facturar es Cloud Monitoring, con un tramo gratuito que en la práctica no se agota.
+        </p>
+        <table className="body-m" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr className="label-l muted" style={{ textAlign: 'left' }}>
+              <th style={{ padding: '6px 8px 6px 0' }}>API</th><th style={{ padding: '6px 8px' }}>Para qué</th><th style={{ padding: '6px 0 6px 8px' }}>Coste</th>
+            </tr>
+          </thead>
+          <tbody>
+            {apiCosts.map(([apiName, use, cost]) => (
+              <tr key={apiName} style={{ borderTop: '1px solid var(--md-outline-variant)', verticalAlign: 'top' }}>
+                <td style={{ padding: '6px 8px 6px 0', whiteSpace: 'nowrap' }}>{apiName}</td>
+                <td style={{ padding: '6px 8px' }} className="muted">{use}</td>
+                <td style={{ padding: '6px 0 6px 8px' }}>{cost}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="body-s muted" style={{ margin: '10px 0 0' }}>
+          Un escaneo pide unas 2 series de Monitoring por VM: con 100 VMs harían falta unos 5.000 escaneos al mes para salir del tramo gratuito.
+          Con credenciales de usuario, lo facturable va al quota project de ADC. Precios de noviembre de 2026; consulta la{' '}
+          <a href="https://cloud.google.com/monitoring/pricing" onClick={e => { e.preventDefault(); api.openURL('https://cloud.google.com/monitoring/pricing') }} style={{ color: 'var(--md-primary)' }}>página de precios de Monitoring</a>.
+        </p>
+      </details>
 
       <details className="card filled">
         <summary className="title-s" style={{ cursor: 'pointer' }}>Componentes de terceros</summary>

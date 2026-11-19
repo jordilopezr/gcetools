@@ -184,6 +184,23 @@ gcetools-cli version
 
 `gcetools-cli` viene en todos los paquetes y funciona igual en Windows, macOS y Linux. En Linux y macOS el binario de la app también acepta `gcetools scan …` y `gcetools diff …`; en Windows no, porque la app gráfica no escribe en la consola.
 
+## Coste de uso de las APIs
+
+gceTools solo hace lecturas. Casi todas las APIs que usa son gratuitas; la única que puede facturar es Cloud Monitoring, con un tramo gratuito que en la práctica no se agota.
+
+| API | Para qué | Coste |
+|---|---|---|
+| Compute Engine | Inventario de VMs, discos, red, snapshots… | Gratis (solo cuotas de peticiones por minuto) |
+| Resource Manager | Listar proyectos | Gratis |
+| Cloud Billing Catalog | Precios del coste estimado (caché de 24 h) | Gratis |
+| Recommender | Recomendaciones | Gratis |
+| Cloud Asset Inventory | Descubrir proyectos con Compute | Gratis (cuota: 400 búsquedas/min por proyecto) |
+| Cloud Monitoring | Métricas de CPU y RAM (gPerf) | 0,50 USD por millón de series devueltas; el primer millón al mes por cuenta de facturación es gratis |
+| OS Config | SO y agentes (gTools) | Leer es gratis. VM Manager cobra por VM con agente activo (0,003 USD/h, 100 VMs gratis por cuenta de facturación), pero eso depende de tener el agente, no de gceTools |
+| GitHub | Buscar actualizaciones | Gratis |
+
+Como referencia, un escaneo pide unas 2 series de Monitoring por VM (CPU y RAM): con 100 VMs harían falta unos 5.000 escaneos al mes para salir del tramo gratuito. Con credenciales de usuario, lo que se factura va al quota project de ADC. Precios de noviembre de 2026: consulta [Monitoring](https://cloud.google.com/monitoring/pricing), [VM Manager](https://cloud.google.com/compute/vm-manager/pricing) y [Cloud Asset Inventory](https://cloud.google.com/asset-inventory/pricing).
+
 ## Permisos IAM
 
 - Mínimos: `roles/compute.viewer` y `roles/browser` (a nivel de organización o carpeta para tener visión global).
