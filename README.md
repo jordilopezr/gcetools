@@ -152,7 +152,7 @@ El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añad
 
 **Firma:**
 - **macOS:** el workflow firma y notariza solo si existen los secrets `APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `APPLE_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` y `APPLE_APP_PASSWORD`. Hace falta una cuenta Apple Developer (99 USD/año).
-- **Windows:** se recomienda Azure Trusted Signing o un certificado EV, que todavía no están integrados.
+- **Windows:** firma gratuita para proyectos open source de [SignPath Foundation](https://signpath.org) (ver [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)). Solo se firman las releases (tags `v*`) y solo si existen el secret `SIGNPATH_API_TOKEN` y las variables `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` y `SIGNPATH_SIGNING_POLICY_SLUG`. Se firma en dos rondas: primero `gcetools.exe` y `gcetools-cli.exe`, luego el instalador, regenerado con el ejecutable ya firmado. Las configuraciones de artefacto de SignPath están en `.signpath/artifact-configurations/`. Cada firma se aprueba a mano en SignPath. El editor que muestra Windows es "SignPath Foundation".
 
 ## Builds multiplataforma
 
