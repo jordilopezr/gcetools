@@ -31,10 +31,30 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 | gRecommend * | — | Recomendaciones activas: rightsizing, recursos idle y CUDs, con ahorro mensual |
 | gCost * | — | Coste mensual estimado por proyecto: compute y GPU, licencias, discos, snapshots, imágenes, IPs sin uso |
 | gProject | vSource | Resumen por proyecto y resultado del escaneo |
-| gHealth | vHealth | Hallazgos: discos huérfanos, firewall abierto, SA por defecto, VMs paradas… |
+| gHealth | vHealth | Hallazgos: discos huérfanos, firewall abierto, SA por defecto, VMs paradas, discos sin snapshot schedule, templates con imágenes deprecadas o antiguas… |
 | gErrors / gMetaData | vMetaData | Errores por proyecto e información del escaneo |
 
 \* Módulos opcionales. Se activan en la pantalla de Proyectos o con `--modules`. Si la API está deshabilitada o falta el permiso, el módulo se omite: el proyecto queda como "OK (sin …)" y el motivo se registra en gErrors.
+
+### Comparar inventarios
+
+Exporta cada escaneo como **Snapshot JSON** y compáralos en la página **Comparar** (no necesita conexión a Google Cloud) o con `gcetools-cli diff`. El informe tiene cinco pestañas:
+
+| Pestaña | Contenido |
+|---|---|
+| Resumen | Altas, bajas y cambios por tipo de recurso |
+| Altas / Bajas | Recursos nuevos y eliminados, con un resumen de cada uno |
+| Cambios | Un campo por fila: valor anterior y valor nuevo |
+| Metadatos | Inventarios comparados, diferencia de coste/mes y lo que no se pudo comparar |
+
+- **Relevantes primero:** VMs redimensionadas, cambios de service account o de Shielded VM, IPs públicas nuevas, reglas de firewall abiertas a Internet, discos que quedan huérfanos, hallazgos nuevos de severidad alta y cambios en commitments.
+- **Sin falsos positivos por permisos:** un recurso solo se compara si su colector funcionó en los dos escaneos; si un proyecto falló en uno de ellos, aparece en Metadatos como "No comparado" en lugar de como cientos de bajas.
+- **Sin ruido:** se ignoran fechas de último arranque y parada, antigüedades, uso de cuotas, métricas y los snapshots creados por schedule (rotan a diario). Los costes solo se comparan si los dos inventarios usan la misma moneda.
+
+```bash
+gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
+gcetools-cli diff --fail-on-relevant base.json hoy.json   # código de salida 3 si hay cambios relevantes
+```
 
 ### Coste estimado
 
@@ -43,7 +63,7 @@ El módulo `pricing` descarga el catálogo público de Compute Engine (Cloud Bil
 - **VM encendida:** compute + GPU + licencias + discos.
 - **VM parada:** solo discos.
 - **No incluye:** descuentos por uso sostenido (SUD), CUDs, precios negociados, red/egress ni licencias BYOL/BYOS.
-- **Licencias de pago tarifadas:** Windows Server, SQL Server, RHEL (también for SAP) y SLES (también for SAP). Ubuntu Pro todavía no.
+- **Licencias de pago tarifadas:** Windows Server, SQL Server, RHEL (también for SAP), SLES (también for SAP) y Ubuntu Pro (también FIPS y Minimal Pro; por tramo de vCPU más RAM). Container-Optimized OS y las distribuciones libres no tienen coste de licencia.
 - **Lo que no encuentra precio** aparece en gInfo (columna "Notas de coste") y en gMetaData ("Sin tarifa").
 - **Validación con el catálogo real:**
 
@@ -66,15 +86,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.2.2-linux-amd64.deb
+sudo apt install ./gcetools-0.3.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.2.2-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.3.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.2.2-linux-x86_64.AppImage && ./gcetools-0.2.2-linux-x86_64.AppImage
+chmod +x gcetools-0.3.0-linux-x86_64.AppImage && ./gcetools-0.3.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
@@ -144,10 +164,12 @@ npm --prefix frontend run dev              # abre http://localhost:5173 con dato
 gcetools-cli scan --out inventario.xlsx
 gcetools-cli scan --auth sa --key sa.json --query "parent:folders/123456" --out inv.zip --csv-sep ";"
 gcetools-cli scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
+gcetools-cli scan --out "inventario-$(date +%F).json"     # snapshot para comparar después
+gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
 gcetools-cli version
 ```
 
-`gcetools-cli` viene en todos los paquetes y funciona igual en Windows, macOS y Linux. En Linux y macOS el binario de la app también acepta `gcetools scan …`; en Windows no, porque la app gráfica no escribe en la consola.
+`gcetools-cli` viene en todos los paquetes y funciona igual en Windows, macOS y Linux. En Linux y macOS el binario de la app también acepta `gcetools scan …` y `gcetools diff …`; en Windows no, porque la app gráfica no escribe en la consola.
 
 ## Permisos IAM
 
@@ -165,8 +187,10 @@ internal/auth             ADC / clave JSON / impersonación
 internal/core             Descubrimiento de proyectos, escaneo concurrente, HTTP con rate-limit y reintentos
 internal/collect          Un colector por tipo de recurso (aggregatedList) + esquema de pestañas
 internal/health           Reglas de gHealth
+internal/diff             Comparación de dos inventarios (altas, bajas y cambios)
+internal/pricing          Catálogo de Cloud Billing y cálculo de coste estimado
 internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
-internal/cli              Comando `scan`
+internal/cli              Comandos `scan`, `diff` y `version`
 frontend/                 React + TS, tokens Material 3, AG Grid
 assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
@@ -178,8 +202,8 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 - Inicio de sesión OAuth en el navegador sin gcloud (necesita un OAuth client ID de la organización)
 - Guardar perfiles con el llavero del sistema
 - Cloud Asset Inventory para organizaciones grandes
-- Comparar dos snapshots JSON
-- Firma de Windows (Azure Trusted Signing o EV), DMG para macOS y AppImage o .deb para Linux
+- Costes reales desde la exportación de facturación a BigQuery
+- Firma de Windows (Azure Trusted Signing o EV) y DMG para macOS
 
 ## Actualizaciones
 

@@ -14,8 +14,16 @@ export function CheckUpdate() {
   return window['go']['main']['App']['CheckUpdate']();
 }
 
+export function Compare(arg1, arg2) {
+  return window['go']['main']['App']['Compare'](arg1, arg2);
+}
+
 export function Connect(arg1, arg2) {
   return window['go']['main']['App']['Connect'](arg1, arg2);
+}
+
+export function CurrentSnapshot() {
+  return window['go']['main']['App']['CurrentSnapshot']();
 }
 
 export function DetectADC() {
@@ -30,6 +38,10 @@ export function Export(arg1, arg2) {
   return window['go']['main']['App']['Export'](arg1, arg2);
 }
 
+export function ExportDiff(arg1, arg2) {
+  return window['go']['main']['App']['ExportDiff'](arg1, arg2);
+}
+
 export function GetInventory() {
   return window['go']['main']['App']['GetInventory']();
 }
@@ -40,6 +52,10 @@ export function ListProjects(arg1) {
 
 export function PickServiceAccountKey() {
   return window['go']['main']['App']['PickServiceAccountKey']();
+}
+
+export function PickSnapshot() {
+  return window['go']['main']['App']['PickSnapshot']();
 }
 
 export function StartScan(arg1, arg2) {

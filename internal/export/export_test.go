@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -96,4 +97,18 @@ func TestCSVZip(t *testing.T) {
 		return
 	}
 	t.Fatal("gDisks.csv not found in zip")
+}
+
+func TestXLSXLongPath(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), strings.Repeat("carpeta-muy-larga-", 6), strings.Repeat("subcarpeta-", 6))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "inventario-con-un-nombre-bastante-largo.xlsx")
+	if len(path) <= 207 {
+		t.Fatalf("test path too short: %d", len(path))
+	}
+	if _, err := Write(collect.NewInventory(), path, XLSX, ','); err != nil {
+		t.Fatalf("long path: %v", err)
+	}
 }

@@ -138,7 +138,17 @@ func writeXLSX(inv *model.Inventory, path string) error {
 			return err
 		}
 	}
-	return f.SaveAs(path)
+	// Not f.SaveAs: excelize rejects paths longer than 207 characters, which
+	// deep folders (and most Windows profiles with OneDrive) easily exceed.
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteTo(out); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // ---------- CSV (zip) ----------
@@ -225,4 +235,22 @@ func writeJSON(inv *model.Inventory, path string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// ReadJSON loads a snapshot written by Write(..., JSON). Row values come back
+// as JSON types (dates as RFC 3339 strings, numbers as float64).
+func ReadJSON(path string) (*model.Inventory, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var inv model.Inventory
+	if err := json.NewDecoder(f).Decode(&inv); err != nil {
+		return nil, fmt.Errorf("%s no es un snapshot JSON de gceTools: %w", filepath.Base(path), err)
+	}
+	if inv.Meta.Tool == "" && len(inv.Sheets) == 0 {
+		return nil, fmt.Errorf("%s no es un snapshot JSON de gceTools", filepath.Base(path))
+	}
+	return &inv, nil
 }

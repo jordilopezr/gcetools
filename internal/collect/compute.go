@@ -339,7 +339,7 @@ func (c *collector) collectTemplates() error {
 					if d.Boot && d.InitializeParams != nil {
 						row["diskType"] = d.InitializeParams.DiskType
 						row["diskGB"] = float64(d.InitializeParams.DiskSizeGb)
-						row["image"] = last(d.InitializeParams.SourceImage)
+						row["image"], row["imageProject"] = templateImage(d.InitializeParams.SourceImage, c.project)
 					}
 				}
 				if len(p.NetworkInterfaces) > 0 {
@@ -361,4 +361,22 @@ func (c *collector) collectTemplates() error {
 		}
 		return nil
 	})
+}
+
+// templateImage splits a template's source image into its name and project.
+// Image families come back as "family/<name>": they always resolve to the
+// newest non-deprecated image, so they must not match a concrete image.
+func templateImage(src, project string) (name, imageProject string) {
+	if src == "" {
+		return "", ""
+	}
+	imageProject = projectOf("/" + strings.TrimPrefix(src, "/")) // also "projects/x/..." without host
+	if imageProject == "" {
+		imageProject = project // relative URL: global/images/<name>
+	}
+	name = last(src)
+	if strings.Contains(src, "/family/") {
+		name = "family/" + name
+	}
+	return name, imageProject
 }

@@ -48,7 +48,7 @@ export default function ProjectsPage({ scan, onScanStart, notify }: Props) {
   const start = async () => {
     try {
       onScanStart()
-      await api.startScan(selected, { concurrency, health: { stoppedDays: 30, snapshotDays: 90 }, modules })
+      await api.startScan(selected, { concurrency, health: { stoppedDays: 30, snapshotDays: 90, imageDays: 180 }, modules })
     } catch (e) { notify(errorText(e)) }
   }
 

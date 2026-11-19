@@ -25,12 +25,10 @@ var assets embed.FS
 var linuxIcon []byte
 
 func main() {
-	// `gcetools scan ...` runs headless (Linux/macOS; on Windows use gcetools-cli).
-	if len(os.Args) > 1 && os.Args[1] == "scan" {
-		os.Exit(cli.Run(os.Args[2:]))
-	}
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		os.Exit(cli.Version())
+	// `gcetools scan|diff|version ...` runs headless (Linux/macOS; on Windows
+	// the GUI binary has no console: use gcetools-cli).
+	if code, ok := cli.Dispatch(os.Args[1:]); ok {
+		os.Exit(code)
 	}
 
 	app := NewApp()

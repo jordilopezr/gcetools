@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"gcetools/internal/auth"
 	"gcetools/internal/core"
+	"gcetools/internal/diff"
 	"gcetools/internal/export"
 	"gcetools/internal/model"
 	"gcetools/internal/update"
@@ -27,9 +29,13 @@ type App struct {
 	projects map[string]core.Project
 	inv      *model.Inventory
 	cancel   context.CancelFunc
+	diff     *model.Inventory            // last comparison
+	snaps    map[string]*model.Inventory // snapshots loaded for comparison, by path
 }
 
-func NewApp() *App { return &App{projects: map[string]core.Project{}} }
+func NewApp() *App {
+	return &App{projects: map[string]core.Project{}, snaps: map[string]*model.Inventory{}}
+}
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
 
@@ -212,14 +218,29 @@ func (a *App) Export(format string, csvSep string) (string, error) {
 	if inv == nil {
 		return "", errors.New("no hay inventario que exportar")
 	}
+	return a.save(inv, "Exportar inventario", "gcetools-"+inv.Meta.StartedAt.Format("20060102-1504"), format, csvSep)
+}
+
+// ExportDiff writes the last comparison.
+func (a *App) ExportDiff(format string, csvSep string) (string, error) {
+	a.mu.Lock()
+	res := a.diff
+	a.mu.Unlock()
+	if res == nil {
+		return "", errors.New("no hay comparación que exportar")
+	}
+	return a.save(res, "Exportar comparación", "gcetools-diff-"+time.Now().Format("20060102-1504"), format, csvSep)
+}
+
+func (a *App) save(inv *model.Inventory, title, name, format, csvSep string) (string, error) {
 	f := export.Format(format)
 	ext := map[export.Format]string{export.XLSX: "xlsx", export.CSV: "zip", export.JSON: "json"}[f]
 	if ext == "" {
 		return "", errors.New("formato no soportado")
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Exportar inventario",
-		DefaultFilename: "gcetools-" + inv.Meta.StartedAt.Format("20060102-1504") + "." + ext,
+		Title:           title,
+		DefaultFilename: name + "." + ext,
 		Filters:         []runtime.FileFilter{{DisplayName: ext, Pattern: "*." + ext}},
 	})
 	if err != nil || path == "" {
@@ -261,4 +282,87 @@ func (a *App) AppInfo() AboutInfo {
 // CheckUpdate asks GitHub for the latest release.
 func (a *App) CheckUpdate() (update.Info, error) {
 	return update.Check(a.ctx, core.Version)
+}
+
+// SnapshotInfo summarizes a JSON snapshot chosen for comparison.
+type SnapshotInfo struct {
+	Path      string    `json:"path"`
+	Name      string    `json:"name"`
+	StartedAt time.Time `json:"startedAt"`
+	Identity  string    `json:"identity"`
+	Version   string    `json:"version"`
+	Projects  int       `json:"projects"`
+	VMs       int       `json:"vms"`
+}
+
+// CurrentInventory is the pseudo-path that selects the inventory in memory.
+const CurrentInventory = "current"
+
+// PickSnapshot opens a file dialog and loads a JSON snapshot.
+func (a *App) PickSnapshot() (*SnapshotInfo, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Elegir snapshot JSON de gceTools",
+		Filters: []runtime.FileFilter{{DisplayName: "Snapshot JSON (*.json)", Pattern: "*.json"}},
+	})
+	if err != nil || path == "" {
+		return nil, err
+	}
+	inv, err := export.ReadJSON(path)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	a.snaps[path] = inv
+	a.mu.Unlock()
+	return snapshotInfo(path, filepath.Base(path), inv), nil
+}
+
+func snapshotInfo(path, name string, inv *model.Inventory) *SnapshotInfo {
+	vms := 0
+	if s := inv.Sheet("gInfo"); s != nil {
+		vms = len(s.Rows)
+	}
+	m := inv.Meta
+	return &SnapshotInfo{Path: path, Name: name, StartedAt: m.StartedAt, Identity: m.Identity,
+		Version: m.Version, Projects: m.Projects, VMs: vms}
+}
+
+// CurrentSnapshot describes the inventory in memory, if any.
+func (a *App) CurrentSnapshot() *SnapshotInfo {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.inv == nil {
+		return nil
+	}
+	return snapshotInfo(CurrentInventory, "Inventario actual", a.inv)
+}
+
+// Compare diffs two snapshots picked before (or "current") and keeps the
+// result for ExportDiff.
+func (a *App) Compare(before, after string) (*model.Inventory, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	get := func(path string) (diff.Input, error) {
+		if path == CurrentInventory {
+			if a.inv == nil {
+				return diff.Input{}, errors.New("no hay inventario actual: escanea primero")
+			}
+			return diff.Input{Inv: a.inv, Label: "Inventario actual"}, nil
+		}
+		inv, ok := a.snaps[path]
+		if !ok {
+			return diff.Input{}, errors.New("snapshot no cargado: vuelve a elegirlo")
+		}
+		return diff.Input{Inv: inv, Label: filepath.Base(path)}, nil
+	}
+	x, err := get(before)
+	if err != nil {
+		return nil, err
+	}
+	y, err := get(after)
+	if err != nil {
+		return nil, err
+	}
+	a.diff = diff.Compare(x, y)
+	return a.diff, nil
 }

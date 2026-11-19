@@ -195,3 +195,18 @@ func TestOptionalModuleDisabledKeepsProjectOK(t *testing.T) {
 		t.Fatalf("status = %q, errors = %+v", st.Status, inv.Errors)
 	}
 }
+
+func TestTemplateImage(t *testing.T) {
+	cases := []struct{ src, name, project string }{
+		{"https://www.googleapis.com/compute/v1/projects/img/global/images/golden-v1", "golden-v1", "img"},
+		{"projects/debian-cloud/global/images/family/debian-12", "family/debian-12", "debian-cloud"},
+		{"global/images/base", "base", "p"},
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		n, p := templateImage(c.src, "p")
+		if n != c.name || p != c.project {
+			t.Errorf("templateImage(%q) = %q, %q; want %q, %q", c.src, n, p, c.name, c.project)
+		}
+	}
+}

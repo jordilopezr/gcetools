@@ -40,6 +40,14 @@ func fakeIndex() *Index {
 		sku("Storage PD Snapshot", "Storage", "OnDemand", "GiBy.mo", 0.05, "us-central1", "europe-west1", "asia-east1"),
 		sku("Static Ip Charge in Santiago", "Network", "OnDemand", "h", 0.015),
 		sku("Licensing Fee for Windows Server 2022 Datacenter Edition on VM", "License", "OnDemand", "h", 0.046, "global"),
+		sku("Licensing Fee for Ubuntu Pro 22.04 LTS (Jammy Jellyfish) on VM with up to 1 VCPU (CPU cost)", "License", "OnDemand", "h", 0.00166, "global"),
+		sku("Licensing Fee for Ubuntu Pro 22.04 LTS (Jammy Jellyfish) on VM with 4 to 5 VCPU (CPU cost)", "License", "OnDemand", "h", 0.006, "global"),
+		sku("Licensing Fee for Ubuntu Pro 22.04 LTS (Jammy Jellyfish) on VM with 222 or more VCPU (CPU cost)", "License", "OnDemand", "h", 0.122063, "global"),
+		sku("Licensing Fee for Ubuntu Pro 22.04 LTS (Jammy Jellyfish) on VM (RAM cost)", "License", "OnDemand", "GiBy.h", 0.000127, "global"),
+		sku("Licensing Fee for Ubuntu Pro 22.04 LTS (Jammy Jellyfish) on VM with 2 to 3 GPU (GPU cost)", "License", "OnDemand", "h", 0.066, "global"),
+		sku("Licensing Fee for Ubuntu Pro FIPS 22.04 LTS (Jammy Jellyfish) on VM with 4 to 5 VCPU (CPU cost)", "License", "OnDemand", "h", 0.9, "global"),
+		sku("Licensing Fee for Ubuntu 24.04 LTS Minimal Pro (Noble Numbat) on VM with 4 to 5 VCPU (CPU cost)", "License", "OnDemand", "h", 0.007, "global"),
+		sku("Licensing Fee for Ubuntu 24.04 LTS Minimal Pro (Noble Numbat) on VM (RAM cost)", "License", "OnDemand", "GiBy.h", 0.0001, "global"),
 		sku("Licensing Fee for Windows Server 2022 Datacenter Edition on f1-micro", "License", "OnDemand", "h", 0.023, "global"),
 		sku("Licensing Fee for SLES 15 For SAP License on VM with 1 to 3 VCPU", "License", "OnDemand", "h", 0.17, "global"),
 		sku("Licensing Fee for SLES 15 For SAP License on VM with 4 VCPU", "License", "OnDemand", "h", 0.34, "global"),
@@ -119,16 +127,22 @@ func TestLicenses(t *testing.T) {
 		{"sql-server-2019-enterprise", 4, 1.596 * 730},
 		{"sql-server-2019-enterprise", 8, 8 * 0.399 * 730},
 		{"debian-12-bookworm", 4, 0},
+		{"ubuntu-pro-2204-lts", 4, (0.006 + 0.000127*16) * 730},
+		{"ubuntu-pro-2204-lts", 1, (0.00166 + 0.000127*16) * 730},
+		{"ubuntu-pro-2204-lts", 240, (0.122063 + 0.000127*16) * 730},
+		{"ubuntu-pro-fips-2204-lts", 4, 0.9 * 730},
+		{"ubuntu-minimal-pro-2404-lts", 4, (0.007 + 0.0001*16) * 730},
+		{"ubuntu-2204-jammy-v20240501", 4, 0},
 	}
 	for _, c := range cases {
-		got, ok := x.License(c.lic, c.vcpu)
+		got, ok := x.License(c.lic, c.vcpu, 16)
 		if !ok {
 			t.Errorf("%s/%d: no match", c.lic, c.vcpu)
 			continue
 		}
 		near(t, c.lic, got, c.want)
 	}
-	if _, ok := x.License("windows-server-2025-dc", 4); ok {
+	if _, ok := x.License("windows-server-2025-dc", 4, 16); ok {
 		t.Error("2025 must not match 2022 SKUs")
 	}
 }
@@ -210,8 +224,9 @@ func TestRealCatalog(t *testing.T) {
 		name string
 		vcpu int64
 	}{{"windows-server-2022-dc", 4}, {"windows-server-2019-dc", 8}, {"sles-15", 4}, {"sles-sap-15", 8}, {"sles-sap-12", 2},
+		{"ubuntu-pro-2204-lts", 4}, {"ubuntu-pro-fips-2004-lts", 2}, {"ubuntu-minimal-pro-2404-lts", 8},
 		{"rhel-9", 4}, {"rhel-8-sap", 16}, {"sql-server-2019-standard", 8}, {"sql-server-2022-enterprise", 4}} {
-		p, ok := x.License(l.name, l.vcpu)
+		p, ok := x.License(l.name, l.vcpu, 16)
 		t.Logf("lic %-28s %8.2f %v", l.name, p, ok)
 		if !ok {
 			t.Errorf("license %s not priced", l.name)

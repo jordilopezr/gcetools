@@ -1,5 +1,5 @@
 // Mock backend for UI work in a plain browser (no Wails, no GCP).
-import type { Api, Column, Inventory, Meta, Progress, Project, Row, Sheet } from './api'
+import type { Api, Column, Inventory, Meta, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
 
 const projects: Project[] = [
   ['acme-prod-erp', 'ERP producción', 'folders/1201'], ['acme-prod-web', 'Web producción', 'folders/1201'],
@@ -79,6 +79,65 @@ function buildInventory(ids: string[]): Inventory {
   return { meta, sheets, errors: [] }
 }
 
+// A plausible comparison result, shaped like internal/diff output.
+function buildDiff(a: SnapshotInfo, b: SnapshotInfo): Inventory {
+  const common = [col('relevant', 'Relevante', 'bool'), col('reason', 'Motivo'), col('sheet', 'Pestaña'), col('kind', 'Tipo de recurso'),
+    col('project', 'Proyecto'), col('resource', 'Recurso'), col('location', 'Ubicación')]
+  const r = (relevant: boolean, reason: string, sheet: string, kind: string, project: string, resource: string, location: string, extra: Row): Row =>
+    ({ relevant, reason, sheet, kind, project, resource, location, ...extra })
+  const added = [
+    r(true, 'Regla nueva abierta a Internet', 'gFirewall', 'Firewall', 'acme-prod-web', 'allow-rdp-temp', 'shared-vpc', { detail: 'Dirección: INGRESS; Acción: allow; Protocolos/puertos: tcp:3389; Orígenes: 0.0.0.0/0' }),
+    r(true, 'VM nueva con IP pública', 'gInfo', 'Instancias', 'acme-prod-web', 'web-vm-09', 'europe-west1-b', { detail: 'Machine type: e2-standard-4; Estado: RUNNING; IP externa: 34.76.12.40' }),
+    r(false, '', 'gInfo', 'Instancias', 'acme-dev-sandbox', 'sandbox-vm-12', 'us-central1-a', { detail: 'Machine type: e2-medium; Estado: RUNNING' }),
+    r(false, '', 'gDisks', 'Todos los discos', 'acme-prod-erp', 'erp-vm-03-data2', 'europe-southwest1-a', { detail: 'Tipo: pd-balanced; Tamaño (GB): 500; VMs: erp-vm-03' }),
+  ]
+  const removed = [
+    r(false, '', 'gInfo', 'Instancias', 'acme-dev-sandbox', 'sandbox-vm-04', 'us-central1-a', { detail: 'Machine type: n1-standard-2; Estado: TERMINATED' }),
+    r(false, '', 'gSnapshot', 'Snapshots', 'acme-prod-erp', 'erp-before-upgrade', '', { detail: 'Disco origen: erp-vm-01-boot; Almacenado (GB): 41.2' }),
+  ]
+  const changed = [
+    r(true, 'Cambio de tamaño de la VM', 'gInfo', 'Instancias', 'acme-prod-erp', 'erp-vm-02', 'europe-southwest1-a', { field: 'Machine type', before: 'n2-standard-8', after: 'n2-standard-16' }),
+    r(true, 'Cambio de identidad (service account)', 'gInfo', 'Instancias', 'acme-prod-web', 'web-vm-03', 'europe-west1-b', { field: 'Service account', before: 'web@acme-prod-web.iam.gserviceaccount.com', after: '482917300000-compute@developer.gserviceaccount.com' }),
+    r(true, 'Disco que se quedó huérfano', 'gDisks', 'Todos los discos', 'acme-data-lake', 'lake-vm-02-data', 'europe-west4-c', { field: 'Huérfano', before: 'No', after: 'Sí' }),
+    r(false, '', 'gInfo', 'Instancias', 'acme-prod-erp', 'erp-vm-02', 'europe-southwest1-a', { field: 'vCPU', before: '8', after: '16' }),
+    r(false, '', 'gInfo', 'Instancias', 'acme-dev-sandbox', 'sandbox-vm-07', 'europe-west1-b', { field: 'Estado', before: 'RUNNING', after: 'TERMINATED' }),
+    r(false, '', 'gMIG', 'MIGs', 'acme-prod-web', 'web-mig', 'europe-west1', { field: 'Target size', before: '3', after: '5' }),
+  ]
+  const summary: Row[] = [
+    { sheet: 'gInfo', kind: 'Instancias', added: 2, removed: 1, modified: 3, fields: 4, relevant: 3 },
+    { sheet: 'gDisks', kind: 'Todos los discos', added: 1, removed: 0, modified: 1, fields: 1, relevant: 1 },
+    { sheet: 'gSnapshot', kind: 'Snapshots', added: 0, removed: 1, modified: 0, fields: 0, relevant: 0 },
+    { sheet: 'gMIG', kind: 'MIGs', added: 0, removed: 0, modified: 1, fields: 1, relevant: 0 },
+    { sheet: 'gFirewall', kind: 'Firewall', added: 1, removed: 0, modified: 0, fields: 0, relevant: 1 },
+  ]
+  const meta = [
+    ['Anterior', a.name], ['Anterior: fecha', a.startedAt.slice(0, 16).replace('T', ' ')], ['Nuevo', b.name], ['Nuevo: fecha', b.startedAt.slice(0, 16).replace('T', ' ')],
+    ['No comparado: gInfo', 'acme-qa (el proyecto no se leyó completo en alguno de los dos escaneos)'],
+    ['Coste/mes estimado anterior', '18450.20 USD'], ['Coste/mes estimado nuevo', '19112.75 USD'], ['Diferencia de coste/mes', '+662.55 USD'],
+  ].map(([property, value]) => ({ property, value }))
+  const now = new Date().toISOString()
+  return {
+    meta: { tool: 'gceTools', version: '0.3.0', identity: 'demo@example.com', authMethod: '', startedAt: a.startedAt, finishedAt: now, projects: 6, projectsOk: 5, errors: 0, cancelled: false },
+    errors: [],
+    sheets: [
+      { name: 'Resumen', title: 'Resumen', description: 'Altas, bajas y cambios por tipo de recurso', rows: summary, columns: [
+        col('sheet', 'Pestaña'), col('kind', 'Tipo de recurso'), col('added', 'Altas', 'int'), col('removed', 'Bajas', 'int'),
+        col('modified', 'Recursos modificados', 'int'), col('fields', 'Campos cambiados', 'int'), col('relevant', 'Relevantes', 'int')] },
+      { name: 'Altas', title: 'Altas', description: 'Recursos que existen en el inventario nuevo y no en el anterior', rows: added, columns: [...common, col('detail', 'Detalle')] },
+      { name: 'Bajas', title: 'Bajas', description: 'Recursos del inventario anterior que ya no existen', rows: removed, columns: [...common, col('detail', 'Detalle')] },
+      { name: 'Cambios', title: 'Cambios', description: 'Un campo por fila: valor anterior y valor nuevo', rows: changed, columns: [...common, col('field', 'Campo'), col('before', 'Antes'), col('after', 'Después')] },
+      { name: 'Metadatos', title: 'Metadatos', description: 'Inventarios comparados y alcance de la comparación', rows: meta, columns: [col('property', 'Propiedad'), col('value', 'Valor')] },
+    ],
+  }
+}
+
+const snapshots: SnapshotInfo[] = [
+  { path: '/home/demo/gcetools-20261018-0900.json', name: 'gcetools-20261018-0900.json', startedAt: '2026-10-18T09:00:00Z', identity: 'demo@example.com', version: '0.2.2', projects: 6, vms: 58 },
+  { path: '/home/demo/gcetools-20261118-0900.json', name: 'gcetools-20261118-0900.json', startedAt: '2026-11-18T09:00:00Z', identity: 'demo@example.com', version: '0.3.0', projects: 6, vms: 59 },
+]
+let picks = 0
+const known = new Map<string, SnapshotInfo>()
+
 type Cb<T> = (v: T) => void
 const listeners = { progress: new Set<Cb<Progress>>(), done: new Set<Cb<Meta>>(), error: new Set<Cb<string>>() }
 let inventory: Inventory | null = null
@@ -130,4 +189,19 @@ export const mockApi: Api = {
     return { current: '0.2.1', latest: '0.3.0', available: true, url: 'https://github.com/jordilopezr/gcetools/releases', notes: '- Ejemplo de notas de la versión', published: '2026-12-01T10:00:00Z' }
   },
   openURL: (url) => { window.open(url, '_blank', 'noopener') },
+  pickSnapshot: async () => { const s = snapshots[picks++ % snapshots.length]; known.set(s.path, s); return s },
+  currentSnapshot: async () => {
+    if (!inventory) return null
+    const s: SnapshotInfo = { path: 'current', name: 'Inventario actual', startedAt: inventory.meta.startedAt, identity: inventory.meta.identity,
+      version: inventory.meta.version, projects: inventory.meta.projects, vms: inventory.sheets.find(x => x.name === 'gInfo')?.rows.length ?? 0 }
+    known.set(s.path, s)
+    return s
+  },
+  compare: async (a, b) => {
+    await sleep(500)
+    const sa = known.get(a), sb = known.get(b)
+    if (!sa || !sb) throw new Error('snapshot no cargado: vuelve a elegirlo')
+    return buildDiff(sa, sb)
+  },
+  exportDiff: async (f) => `/home/demo/gcetools-diff.${f === 'csv' ? 'zip' : f}`,
 }

@@ -12,7 +12,11 @@ export function CancelScan():Promise<void>;
 
 export function CheckUpdate():Promise<update.Info>;
 
+export function Compare(arg1:string,arg2:string):Promise<model.Inventory>;
+
 export function Connect(arg1:string,arg2:string):Promise<main.SessionInfo>;
+
+export function CurrentSnapshot():Promise<main.SnapshotInfo>;
 
 export function DetectADC():Promise<main.ADCStatus>;
 
@@ -20,11 +24,15 @@ export function Disconnect():Promise<void>;
 
 export function Export(arg1:string,arg2:string):Promise<string>;
 
+export function ExportDiff(arg1:string,arg2:string):Promise<string>;
+
 export function GetInventory():Promise<model.Inventory>;
 
 export function ListProjects(arg1:string):Promise<Array<core.Project>>;
 
 export function PickServiceAccountKey():Promise<auth.KeyInfo>;
+
+export function PickSnapshot():Promise<main.SnapshotInfo>;
 
 export function StartScan(arg1:Array<string>,arg2:core.ScanOptions):Promise<void>;
 

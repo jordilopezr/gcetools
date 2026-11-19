@@ -140,7 +140,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 				continue
 			}
 			seen[l] = true
-			c, ok := x.License(l, vcpu)
+			c, ok := x.License(l, vcpu, num(r, "memoryGB"))
 			if !ok {
 				notes = append(notes, "licencia "+l+" sin tarifa")
 				miss("licencia " + l)

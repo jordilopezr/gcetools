@@ -109,6 +109,7 @@ export namespace health {
 	export class Options {
 	    stoppedDays: number;
 	    snapshotDays: number;
+	    imageDays: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Options(source);
@@ -118,6 +119,7 @@ export namespace health {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.stoppedDays = source["stoppedDays"];
 	        this.snapshotDays = source["snapshotDays"];
+	        this.imageDays = source["imageDays"];
 	    }
 	}
 
@@ -176,6 +178,49 @@ export namespace main {
 	        this.method = source["method"];
 	        this.projectHint = source["projectHint"];
 	    }
+	}
+	export class SnapshotInfo {
+	    path: string;
+	    name: string;
+	    // Go type: time
+	    startedAt: any;
+	    identity: string;
+	    version: string;
+	    projects: number;
+	    vms: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SnapshotInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	        this.identity = source["identity"];
+	        this.version = source["version"];
+	        this.projects = source["projects"];
+	        this.vms = source["vms"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

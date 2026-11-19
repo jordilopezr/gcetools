@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
+import { api, CURRENT, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
 import { Icon, Snackbar, Menu } from './components/ui'
 import appIcon from './assets/gcetools-icon-small.svg' // simplified variant for small sizes
 import ConnectPage from './pages/ConnectPage'
 import ProjectsPage from './pages/ProjectsPage'
 import InventoryPage from './pages/InventoryPage'
 import AboutPage, { type UpdateState } from './pages/AboutPage'
+import ComparePage, { type CompareState } from './pages/ComparePage'
 
-type Page = 'connect' | 'projects' | 'inventory' | 'about'
+type Page = 'connect' | 'projects' | 'inventory' | 'compare' | 'about'
 type Theme = 'system' | 'light' | 'dark'
 
 export interface ScanState {
@@ -34,6 +35,7 @@ export default function App() {
   const [about, setAbout] = useState<AboutInfo | null>(null)
   const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
   const [autoCheck, setAutoCheckState] = useState(loadAutoCheck)
+  const [compare, setCompare] = useState<CompareState>({ before: null, after: null, result: null })
 
   const setAutoCheck = (v: boolean) => {
     setAutoCheckState(v)
@@ -73,6 +75,8 @@ export default function App() {
     })))
     const offD = api.onDone(async meta => {
       setScan(s => ({ ...s, running: false }))
+      // a comparison against the previous in-memory inventory is now stale
+      setCompare(c => c.after?.path === CURRENT ? { ...c, after: null, result: null } : c)
       try {
         setInventory(await api.getInventory())
         setPage('inventory')
@@ -88,12 +92,14 @@ export default function App() {
   const disconnect = async () => {
     await api.disconnect()
     setSession(null); setInventory(null); setScan({ running: false, progress: null, log: [] }); setPage('connect')
+    setCompare(c => c.after?.path === CURRENT ? { ...c, after: null, result: null } : c)
   }
 
   const nav: { id: Page; icon: string; label: string; enabled: boolean }[] = [
     { id: 'connect', icon: 'key', label: 'Conexión', enabled: true },
     { id: 'projects', icon: 'folder_open', label: 'Proyectos', enabled: !!session },
     { id: 'inventory', icon: 'table_view', label: 'Inventario', enabled: !!inventory },
+    { id: 'compare', icon: 'compare_arrows', label: 'Comparar', enabled: true },
   ]
   const updateAvailable = update.status === 'done' && !!update.info?.available
   const themeIcon = theme === 'dark' ? 'dark_mode' : theme === 'light' ? 'light_mode' : 'contrast'
@@ -173,6 +179,7 @@ export default function App() {
         {page === 'projects' && session && <ProjectsPage scan={scan} notify={notify}
           onScanStart={() => setScan({ running: true, progress: null, log: [] })} />}
         {page === 'inventory' && inventory && <InventoryPage inventory={inventory} notify={notify} />}
+        {page === 'compare' && <ComparePage state={compare} setState={setCompare} hasInventory={!!inventory} notify={notify} />}
         {page === 'about' && <AboutPage about={about} update={update} onCheck={() => checkUpdate(false)}
           autoCheck={autoCheck} setAutoCheck={setAutoCheck} />}
       </main>

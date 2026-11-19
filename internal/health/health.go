@@ -16,9 +16,10 @@ import (
 type Options struct {
 	StoppedDays  int `json:"stoppedDays"`  // VM stopped longer than this
 	SnapshotDays int `json:"snapshotDays"` // snapshot older than this
+	ImageDays    int `json:"imageDays"`    // custom image used by a template older than this
 }
 
-func DefaultOptions() Options { return Options{StoppedDays: 30, SnapshotDays: 90} }
+func DefaultOptions() Options { return Options{StoppedDays: 30, SnapshotDays: 90, ImageDays: 180} }
 
 const (
 	High   = "Alta"
@@ -97,6 +98,90 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) {
 				detail += fmt.Sprintf("; ~%.2f %s/mes", c, inv.Meta.Currency)
 			}
 			add(finding{High, "Coste", "Disco huérfano", str(r, "project"), str(r, "name"), str(r, "location"), detail})
+		}
+	}
+
+	// Disks of VMs with no snapshot schedule. One finding per VM; MIG members
+	// are skipped (stateless by design) and orphans already have their own rule.
+	migVM := map[string]bool{}
+	for _, r := range rows(collect.SInfo) {
+		if str(r, "mig") != "" {
+			migVM[str(r, "project")+"/"+str(r, "name")] = true
+		}
+	}
+	type vmDisks struct {
+		project, vm, zone string
+		disks             []string
+	}
+	unprotected := map[string]*vmDisks{}
+	var unprotectedOrder []string
+	for _, r := range rows(collect.SDisks) {
+		if boolean(r, "orphan") || str(r, "snapshotSchedule") != "" {
+			continue
+		}
+		p := str(r, "project")
+		for _, vm := range strings.Split(str(r, "users"), "; ") {
+			if vm == "" || migVM[p+"/"+vm] {
+				continue
+			}
+			k := p + "/" + vm
+			v := unprotected[k]
+			if v == nil {
+				v = &vmDisks{project: p, vm: vm, zone: str(r, "location")}
+				unprotected[k] = v
+				unprotectedOrder = append(unprotectedOrder, k)
+			}
+			v.disks = append(v.disks, str(r, "name"))
+		}
+	}
+	for _, k := range unprotectedOrder {
+		v := unprotected[k]
+		add(finding{Low, "Protección de datos", "VM con discos sin snapshot schedule", v.project, v.vm, v.zone,
+			"Discos: " + strings.Join(v.disks, ", ") + ". Ignorar si se protege con otra herramienta (Backup and DR, Veeam…)"})
+	}
+
+	// Instance templates that create VMs from deprecated or old custom images.
+	type imageInfo struct {
+		deprecated string
+		age        int64
+	}
+	images := map[string]imageInfo{}
+	for _, r := range rows(collect.SImage) {
+		if str(r, "kind") == "Image" {
+			age, _ := r["ageDays"].(int64)
+			images[str(r, "project")+"/"+str(r, "name")] = imageInfo{str(r, "deprecated"), age}
+		}
+	}
+	templateMIGs := map[string][]string{}
+	for _, r := range rows(collect.SMIG) {
+		k := str(r, "project") + "/" + str(r, "template")
+		templateMIGs[k] = append(templateMIGs[k], str(r, "name"))
+	}
+	imageDays := opt.ImageDays
+	if imageDays <= 0 {
+		imageDays = DefaultOptions().ImageDays
+	}
+	for _, r := range rows(collect.STemplate) {
+		img, ok := images[str(r, "imageProject")+"/"+str(r, "image")]
+		if !ok {
+			continue // public image, image family or image outside the scan
+		}
+		p, t := str(r, "project"), str(r, "name")
+		detail := "Imagen " + str(r, "imageProject") + "/" + str(r, "image")
+		if migs := templateMIGs[p+"/"+t]; len(migs) > 0 {
+			detail += "; usado por el MIG " + strings.Join(migs, ", ")
+		}
+		switch img.deprecated {
+		case "OBSOLETE", "DELETED":
+			add(finding{High, "Operación", "Template con imagen obsoleta o eliminada", p, t, "",
+				detail + " (" + img.deprecated + "): no se podrán crear VMs nuevas"})
+		case "DEPRECATED":
+			add(finding{Medium, "Operación", "Template con imagen deprecada", p, t, "", detail})
+		default:
+			if img.age > int64(imageDays) {
+				add(finding{Low, "Seguridad", fmt.Sprintf("Template con imagen custom de más de %d días", imageDays), p, t, "",
+					fmt.Sprintf("%s, creada hace %d días: probablemente sin parches recientes", detail, img.age)})
+			}
 		}
 	}
 

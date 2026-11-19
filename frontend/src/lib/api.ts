@@ -24,9 +24,10 @@ export interface KeyInfo { clientEmail: string; projectId: string; keyId: string
 export interface SessionInfo { identity: string; method: string; projectHint: string }
 export interface ADCStatus { found: boolean; identity: string }
 export interface Modules { osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string }
-export interface ScanOptions { concurrency: number; health: { stoppedDays: number; snapshotDays: number }; modules: Modules }
+export interface ScanOptions { concurrency: number; health: { stoppedDays: number; snapshotDays: number; imageDays: number }; modules: Modules }
 export interface AboutInfo { version: string; website: string; donate: string; license: string; licenseUrl: string; releases: string }
 export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
+export interface SnapshotInfo { path: string; name: string; startedAt: string; identity: string; version: string; projects: number; vms: number }
 export type AuthMethod = 'adc' | 'sa' | 'impersonate'
 export type ExportFormat = 'xlsx' | 'csv' | 'json'
 
@@ -48,7 +49,14 @@ export interface Api {
   appInfo(): Promise<AboutInfo>
   checkUpdate(): Promise<UpdateInfo>
   openURL(url: string): void
+  pickSnapshot(): Promise<SnapshotInfo | null>
+  currentSnapshot(): Promise<SnapshotInfo | null>
+  compare(before: string, after: string): Promise<Inventory>
+  exportDiff(format: ExportFormat, csvSep: string): Promise<string>
 }
+
+/** Pseudo-path that selects the inventory in memory (see app.go). */
+export const CURRENT = 'current'
 
 const wailsApi: Api = {
   mock: false,
@@ -68,6 +76,10 @@ const wailsApi: Api = {
   appInfo: () => App.AppInfo(),
   checkUpdate: () => App.CheckUpdate(),
   openURL: (url) => BrowserOpenURL(url),
+  pickSnapshot: async () => ((await App.PickSnapshot()) as unknown as SnapshotInfo) ?? null,
+  currentSnapshot: async () => ((await App.CurrentSnapshot()) as unknown as SnapshotInfo) ?? null,
+  compare: async (a, b) => (await App.Compare(a, b)) as unknown as Inventory,
+  exportDiff: (f, sep) => App.ExportDiff(f, sep),
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined

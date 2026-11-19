@@ -323,13 +323,18 @@ func FreeLicense(name string) bool {
 	return strings.HasPrefix(n, "ubuntu-") && !strings.Contains(n, "pro")
 }
 
-// License returns the monthly fee of a premium license for a VM with vcpu.
-// matched is false when the license is premium but no SKU could be found.
-func (x *Index) License(name string, vcpu int64) (fee float64, matched bool) {
+var reUbuntuVer = regexp.MustCompile(`(\d{2})(\d{2})`)
+
+// License returns the monthly fee of a premium license for a VM with vcpu and
+// memGB. matched is false when the license is premium but no SKU could be found.
+func (x *Index) License(name string, vcpu int64, memGB float64) (fee float64, matched bool) {
 	if FreeLicense(name) {
 		return 0, true
 	}
 	n := strings.ToLower(name)
+	if strings.HasPrefix(n, "ubuntu") && strings.Contains(n, "pro") {
+		return x.ubuntuPro(n, vcpu, memGB)
+	}
 	var need, anyOf []string
 	var avoid = []string{"commitment", "f1-micro", "g1-small", "byos", "byol", "(ram cost)", "(gpu cost)", "cloud sql", "extended life"}
 	perVCPU := false
@@ -422,4 +427,53 @@ func (x *Index) License(name string, vcpu int64) (fee float64, matched bool) {
 		return s.Price * HoursPerMonth, true
 	}
 	return 0, false
+}
+
+// ubuntuPro prices Ubuntu Pro (also FIPS and Minimal Pro): a flat hourly fee
+// per VM by vCPU tier plus a fee per GiB of RAM. License names look like
+// ubuntu-pro-2204-lts, ubuntu-pro-fips-2004-lts or ubuntu-minimal-pro-2404-lts.
+func (x *Index) ubuntuPro(n string, vcpu int64, memGB float64) (float64, bool) {
+	m := reUbuntuVer.FindStringSubmatch(n)
+	if m == nil {
+		return 0, false
+	}
+	ver := m[1] + "." + m[2]
+	prefix := "ubuntu pro " + ver + " "
+	switch {
+	case strings.Contains(n, "minimal"):
+		prefix = "ubuntu " + ver + " lts minimal pro "
+	case strings.Contains(n, "fips"):
+		prefix = "ubuntu pro fips " + ver + " "
+	}
+	cpu, ram := -1.0, -1.0
+	for _, s := range x.skus {
+		if s.Family != "License" {
+			continue
+		}
+		d := strings.ToLower(s.Desc)
+		if !strings.Contains(d, prefix) {
+			continue
+		}
+		switch {
+		case s.Unit == "GiBy.h" && strings.Contains(d, "(ram cost)"):
+			ram = s.Price
+		case s.Unit == "h" && strings.Contains(d, "(cpu cost)") && cpu < 0:
+			for _, t := range reTiers {
+				if tm := t.re.FindStringSubmatch(d); tm != nil {
+					if lo, hi := t.tier(tm); vcpu >= lo && vcpu <= hi {
+						cpu = s.Price
+					}
+					break
+				}
+			}
+		}
+	}
+	if cpu < 0 {
+		return 0, false
+	}
+	fee := cpu
+	if ram > 0 {
+		fee += ram * memGB
+	}
+	return fee * HoursPerMonth, true
 }
