@@ -6,13 +6,16 @@ Guía para registrar gceTools en Google y que "Iniciar sesión con Google" funci
 
 Crea un proyecto dedicado (p. ej. `gcetools-app`) en una cuenta propia, **fuera de cualquier organización de cliente**. Así el consentimiento puede ser de tipo *Externo* y el proyecto no depende de ningún tercero.
 
-En ese proyecto, habilita las APIs que usan los módulos opcionales cuando la cuota se carga al proyecto del cliente OAuth:
+Con "Iniciar sesión con Google", Google carga la cuota y comprueba la habilitación de las APIs en el **proyecto del cliente OAuth**, no en los proyectos que se escanean. Por eso hay que habilitar en él todas las APIs que usa gceTools:
 
-- Cloud Resource Manager API
-- Compute Engine API
-- Cloud Billing API (catálogo de precios)
-- Recommender API
-- Cloud Asset API
+```bash
+gcloud services enable --project gcetools-app \
+  cloudresourcemanager.googleapis.com compute.googleapis.com monitoring.googleapis.com \
+  osconfig.googleapis.com recommender.googleapis.com cloudasset.googleapis.com \
+  cloudbilling.googleapis.com bigquery.googleapis.com
+```
+
+Ninguna tiene coste por estar habilitada. Las cuotas por minuto de ese proyecto se comparten entre todos los usuarios de la app.
 
 ## 2. Pantalla de consentimiento (Google Auth Platform)
 
