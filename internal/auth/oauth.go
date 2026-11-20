@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"net"
 	"net/http"
 	"strings"
@@ -257,12 +256,8 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 			return
 		}
 		res := result{code: q.Get("code"), err: q.Get("error")}
-		msg := "Sesión iniciada. Ya puedes cerrar esta pestaña y volver a gceTools."
-		if res.err != "" || res.code == "" {
-			msg = "No se completó el inicio de sesión (" + html.EscapeString(res.err) + "). Vuelve a gceTools e inténtalo de nuevo."
-		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>gceTools</title><body style="font:16px system-ui;margin:48px;max-width:560px"><h2>gceTools</h2><p>%s</p></body>`, msg)
+		_ = writeCallbackPage(w, res.err == "" && res.code != "", res.err)
 		select {
 		case done <- res:
 		default:

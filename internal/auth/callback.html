@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gceTools · {{if .OK}}Sesión iniciada{{else}}Inicio de sesión no completado{{end}}</title>
+<link rel="icon" href="{{.Icon}}">
+<style>
+  :root {
+    --primary: #0b57d0; --on-primary: #fff;
+    --ok: #146c2e; --ok-container: #c4eed0; --on-ok-container: #072711;
+    --error: #b3261e; --error-container: #f9dedc; --on-error-container: #410e0b;
+    --surface: #f8fafd; --card: #ffffff; --on-surface: #1f1f1f; --muted: #444746; --outline: #c4c7c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --primary: #a8c7fa; --on-primary: #062e6f;
+      --ok: #6dd58c; --ok-container: #0f5223; --on-ok-container: #c4eed0;
+      --error: #f2b8b5; --error-container: #8c1d18; --on-error-container: #f9dedc;
+      --surface: #131314; --card: #1e1f20; --on-surface: #e3e3e3; --muted: #c4c7c5; --outline: #444746;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; place-items: center; padding: 24px;
+    background: var(--surface); color: var(--on-surface);
+    font: 400 15px/1.5 "Google Sans Text", "Roboto Flex", Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .card {
+    width: 100%; max-width: 440px; padding: 40px 36px 32px; text-align: center;
+    background: var(--card); border: 1px solid var(--outline); border-radius: 28px;
+  }
+  .logo { width: 72px; height: 72px; border-radius: 16px; display: block; margin: 0 auto 8px; }
+  .brand { font-size: 13px; font-weight: 500; letter-spacing: .4px; color: var(--muted); margin: 0 0 28px; }
+  .status {
+    width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 16px;
+    display: grid; place-items: center;
+    background: var(--ok-container); color: var(--on-ok-container);
+  }
+  .err .status { background: var(--error-container); color: var(--on-error-container); }
+  .status svg { width: 30px; height: 30px; fill: currentColor; }
+  h1 { font-size: 22px; font-weight: 500; line-height: 28px; margin: 0 0 8px; }
+  p { margin: 0; color: var(--muted); }
+  .detail {
+    margin-top: 16px; padding: 8px 12px; border-radius: 8px; font: 12.5px/1.4 ui-monospace, "Roboto Mono", monospace;
+    background: var(--error-container); color: var(--on-error-container); word-break: break-word;
+  }
+  .foot { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--outline); font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="card{{if not .OK}} err{{end}}">
+  <img class="logo" alt="" src="{{.Icon}}">
+  <div class="brand">gceTools</div>
+  <div class="status" aria-hidden="true">
+    {{if .OK}}<svg viewBox="0 0 24 24"><path d="M9.55 18 3.85 12.3l1.43-1.42 4.27 4.27 9.17-9.17 1.43 1.42Z"/></svg>
+    {{else}}<svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2Zm0-8h2v6h-2Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>{{end}}
+  </div>
+  {{if .OK}}
+  <h1>Sesión iniciada</h1>
+  <p>Ya puedes cerrar esta pestaña y volver a gceTools.</p>
+  {{else}}
+  <h1>No se completó el inicio de sesión</h1>
+  <p>Vuelve a gceTools e inténtalo de nuevo.</p>
+  {{if .Detail}}<div class="detail">{{.Detail}}</div>{{end}}
+  {{end}}
+  <div class="foot">gceTools solo tiene acceso de lectura a Google Cloud. Puedes revocarlo en cualquier momento desde «Cerrar sesión».</div>
+</main>
+</body>
+</html>
