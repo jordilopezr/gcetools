@@ -60,7 +60,7 @@ func TestSaveListLoadDelete(t *testing.T) {
 	if err != nil || len(inv.Sheet(collect.SInfo).Rows) != 3 {
 		t.Fatalf("load: %v", err)
 	}
-	if p, ok := Previous(s3.StartedAt); !ok || p.StartedAt != t0 {
+	if p, ok := Previous(s3.StartedAt); !ok || !p.StartedAt.Equal(t0) {
 		t.Errorf("previous = %+v %v", p, ok)
 	}
 	if _, err := Load("../../etc/passwd"); err == nil {
@@ -93,7 +93,7 @@ func TestRetention(t *testing.T) {
 	}
 	all, _ := List()
 	files, _ := filepath.Glob(filepath.Join(dir, "*.json.gz"))
-	if len(all) != 3 || len(files) != 3 || all[2].StartedAt != t0.Add(2*time.Hour) {
+	if len(all) != 3 || len(files) != 3 || !all[2].StartedAt.Equal(t0.Add(2*time.Hour)) {
 		t.Errorf("kept %d entries / %d files: %+v", len(all), len(files), all)
 	}
 }
