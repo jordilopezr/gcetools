@@ -18,6 +18,8 @@ export namespace auth {
 	}
 	export class OAuthStatus {
 	    available: boolean;
+	    builtin: boolean;
+	    custom: boolean;
 	    client: string;
 	    projectId: string;
 	    account: string;
@@ -30,6 +32,8 @@ export namespace auth {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.available = source["available"];
+	        this.builtin = source["builtin"];
+	        this.custom = source["custom"];
 	        this.client = source["client"];
 	        this.projectId = source["projectId"];
 	        this.account = source["account"];

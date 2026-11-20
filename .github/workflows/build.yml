@@ -67,6 +67,12 @@ jobs:
       # Exposed at job level so the signing step's `if:` can test for it.
       APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
       SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      # gceTools' own "Desktop app" OAuth client for "Iniciar sesión con Google".
+      # Injected with -ldflags so it never lives in the repository; without
+      # these secrets the build simply lacks the built-in client.
+      GCETOOLS_OAUTH_CLIENT_ID: ${{ secrets.GCETOOLS_OAUTH_CLIENT_ID }}
+      GCETOOLS_OAUTH_CLIENT_SECRET: ${{ secrets.GCETOOLS_OAUTH_CLIENT_SECRET }}
+      GCETOOLS_OAUTH_PROJECT: ${{ vars.GCETOOLS_OAUTH_PROJECT }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -118,7 +124,11 @@ jobs:
       - name: Build GUI
         shell: bash
         run: |
-          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "${{ steps.v.outputs.ldflags }}")
+          ld="${{ steps.v.outputs.ldflags }}"
+          if [[ -n "$GCETOOLS_OAUTH_CLIENT_ID" ]]; then
+            ld+=" -X gcetools/internal/auth.BuiltinClientID=$GCETOOLS_OAUTH_CLIENT_ID -X gcetools/internal/auth.BuiltinClientSecret=$GCETOOLS_OAUTH_CLIENT_SECRET -X gcetools/internal/auth.BuiltinClientProject=$GCETOOLS_OAUTH_PROJECT"
+          fi
+          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "$ld")
           [[ -n "${{ matrix.tags }}" ]] && args+=(-tags "${{ matrix.tags }}")
           [[ "${{ matrix.nsis }}" == "true" ]] && args+=(-nsis)
           wails build "${args[@]}"
@@ -128,11 +138,15 @@ jobs:
         run: |
           mkdir -p dist
           ext=""; [[ "$RUNNER_OS" == "Windows" ]] && ext=".exe"
+          ld="${{ steps.v.outputs.ldflags }}"
+          if [[ -n "$GCETOOLS_OAUTH_CLIENT_ID" ]]; then
+            ld+=" -X gcetools/internal/auth.BuiltinClientID=$GCETOOLS_OAUTH_CLIENT_ID -X gcetools/internal/auth.BuiltinClientSecret=$GCETOOLS_OAUTH_CLIENT_SECRET -X gcetools/internal/auth.BuiltinClientProject=$GCETOOLS_OAUTH_PROJECT"
+          fi
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            for a in amd64 arm64; do GOARCH=$a CGO_ENABLED=0 go build -trimpath -ldflags "${{ steps.v.outputs.ldflags }}" -o dist/gcetools-cli-$a ./cmd/gcetools-cli; done
+            for a in amd64 arm64; do GOARCH=$a CGO_ENABLED=0 go build -trimpath -ldflags "$ld" -o dist/gcetools-cli-$a ./cmd/gcetools-cli; done
             lipo -create -output "dist/gcetools-cli" dist/gcetools-cli-amd64 dist/gcetools-cli-arm64 && rm dist/gcetools-cli-*64
           else
-            CGO_ENABLED=0 go build -trimpath -ldflags "${{ steps.v.outputs.ldflags }}" -o "dist/gcetools-cli${ext}" ./cmd/gcetools-cli
+            CGO_ENABLED=0 go build -trimpath -ldflags "$ld" -o "dist/gcetools-cli${ext}" ./cmd/gcetools-cli
           fi
 
       # ---- Windows signing with SignPath (optional, releases only) ----

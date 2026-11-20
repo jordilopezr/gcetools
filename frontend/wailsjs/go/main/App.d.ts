@@ -61,6 +61,8 @@ export function OAuthPickClient():Promise<auth.OAuthStatus>;
 
 export function OAuthStatus():Promise<auth.OAuthStatus>;
 
+export function OAuthUseBuiltin():Promise<auth.OAuthStatus>;
+
 export function OpenHistory(arg1:string):Promise<model.Inventory>;
 
 export function PickServiceAccountKey():Promise<auth.KeyInfo>;

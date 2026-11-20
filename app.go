@@ -557,3 +557,9 @@ func (a *App) OAuthLogout(all bool) (auth.OAuthStatus, error) {
 	err := auth.ForgetOAuth(all)
 	return auth.GetOAuthStatus(), err
 }
+
+// OAuthUseBuiltin goes back to gceTools' own OAuth client.
+func (a *App) OAuthUseBuiltin() (auth.OAuthStatus, error) {
+	err := auth.UseBuiltinClient()
+	return auth.GetOAuthStatus(), err
+}

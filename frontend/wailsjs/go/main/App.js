@@ -106,6 +106,10 @@ export function OAuthStatus() {
   return window['go']['main']['App']['OAuthStatus']();
 }
 
+export function OAuthUseBuiltin() {
+  return window['go']['main']['App']['OAuthUseBuiltin']();
+}
+
 export function OpenHistory(arg1) {
   return window['go']['main']['App']['OpenHistory'](arg1);
 }

@@ -71,8 +71,8 @@ func TestLoginFlow(t *testing.T) {
 	if st := GetOAuthStatus(); !st.Available || st.Client != "" {
 		t.Fatalf("empty status = %+v", st)
 	}
-	if _, err := Login(context.Background(), func(string) {}); err == nil {
-		t.Fatal("login without client must fail")
+	if _, err := Login(context.Background(), func(string) {}); err == nil || !strings.Contains(err.Error(), "no incluye") {
+		t.Fatalf("login without any client must fail: %v", err)
 	}
 	idTok := "x." + base64.RawURLEncoding.EncodeToString([]byte(`{"email":"ana@example.com"}`)) + ".y"
 	var gotVerifier, gotRedirect string
@@ -132,6 +132,59 @@ func TestLoginFlow(t *testing.T) {
 	ForgetOAuth(true)
 	if len(r.m) != 0 {
 		t.Errorf("keyring not empty: %v", r.m)
+	}
+}
+
+func TestBuiltinClient(t *testing.T) {
+	r := useMemRing(t)
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.Form.Get("client_id") != "builtin-id" && r.Form.Get("client_id") != "" {
+			t.Errorf("token request with client %q", r.Form.Get("client_id"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"access_token":"at","refresh_token":"rt-b","expires_in":3600,"token_type":"Bearer"}`))
+	}))
+	defer tokenSrv.Close()
+	oldEP := oauthEndpoint
+	oauthEndpoint = oauth2.Endpoint{AuthURL: "https://accounts.example/auth", TokenURL: tokenSrv.URL}
+	defer func() { oauthEndpoint = oldEP }()
+	BuiltinClientID, BuiltinClientSecret, BuiltinClientProject = "builtin-id", "builtin-secret", "gcetools-app"
+	defer func() { BuiltinClientID, BuiltinClientSecret, BuiltinClientProject = "", "", "" }()
+
+	st := GetOAuthStatus()
+	if !st.Builtin || st.Custom || st.Client != "builtin-id" || st.Account != "" {
+		t.Fatalf("fresh status = %+v", st)
+	}
+	follow := func(consent string) {
+		u, _ := url.Parse(consent)
+		if u.Query().Get("client_id") != "builtin-id" {
+			t.Errorf("consent client = %s", u.Query().Get("client_id"))
+		}
+		go http.Get(u.Query().Get("redirect_uri") + "?state=" + u.Query().Get("state") + "&code=c")
+	}
+	if _, err := Login(context.Background(), follow); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.m["gcetools/google-oauth"], `"refreshToken":"rt-b"`) {
+		t.Fatalf("keyring = %v", r.m)
+	}
+	if ts, _, project, err := oauthSession(context.Background()); err != nil || ts == nil || project != "gcetools-app" {
+		t.Errorf("session: %v %v", project, err)
+	}
+
+	// loading the organization's client signs out of the built-in one…
+	SetOAuthClient(OAuthClient{ClientID: "org-id", ProjectID: "org"})
+	if st := GetOAuthStatus(); !st.Custom || st.Client != "org-id" || st.Account != "" {
+		t.Errorf("with org client = %+v", st)
+	}
+	// …and going back to the built-in client leaves nothing behind
+	UseBuiltinClient()
+	if st := GetOAuthStatus(); st.Custom || st.Client != "builtin-id" {
+		t.Errorf("back to builtin = %+v", st)
+	}
+	if len(r.m) != 0 {
+		t.Errorf("keyring should be empty, got %v", r.m)
 	}
 }
 

@@ -51,7 +51,7 @@ export interface AboutInfo { version: string; website: string; donate: string; l
 export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
 export interface SnapshotInfo { path: string; name: string; startedAt: string; identity: string; version: string; projects: number; vms: number }
 export type AuthMethod = 'adc' | 'sa' | 'impersonate' | 'oauth'
-export interface OAuthStatus { available: boolean; client: string; projectId: string; account: string; error?: string }
+export interface OAuthStatus { available: boolean; builtin: boolean; custom: boolean; client: string; projectId: string; account: string; error?: string }
 export type ExportFormat = 'xlsx' | 'csv' | 'json'
 
 export interface Api {
@@ -92,6 +92,7 @@ export interface Api {
   oauthLogin(): Promise<OAuthStatus>
   oauthCancel(): Promise<void>
   oauthLogout(all: boolean): Promise<OAuthStatus>
+  oauthUseBuiltin(): Promise<OAuthStatus>
 }
 
 /** Compare path prefix for history entries (see app.go HistoryPrefix). */
@@ -146,6 +147,7 @@ const wailsApi: Api = {
   oauthLogin: async () => (await App.OAuthLogin()) as unknown as OAuthStatus,
   oauthCancel: () => App.OAuthCancel(),
   oauthLogout: async (all) => (await App.OAuthLogout(all)) as unknown as OAuthStatus,
+  oauthUseBuiltin: async () => (await App.OAuthUseBuiltin()) as unknown as OAuthStatus,
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined

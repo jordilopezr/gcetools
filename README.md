@@ -6,7 +6,7 @@ Inventario de Google Compute Engine al estilo RVTools: aplicación de escritorio
 Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja por pestaña), CSV (ZIP) o JSON.
 
 - **Solo lectura:** pide únicamente el scope `cloud-platform.read-only`.
-- **Autenticación:** inicio de sesión con Google sin gcloud (cliente OAuth de tu organización; sesión guardada en el llavero del sistema), credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
+- **Autenticación:** inicio de sesión con Google sin gcloud (sesión guardada en el llavero del sistema), credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, con interfaz Material 3 y AG Grid Community.
 
 ## Pestañas (MVP)
@@ -38,19 +38,19 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 
 ### Iniciar sesión con Google
 
-Para usar gceTools sin instalar Google Cloud CLI. Google no permite reutilizar el cliente OAuth de gcloud y exige verificar las apps públicas que piden acceso a Google Cloud, así que **cada organización usa su propio cliente OAuth**. Si es de tipo *Interno*, no necesita verificación y la pantalla de consentimiento solo la ven usuarios de la organización.
-
-Lo crea una vez un administrador, en un proyecto de la organización:
-
-1. **APIs y servicios → Pantalla de consentimiento de OAuth** (Google Auth Platform): tipo de usuario **Interno**, nombre "gceTools" y email de soporte. No hace falta añadir scopes a mano.
-2. **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**: tipo **App de escritorio**. Descarga el JSON (`client_secret_….json`) y repártelo a quien vaya a usar gceTools. En las apps de escritorio el "secreto" de ese archivo no es confidencial: Google lo trata como público y la seguridad la aporta el flujo PKCE.
-3. En ese proyecto, habilita las APIs de los módulos opcionales que vayáis a usar (Recommender, Cloud Asset, Cloud Billing): con este método la cuota se carga al proyecto del cliente.
-
-En la app: **Conexión → Iniciar sesión con Google → Cargar cliente OAuth (JSON) → Iniciar sesión con Google**. Se abre el navegador; tras aceptar, la sesión queda guardada y al volver a abrir la app ya estás conectado.
+Para usar gceTools sin instalar Google Cloud CLI: **Conexión → Iniciar sesión con Google**. Se abre el navegador, aceptas el permiso y la sesión queda guardada; al volver a abrir la app ya estás conectado.
 
 - Se solicita solo `cloud-platform.read-only` (más tu email, para mostrar la cuenta). Flujo OAuth para apps instaladas con PKCE y redirección a `127.0.0.1`.
-- El cliente y el token de refresco se guardan **solo en el llavero del sistema** (Credential Manager en Windows, Keychain en macOS, Secret Service en Linux), nunca en archivos. "Cerrar sesión" los borra; también puedes revocar el acceso en [tu cuenta de Google](https://myaccount.google.com/permissions).
-- En consola: `gcetools-cli login --client client_secret_….json` (una vez) y luego `gcetools-cli scan --auth oauth`. `gcetools-cli logout` cierra la sesión.
+- El token de refresco se guarda **solo en el llavero del sistema** (Credential Manager en Windows, Keychain en macOS, Secret Service en Linux), nunca en archivos. "Cerrar sesión" lo borra; también puedes revocar el acceso en [tu cuenta de Google](https://myaccount.google.com/permissions).
+- gceTools no envía tus datos a ningún servidor propio: habla directamente con las APIs de Google. Ver [PRIVACY.md](PRIVACY.md).
+- En consola: `gcetools-cli login` y luego `gcetools-cli scan --auth oauth`; `gcetools-cli logout` cierra la sesión.
+
+**Si tu organización bloquea apps externas** (políticas de Google Workspace o Cloud Identity), hay dos salidas:
+
+- Que un administrador autorice gceTools en *Consola de administración → Seguridad → Acceso y control de datos → Controles de API*.
+- O usar un cliente OAuth propio: en un proyecto de la organización, *APIs y servicios → Pantalla de consentimiento de OAuth* con tipo **Interno**, y *Credenciales → ID de cliente de OAuth* de tipo **App de escritorio**. Se reparte el JSON y cada usuario lo carga en **Conexión → Opciones avanzadas → Usar el cliente OAuth de mi organización** (o `gcetools-cli login --client client_secret_….json`). Con un cliente propio, la cuota de las APIs opcionales (Recommender, Cloud Asset, Cloud Billing) se carga a ese proyecto, que debe tenerlas habilitadas.
+
+Las compilaciones hechas desde el código fuente no incluyen el cliente de gceTools (se inyecta al publicar las releases); en ellas solo funciona el cliente propio.
 
 ### Historial y tendencias
 
@@ -240,7 +240,7 @@ gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
 gcetools-cli scan --profile produccion --discover organizations/123456
 gcetools-cli profiles
 gcetools-cli scan --save-history --report "informe-$(date +%F).html"   # historial + informe para la tarea semanal
-gcetools-cli login --client client_secret.json && gcetools-cli scan --auth oauth
+gcetools-cli login && gcetools-cli scan --auth oauth
 gcetools-cli version
 ```
 

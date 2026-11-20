@@ -41,6 +41,9 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
       if (o.account) await connectWith('oauth')
     } catch (e) { setError(errorText(e)); setOauth(await api.oauthStatus()) } finally { setSigningIn(false) }
   }
+  const useBuiltin = async () => {
+    try { setOauth(await api.oauthUseBuiltin()) } catch (e) { setError(errorText(e)) }
+  }
   const signOut = async (all: boolean) => {
     try { setOauth(await api.oauthLogout(all)) } catch (e) { setError(errorText(e)) }
   }
@@ -102,37 +105,47 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
             <span className="body-m selectable">{oauth.error}</span>
             <span className="body-s muted">gceTools solo guarda la sesión en el llavero del sistema (en Linux, un servicio Secret Service como GNOME Keyring o KWallet). Usa otro método mientras tanto.</span>
           </div>
-        ) : !oauth?.client ? (
-          <div className="col" style={{ gap: 10 }}>
-            <span className="body-m">
-              Necesitas el <b>cliente OAuth de tu organización</b> (tipo "App de escritorio", archivo <span className="mono">client_secret_….json</span>).
-              Lo crea una vez el administrador de Google Cloud en <i>APIs y servicios → Credenciales</i>; con un consentimiento de tipo <b>Interno</b> no hace falta verificar la app con Google.
-            </span>
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn tonal" onClick={pickClient}><Icon name="upload_file" />Cargar cliente OAuth (JSON)</button>
-              <button className="btn text" onClick={() => api.openURL('https://github.com/jordilopezr/gcetools#iniciar-sesi%C3%B3n-con-google')}><Icon name="help" />Cómo crearlo</button>
-            </div>
-          </div>
-        ) : oauth.account ? (
-          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <span className="badge ok">Sesión guardada</span>
-            <span className="title-s selectable">{oauth.account}</span>
-            <span className="body-s muted">Cliente de {oauth.projectId || 'tu organización'}</span>
-            <span className="spacer" />
-            <button className="btn text" onClick={() => signOut(false)}><Icon name="logout" />Cerrar sesión</button>
-            <button className="btn text" onClick={() => signOut(true)}>Olvidar cliente</button>
-          </div>
         ) : (
-          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            {signingIn ? <>
-              <Icon name="progress_activity" />
-              <span className="body-m">Completa el inicio de sesión en el navegador que se ha abierto…</span>
-              <button className="btn text" onClick={() => api.oauthCancel()}>Cancelar</button>
-            </> : <>
-              <button className="btn filled" onClick={signIn}><Icon name="account_circle" />Iniciar sesión con Google</button>
-              <span className="body-s muted">Cliente {oauth.client.split('-')[0]}… de {oauth.projectId || 'tu organización'}</span>
-              <button className="btn text" onClick={pickClient}>Cambiar cliente</button>
-            </>}
+          <div className="col" style={{ gap: 12 }}>
+            {!oauth?.client ? (
+              <span className="body-m">
+                Esta compilación no incluye el cliente OAuth de gceTools. Carga el <b>cliente OAuth de tu organización</b> (tipo "App de escritorio", archivo <span className="mono">client_secret_….json</span>).
+              </span>
+            ) : oauth.account ? (
+              <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                <span className="badge ok">Sesión guardada</span>
+                <span className="title-s selectable">{oauth.account}</span>
+                <span className="spacer" />
+                <button className="btn text" onClick={() => signOut(false)}><Icon name="logout" />Cerrar sesión</button>
+              </div>
+            ) : signingIn ? (
+              <div className="row" style={{ gap: 10 }}>
+                <Icon name="progress_activity" />
+                <span className="body-m">Completa el inicio de sesión en el navegador que se ha abierto…</span>
+                <button className="btn text" onClick={() => api.oauthCancel()}>Cancelar</button>
+              </div>
+            ) : (
+              <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+                <button className="btn filled" onClick={signIn}><Icon name="account_circle" />Iniciar sesión con Google</button>
+                <span className="body-s muted">Se abrirá el navegador. gceTools solo pide permiso de <b>lectura</b> sobre Google Cloud.</span>
+              </div>
+            )}
+            <details open={!oauth?.builtin || oauth?.custom}>
+              <summary className="body-s muted" style={{ cursor: 'pointer' }}>
+                Opciones avanzadas{oauth?.custom ? ` · usando el cliente OAuth de ${oauth.projectId || 'tu organización'}` : ''}
+              </summary>
+              <div className="col" style={{ gap: 8, marginTop: 8 }}>
+                <span className="body-s muted">
+                  Si tu organización no permite apps externas, un administrador puede crear un cliente OAuth propio (tipo "App de escritorio", consentimiento <b>Interno</b>) y repartir su JSON.
+                </span>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn tonal" onClick={pickClient}><Icon name="upload_file" />{oauth?.custom ? 'Cambiar cliente de la organización' : 'Usar el cliente OAuth de mi organización'}</button>
+                  {oauth?.custom && oauth.builtin && <button className="btn text" onClick={useBuiltin}>Volver al cliente de gceTools</button>}
+                  {oauth?.custom && !oauth.builtin && <button className="btn text" onClick={() => signOut(true)}>Olvidar cliente</button>}
+                  <button className="btn text" onClick={() => api.openURL('https://github.com/jordilopezr/gcetools#iniciar-sesi%C3%B3n-con-google')}><Icon name="help" />Ayuda</button>
+                </div>
+              </div>
+            </details>
           </div>
         ))}
 

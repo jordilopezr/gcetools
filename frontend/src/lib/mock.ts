@@ -152,7 +152,8 @@ let historyEntries: HistoryEntry[] = Array.from({ length: 12 }, (_, i) => {
   }
 })
 
-let oauth: OAuthStatus = { available: true, client: '', projectId: '', account: '' }
+const builtinOAuth: OAuthStatus = { available: true, builtin: true, custom: false, client: '1234-gcetools.apps.googleusercontent.com', projectId: 'gcetools-app', account: '' }
+let oauth: OAuthStatus = { ...builtinOAuth }
 let loginTimer: ReturnType<typeof setTimeout> | undefined
 let oauthCancelReject: (() => void) | undefined
 
@@ -270,11 +271,12 @@ export const mockApi: Api = {
   historyDir: async () => '/home/demo/.local/share/gcetools/history',
   exportReport: async () => '/home/demo/gcetools-informe-demo.html',
   oauthStatus: async () => oauth,
-  oauthPickClient: async () => (oauth = { ...oauth, client: '482917300000-demo.apps.googleusercontent.com', projectId: 'acme-tools', account: '' }),
+  oauthPickClient: async () => (oauth = { ...oauth, custom: true, client: '482917300000-demo.apps.googleusercontent.com', projectId: 'acme-tools', account: '' }),
   oauthLogin: () => new Promise((resolve, reject) => {
     loginTimer = setTimeout(() => resolve(oauth = { ...oauth, account: 'demo@example.com' }), 1500)
     oauthCancelReject = () => reject(new Error('inicio de sesión cancelado'))
   }),
   oauthCancel: async () => { clearTimeout(loginTimer); oauthCancelReject?.() },
-  oauthLogout: async (all) => (oauth = all ? { available: true, client: '', projectId: '', account: '' } : { ...oauth, account: '' }),
+  oauthLogout: async (all) => (oauth = all ? { ...builtinOAuth } : { ...oauth, account: '' }),
+  oauthUseBuiltin: async () => (oauth = { ...builtinOAuth }),
 }

@@ -1,13 +1,16 @@
 package auth
 
 // Sign-in with Google without gcloud: the OAuth 2.0 flow for installed apps
-// (loopback redirect + PKCE) with an OAuth client created by the user's own
-// organization. An "Internal" client needs no Google verification and keeps
-// the consent screen inside the organization.
+// (loopback redirect + PKCE).
 //
-// Nothing is written to disk: the client and the refresh token live in the
-// operating system keyring (Windows Credential Manager, macOS Keychain,
-// Secret Service on Linux).
+// Release builds embed gceTools' own "Desktop app" OAuth client (injected at
+// build time from CI secrets, never committed). Organizations that block
+// third-party apps can load their own client instead (an "Internal" client
+// needs no Google verification).
+//
+// Nothing is written to disk: the organization's client and the refresh token
+// live in the operating system keyring (Windows Credential Manager, macOS
+// Keychain, Secret Service on Linux).
 
 import (
 	"context"
@@ -31,28 +34,43 @@ import (
 // OAuth is the sign-in-with-Google method.
 const OAuth Method = "oauth"
 
+// Built-in client, set at release build time:
+//
+//	-ldflags "-X gcetools/internal/auth.BuiltinClientID=… -X gcetools/internal/auth.BuiltinClientSecret=…"
+//
+// For desktop clients Google treats the secret as public (PKCE protects the
+// flow); it is kept out of the repository only so secret scanners stay quiet.
+var (
+	BuiltinClientID      string
+	BuiltinClientSecret  string
+	BuiltinClientProject string
+)
+
 const (
 	keyringService = "gcetools"
 	keyringUser    = "google-oauth"
 )
 
-// OAuthClient is the organization's "Desktop app" OAuth client.
+// OAuthClient is a "Desktop app" OAuth client.
 type OAuthClient struct {
 	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"` // not confidential for desktop clients, kept in the keyring anyway
+	ClientSecret string `json:"clientSecret"`
 	ProjectID    string `json:"projectId"`
 }
 
 type stored struct {
-	Client       OAuthClient `json:"client"`
-	RefreshToken string      `json:"refreshToken,omitempty"`
-	Account      string      `json:"account,omitempty"`
+	Custom       *OAuthClient `json:"custom,omitempty"` // organization's own client, if loaded
+	TokenClient  OAuthClient  `json:"tokenClient"`      // client that issued the refresh token
+	RefreshToken string       `json:"refreshToken,omitempty"`
+	Account      string       `json:"account,omitempty"`
 }
 
 // OAuthStatus is what the connection page shows.
 type OAuthStatus struct {
 	Available bool   `json:"available"` // the OS keyring works
-	Client    string `json:"client"`    // client ID ("" = none configured)
+	Builtin   bool   `json:"builtin"`   // this build embeds gceTools' client
+	Custom    bool   `json:"custom"`    // the organization's own client is active
+	Client    string `json:"client"`    // client ID that will be used ("" = none: load one)
 	ProjectID string `json:"projectId"`
 	Account   string `json:"account"` // signed-in account ("" = not signed in)
 	Error     string `json:"error,omitempty"`
@@ -73,6 +91,21 @@ type osKeyring struct{}
 func (osKeyring) Get(s, u string) (string, error) { return keyring.Get(s, u) }
 func (osKeyring) Set(s, u, v string) error        { return keyring.Set(s, u, v) }
 func (osKeyring) Delete(s, u string) error        { return keyring.Delete(s, u) }
+
+func builtin() (OAuthClient, bool) {
+	if BuiltinClientID == "" {
+		return OAuthClient{}, false
+	}
+	return OAuthClient{ClientID: BuiltinClientID, ClientSecret: BuiltinClientSecret, ProjectID: BuiltinClientProject}, true
+}
+
+// effective is the client a new sign-in uses: the organization's, else the built-in one.
+func (s stored) effective() (OAuthClient, bool) {
+	if s.Custom != nil && s.Custom.ClientID != "" {
+		return *s.Custom, true
+	}
+	return builtin()
+}
 
 // ParseOAuthClient reads the JSON downloaded from the console
 // (APIs & Services → Credentials → OAuth client ID → Desktop app).
@@ -102,17 +135,26 @@ func ParseOAuthClient(data []byte) (OAuthClient, error) {
 
 func load() (stored, error) {
 	v, err := ring.Get(keyringService, keyringUser)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return stored{}, nil
+	}
 	if err != nil {
-		return stored{}, err
+		return stored{}, fmt.Errorf("llavero del sistema no disponible: %w", err)
 	}
 	var s stored
 	if err := json.Unmarshal([]byte(v), &s); err != nil {
-		return stored{}, err
+		return stored{}, nil // unreadable (older format): start over
 	}
 	return s, nil
 }
 
 func save(s stored) error {
+	if s.Custom == nil && s.RefreshToken == "" {
+		if err := ring.Delete(keyringService, keyringUser); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return err
+		}
+		return nil
+	}
 	b, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -125,43 +167,58 @@ func save(s stored) error {
 
 // GetOAuthStatus never fails: problems are reported in Error.
 func GetOAuthStatus() OAuthStatus {
+	_, hasBuiltin := builtin()
 	s, err := load()
-	switch {
-	case err == nil:
-		return OAuthStatus{Available: true, Client: s.Client.ClientID, ProjectID: s.Client.ProjectID, Account: s.Account}
-	case errors.Is(err, keyring.ErrNotFound):
-		return OAuthStatus{Available: true}
-	default:
-		return OAuthStatus{Error: "Llavero del sistema no disponible: " + err.Error()}
+	if err != nil {
+		return OAuthStatus{Builtin: hasBuiltin, Error: err.Error()}
 	}
+	st := OAuthStatus{Available: true, Builtin: hasBuiltin, Custom: s.Custom != nil, Account: s.Account}
+	if c, ok := s.effective(); ok {
+		st.Client, st.ProjectID = c.ClientID, c.ProjectID
+	}
+	if s.RefreshToken != "" && s.TokenClient.ClientID != st.Client {
+		st.Account = "" // signed in with another client: sign in again
+	}
+	return st
 }
 
-// SetOAuthClient stores the organization's client. Changing the client signs out.
+// SetOAuthClient stores the organization's own client. Changing it signs out.
 func SetOAuthClient(c OAuthClient) error {
 	s, err := load()
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		return fmt.Errorf("llavero del sistema no disponible: %w", err)
-	}
-	if s.Client.ClientID != c.ClientID {
-		s = stored{}
-	}
-	s.Client = c
-	return save(s)
-}
-
-// ForgetOAuth signs out; with all=true it also removes the client.
-func ForgetOAuth(all bool) error {
-	s, err := load()
-	if errors.Is(err, keyring.ErrNotFound) {
-		return nil
-	}
 	if err != nil {
 		return err
 	}
-	if all {
-		return ring.Delete(keyringService, keyringUser)
+	if s.TokenClient.ClientID != c.ClientID {
+		s.RefreshToken, s.Account, s.TokenClient = "", "", OAuthClient{}
 	}
-	return save(stored{Client: s.Client})
+	s.Custom = &c
+	return save(s)
+}
+
+// UseBuiltinClient forgets the organization's client (and its session).
+func UseBuiltinClient() error {
+	s, err := load()
+	if err != nil {
+		return err
+	}
+	if s.Custom != nil && s.TokenClient.ClientID == s.Custom.ClientID {
+		s.RefreshToken, s.Account, s.TokenClient = "", "", OAuthClient{}
+	}
+	s.Custom = nil
+	return save(s)
+}
+
+// ForgetOAuth signs out; with all=true it also forgets the organization's client.
+func ForgetOAuth(all bool) error {
+	s, err := load()
+	if err != nil {
+		return err
+	}
+	s.RefreshToken, s.Account, s.TokenClient = "", "", OAuthClient{}
+	if all {
+		s.Custom = nil
+	}
+	return save(s)
 }
 
 func oauthConfig(c OAuthClient, redirect string) *oauth2.Config {
@@ -173,11 +230,12 @@ func oauthConfig(c OAuthClient, redirect string) *oauth2.Config {
 // the consent URL (the app opens the browser; the CLI also prints it).
 func Login(ctx context.Context, open func(url string)) (account string, err error) {
 	s, err := load()
-	if errors.Is(err, keyring.ErrNotFound) || (err == nil && s.Client.ClientID == "") {
-		return "", errors.New("primero configura el cliente OAuth de tu organización")
-	}
 	if err != nil {
-		return "", fmt.Errorf("llavero del sistema no disponible: %w", err)
+		return "", err
+	}
+	client, ok := s.effective()
+	if !ok {
+		return "", errors.New("esta compilación no incluye el cliente OAuth de gceTools: carga el cliente OAuth de tu organización")
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -186,7 +244,7 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 	}
 	defer ln.Close()
 	redirect := fmt.Sprintf("http://127.0.0.1:%d/", ln.Addr().(*net.TCPAddr).Port)
-	cfg := oauthConfig(s.Client, redirect)
+	cfg := oauthConfig(client, redirect)
 	verifier := oauth2.GenerateVerifier()
 	state := randomHex(16)
 
@@ -227,10 +285,13 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 		}
 		return "", errors.New("inicio de sesión cancelado")
 	}
-	if res.err != "" {
-		if res.err == "access_denied" {
-			return "", errors.New("se denegó el acceso en la pantalla de consentimiento")
-		}
+	switch res.err {
+	case "":
+	case "access_denied":
+		return "", errors.New("se denegó el acceso en la pantalla de consentimiento")
+	case "admin_policy_enforced", "org_internal":
+		return "", errors.New("tu organización no permite esta app: pide a tu administrador que la autorice o usa el cliente OAuth de tu organización (opciones avanzadas)")
+	default:
 		return "", fmt.Errorf("Google devolvió el error %q", res.err)
 	}
 	tok, err := cfg.Exchange(ctx, res.code, oauth2.VerifierOption(verifier))
@@ -238,24 +299,27 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 		return "", fmt.Errorf("no se pudo completar el inicio de sesión: %w", err)
 	}
 	if tok.RefreshToken == "" {
-		return "", errors.New("Google no devolvió un token de refresco; revoca el acceso de la app en tu cuenta y vuelve a intentarlo")
+		return "", errors.New("Google no devolvió un token de refresco; revoca el acceso de la app en tu cuenta de Google y vuelve a intentarlo")
 	}
 	account = emailFromIDToken(tok)
 	if account == "" {
 		account = emailFromTokenInfo(ctx, tok.AccessToken)
 	}
-	s.RefreshToken, s.Account = tok.RefreshToken, account
+	s.TokenClient, s.RefreshToken, s.Account = client, tok.RefreshToken, account
 	return account, save(s)
 }
 
 // oauthSession builds the token source from the stored refresh token.
 func oauthSession(ctx context.Context) (oauth2.TokenSource, string, string, error) {
 	s, err := load()
-	if err != nil || s.RefreshToken == "" {
+	if err != nil {
+		return nil, "", "", err
+	}
+	if s.RefreshToken == "" || s.TokenClient.ClientID == "" {
 		return nil, "", "", errors.New("no has iniciado sesión con Google en gceTools")
 	}
-	ts := oauthConfig(s.Client, "").TokenSource(context.WithoutCancel(ctx), &oauth2.Token{RefreshToken: s.RefreshToken})
-	return ts, s.Account, s.Client.ProjectID, nil
+	ts := oauthConfig(s.TokenClient, "").TokenSource(context.WithoutCancel(ctx), &oauth2.Token{RefreshToken: s.RefreshToken})
+	return ts, s.Account, s.TokenClient.ProjectID, nil
 }
 
 func emailFromIDToken(tok *oauth2.Token) string {
