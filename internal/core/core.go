@@ -29,7 +29,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.5.0"
+var Version = "0.6.0"
 
 type Engine struct {
 	Session *auth.Session
@@ -103,6 +103,10 @@ type ScanOptions struct {
 	Concurrency int            `json:"concurrency"`
 	Health      health.Options `json:"health"`
 	Modules     Modules        `json:"modules"`
+	// SaveHistory stores the result in the local history (the app does it,
+	// the CLI with --save-history); Profile labels that history entry.
+	SaveHistory bool   `json:"saveHistory"`
+	Profile     string `json:"profile"`
 }
 
 type Progress struct {
@@ -193,7 +197,7 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		if !scanned {
 			status = "No escaneado"
 		}
-		if status == "OK" {
+		if strings.HasPrefix(status, "OK") { // also "OK (sin osconfig)": optional modules do not make a project fail
 			inv.Meta.ProjectsOK++
 		}
 		lbl := make([]string, 0, len(p.Labels))

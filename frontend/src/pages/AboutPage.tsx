@@ -22,6 +22,7 @@ const credits: [string, string, string][] = [
   ['React', 'MIT', 'https://react.dev'],
   ['excelize', 'BSD-3-Clause', 'https://github.com/qax-os/excelize'],
   ['Google API Go Client', 'BSD-3-Clause', 'https://github.com/googleapis/google-api-go-client'],
+  ['go-keyring', 'MIT', 'https://github.com/zalando/go-keyring'],
   ['Roboto Flex', 'OFL-1.1', 'https://fonts.google.com/specimen/Roboto+Flex'],
   ['Material Symbols', 'Apache-2.0', 'https://fonts.google.com/icons'],
 ]

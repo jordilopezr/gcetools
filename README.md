@@ -6,7 +6,7 @@ Inventario de Google Compute Engine al estilo RVTools: aplicación de escritorio
 Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja por pestaña), CSV (ZIP) o JSON.
 
 - **Solo lectura:** pide únicamente el scope `cloud-platform.read-only`.
-- **Autenticación:** credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
+- **Autenticación:** inicio de sesión con Google sin gcloud (cliente OAuth de tu organización; sesión guardada en el llavero del sistema), credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, con interfaz Material 3 y AG Grid Community.
 
 ## Pestañas (MVP)
@@ -35,6 +35,34 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 | gErrors / gMetaData | vMetaData | Errores por proyecto e información del escaneo |
 
 \* Módulos opcionales. Se activan en la pantalla de Proyectos o con `--modules`. Si la API está deshabilitada o falta el permiso, el módulo se omite: el proyecto queda como "OK (sin …)" y el motivo se registra en gErrors.
+
+### Iniciar sesión con Google
+
+Para usar gceTools sin instalar Google Cloud CLI. Google no permite reutilizar el cliente OAuth de gcloud y exige verificar las apps públicas que piden acceso a Google Cloud, así que **cada organización usa su propio cliente OAuth**. Si es de tipo *Interno*, no necesita verificación y la pantalla de consentimiento solo la ven usuarios de la organización.
+
+Lo crea una vez un administrador, en un proyecto de la organización:
+
+1. **APIs y servicios → Pantalla de consentimiento de OAuth** (Google Auth Platform): tipo de usuario **Interno**, nombre "gceTools" y email de soporte. No hace falta añadir scopes a mano.
+2. **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**: tipo **App de escritorio**. Descarga el JSON (`client_secret_….json`) y repártelo a quien vaya a usar gceTools. En las apps de escritorio el "secreto" de ese archivo no es confidencial: Google lo trata como público y la seguridad la aporta el flujo PKCE.
+3. En ese proyecto, habilita las APIs de los módulos opcionales que vayáis a usar (Recommender, Cloud Asset, Cloud Billing): con este método la cuota se carga al proyecto del cliente.
+
+En la app: **Conexión → Iniciar sesión con Google → Cargar cliente OAuth (JSON) → Iniciar sesión con Google**. Se abre el navegador; tras aceptar, la sesión queda guardada y al volver a abrir la app ya estás conectado.
+
+- Se solicita solo `cloud-platform.read-only` (más tu email, para mostrar la cuenta). Flujo OAuth para apps instaladas con PKCE y redirección a `127.0.0.1`.
+- El cliente y el token de refresco se guardan **solo en el llavero del sistema** (Credential Manager en Windows, Keychain en macOS, Secret Service en Linux), nunca en archivos. "Cerrar sesión" los borra; también puedes revocar el acceso en [tu cuenta de Google](https://myaccount.google.com/permissions).
+- En consola: `gcetools-cli login --client client_secret_….json` (una vez) y luego `gcetools-cli scan --auth oauth`. `gcetools-cli logout` cierra la sesión.
+
+### Historial y tendencias
+
+Cada escaneo hecho desde la app se guarda automáticamente (se desactiva en **Historial**) como JSON comprimido en la carpeta de datos del usuario: `~/.local/share/gcetools/history` en Linux, `%LocalAppData%\gcetools\history` en Windows y `~/Library/Application Support/gcetools/history` en macOS. Se conservan los 100 más recientes.
+
+- **Historial** muestra la lista de escaneos y gráficas de evolución de VMs, vCPU, coste (real si existe, si no el estimado) y hallazgos de severidad alta.
+- **Abrir en Inventario** carga un escaneo antiguo; **Comparar con el anterior** (o seleccionando dos) abre la comparación sin exportar nada a mano.
+- En consola: `gcetools-cli scan --save-history` guarda también en el mismo historial (útil en tareas programadas).
+
+### Informe ejecutivo
+
+**Inventario → Exportar → Informe ejecutivo (HTML)** genera una página autocontenida (sin scripts ni recursos externos) que se abre en el navegador y se imprime a PDF: totales, coste estimado o real, ahorro de Recommender, los 10 hallazgos principales, coste por proyecto, proyectos no leídos y, si hay historial, los cambios desde el escaneo anterior. En consola: `gcetools-cli scan --report informe.html`.
 
 ### Perfiles y descubrimiento con Cloud Asset Inventory
 
@@ -129,15 +157,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.5.0-linux-amd64.deb
+sudo apt install ./gcetools-0.6.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.5.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.6.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.5.0-linux-x86_64.AppImage && ./gcetools-0.5.0-linux-x86_64.AppImage
+chmod +x gcetools-0.6.0-linux-x86_64.AppImage && ./gcetools-0.6.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
@@ -211,6 +239,8 @@ gcetools-cli scan --out "inventario-$(date +%F).json"     # snapshot para compar
 gcetools-cli diff --out cambios.xlsx anterior.json nuevo.json
 gcetools-cli scan --profile produccion --discover organizations/123456
 gcetools-cli profiles
+gcetools-cli scan --save-history --report "informe-$(date +%F).html"   # historial + informe para la tarea semanal
+gcetools-cli login --client client_secret.json && gcetools-cli scan --auth oauth
 gcetools-cli version
 ```
 
@@ -258,6 +288,8 @@ internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
 internal/cli              Comandos `scan`, `diff`, `profiles` y `version`
 internal/profile          Perfiles de escaneo guardados
 internal/billing          Coste real desde la exportación de facturación a BigQuery
+internal/history          Historial local de escaneos
+internal/report           Informe ejecutivo en HTML
 frontend/                 React + TS, tokens Material 3, AG Grid
 assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
@@ -266,7 +298,6 @@ Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escri
 
 ## Pendiente
 
-- Inicio de sesión OAuth en el navegador sin gcloud (necesita un OAuth client ID de la organización)
 - Colector completo basado en Cloud Asset Inventory (hoy CAI solo se usa para descubrir proyectos)
 - Firma de los ejecutables de Windows
 

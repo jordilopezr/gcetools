@@ -49,6 +49,14 @@ export default function InventoryPage({ inventory, notify }: Props) {
     } catch (e) { notify(errorText(e)) } finally { setExporting(false) }
   }
 
+  const doReport = async () => {
+    setExporting(true)
+    try {
+      const path = await api.exportReport()
+      if (path) notify(`Informe guardado en ${path}`)
+    } catch (e) { notify(errorText(e)) } finally { setExporting(false) }
+  }
+
   const m = inventory.meta
   const duration = m.startedAt && m.finishedAt ? Math.round((new Date(m.finishedAt).getTime() - new Date(m.startedAt).getTime()) / 1000) : 0
 
@@ -70,6 +78,7 @@ export default function InventoryPage({ inventory, notify }: Props) {
             <button onClick={() => { close(); doExport('csv', ',') }}><Icon name="csv" /><div><div>CSV (coma)</div><div className="sub">ZIP con un CSV por pestaña</div></div></button>
             <button onClick={() => { close(); doExport('csv', ';') }}><Icon name="csv" /><div><div>CSV (punto y coma)</div><div className="sub">Para Excel con configuración regional española</div></div></button>
             <hr />
+            <button onClick={() => { close(); doReport() }}><Icon name="summarize" /><div><div>Informe ejecutivo (HTML)</div><div className="sub">Resumen de una página, imprimible a PDF</div></div></button>
             <button onClick={() => { close(); doExport('json') }}><Icon name="data_object" /><div><div>Snapshot JSON</div><div className="sub">Para comparar escaneos</div></div></button>
           </>}
         </Menu>

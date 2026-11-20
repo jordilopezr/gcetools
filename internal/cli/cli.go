@@ -15,9 +15,12 @@ import (
 	"gcetools/internal/auth"
 	"gcetools/internal/billing"
 	"gcetools/internal/core"
+	"gcetools/internal/diff"
 	"gcetools/internal/export"
 	"gcetools/internal/health"
+	"gcetools/internal/history"
 	"gcetools/internal/profile"
+	"gcetools/internal/report"
 	"gcetools/internal/update"
 )
 
@@ -32,6 +35,7 @@ Ejemplos:
   gcetools scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
   gcetools scan --discover organizations/123456 --out inventario.json
   gcetools scan --profile produccion --out inventario.xlsx
+  gcetools scan --save-history --report informe.html --out inventario.xlsx
   gcetools scan --billing-table finops-prj.billing.gcp_billing_export_resource_v1_XXXX --out inventario.xlsx
 
 Con --profile se usan los valores guardados en la app (Proyectos → Perfil);
@@ -43,7 +47,7 @@ Opciones:
 func Run(args []string) int {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.Usage = func() { fmt.Fprint(fs.Output(), usage); fs.PrintDefaults() }
-	method := fs.String("auth", "adc", "método: adc | sa | impersonate")
+	method := fs.String("auth", "adc", "método: adc | sa | impersonate | oauth (tras gcetools login)")
 	keyPath := fs.String("key", "", "ruta a la clave JSON de la service account (--auth sa)")
 	target := fs.String("impersonate", "", "email de la service account a impersonar (--auth impersonate)")
 	projects := fs.String("projects", "", "IDs de proyecto separados por comas (por defecto: todos los visibles)")
@@ -61,6 +65,8 @@ func Run(args []string) int {
 	billTable := fs.String("billing-table", "", "tabla de exportación de facturación en BigQuery (proyecto.dataset.tabla) para el coste real")
 	billMonth := fs.String("billing-month", "", "mes de facturación AAAAMM (por defecto, el mes anterior)")
 	billMaxGB := fs.Int("billing-max-gb", 50, "no ejecutar la consulta de BigQuery si leería más GB que esto")
+	reportPath := fs.String("report", "", "genera además el informe ejecutivo en HTML en esta ruta")
+	saveHistory := fs.Bool("save-history", false, "guarda también el resultado en el historial local (el mismo que usa la app)")
 	disableRules := fs.String("disable-rules", "", "reglas de gHealth a desactivar, separadas por comas (gcetools rules las lista)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -208,7 +214,7 @@ func Run(args []string) int {
 			return fail("módulo desconocido %q (osconfig, monitoring, recommender, pricing)", m)
 		}
 	}
-	inv, err := eng.Scan(ctx, list, core.ScanOptions{Concurrency: *conc, Modules: mods, Health: hopt}, func(p core.Progress) {
+	inv, err := eng.Scan(ctx, list, core.ScanOptions{Concurrency: *conc, Modules: mods, Health: hopt, SaveHistory: *saveHistory}, func(p core.Progress) {
 		if p.Step == "done" {
 			fmt.Fprintf(os.Stderr, "[%d/%d] %-30s %s\n", p.Done, p.Total, p.Project, p.Message)
 		}
@@ -228,6 +234,33 @@ func Run(args []string) int {
 	path, err := export.Write(inv, *out, f, r[0])
 	if err != nil {
 		return fail("error al exportar: %v", err)
+	}
+	if *reportPath != "" {
+		ropt := report.Options{Website: update.Website}
+		if prev, ok := history.Previous(inv.Meta.StartedAt); ok { // compare with the last stored scan
+			if old, err := history.Load(prev.ID); err == nil {
+				ropt.Diff = diff.Compare(diff.Input{Inv: old, Label: prev.ID}, diff.Input{Inv: inv, Label: "actual"})
+				ropt.DiffSince = prev.StartedAt
+			}
+		}
+		if html, err := report.Render(inv, ropt); err != nil {
+			fmt.Fprintf(os.Stderr, "aviso: no se pudo generar el informe: %v\n", err)
+		} else if err := os.WriteFile(*reportPath, html, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "aviso: no se pudo guardar el informe: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Informe ejecutivo: %s\n", *reportPath)
+		}
+	}
+	if *saveHistory {
+		label := ""
+		if prof != nil {
+			label = prof.Name
+		}
+		if s, err := history.Save(inv, label); err != nil {
+			fmt.Fprintf(os.Stderr, "aviso: no se pudo guardar en el historial: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Guardado en el historial: %s\n", s.ID)
+		}
 	}
 	fmt.Fprintf(os.Stderr, "Inventario: %d VMs, %d errores → %s\n", len(inv.Sheet("gInfo").Rows), len(inv.Errors), path)
 	if inv.Meta.Cancelled {

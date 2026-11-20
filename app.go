@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,8 +15,10 @@ import (
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
 	"gcetools/internal/health"
+	"gcetools/internal/history"
 	"gcetools/internal/model"
 	"gcetools/internal/profile"
+	"gcetools/internal/report"
 	"gcetools/internal/update"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -25,15 +29,16 @@ import (
 type App struct {
 	ctx context.Context
 
-	mu       sync.Mutex
-	keyJSON  []byte // service account key, memory only
-	keyPath  string // where it was read from (saved in profiles; never the content)
-	engine   *core.Engine
-	projects map[string]core.Project
-	inv      *model.Inventory
-	cancel   context.CancelFunc
-	diff     *model.Inventory            // last comparison
-	snaps    map[string]*model.Inventory // snapshots loaded for comparison, by path
+	mu          sync.Mutex
+	keyJSON     []byte             // service account key, memory only
+	keyPath     string             // where it was read from (saved in profiles; never the content)
+	loginCancel context.CancelFunc // pending Google sign-in
+	engine      *core.Engine
+	projects    map[string]core.Project
+	inv         *model.Inventory
+	cancel      context.CancelFunc
+	diff        *model.Inventory            // last comparison
+	snaps       map[string]*model.Inventory // snapshots loaded for comparison, by path
 }
 
 func NewApp() *App {
@@ -194,6 +199,11 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 		a.mu.Lock()
 		a.inv = inv
 		a.mu.Unlock()
+		if opt.SaveHistory {
+			if _, err := history.Save(inv, opt.Profile); err != nil {
+				runtime.EventsEmit(a.ctx, "scan:warning", "No se pudo guardar en el historial: "+err.Error())
+			}
+		}
 		runtime.EventsEmit(a.ctx, "scan:done", inv.Meta)
 	}()
 	return nil
@@ -353,6 +363,13 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 			}
 			return diff.Input{Inv: a.inv, Label: "Inventario actual"}, nil
 		}
+		if id, ok := strings.CutPrefix(path, HistoryPrefix); ok {
+			inv, err := history.Load(id)
+			if err != nil {
+				return diff.Input{}, fmt.Errorf("no se pudo leer el escaneo %s del historial: %w", id, err)
+			}
+			return diff.Input{Inv: inv, Label: "Historial " + id}, nil
+		}
 		inv, ok := a.snaps[path]
 		if !ok {
 			return diff.Input{}, errors.New("snapshot no cargado: vuelve a elegirlo")
@@ -399,4 +416,144 @@ func (a *App) Discover(scope string) ([]core.Footprint, error) {
 		return nil, err
 	}
 	return eng.Discover(a.ctx, scope)
+}
+
+// ---------- history ----------
+
+// HistoryPrefix marks a Compare path that names a history entry ("history:<id>").
+const HistoryPrefix = "history:"
+
+func (a *App) ListHistory() ([]history.Summary, error) { return history.List() }
+
+// OpenHistory loads a stored scan as the current inventory.
+func (a *App) OpenHistory(id string) (*model.Inventory, error) {
+	inv, err := history.Load(id)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	a.inv = inv
+	a.mu.Unlock()
+	return inv, nil
+}
+
+func (a *App) DeleteHistory(id string) error { return history.Delete(id) }
+
+// HistorySnapshot describes a history entry for the comparison page.
+func (a *App) HistorySnapshot(id string) (*SnapshotInfo, error) {
+	inv, err := history.Load(id)
+	if err != nil {
+		return nil, err
+	}
+	return snapshotInfo(HistoryPrefix+id, "Historial "+id, inv), nil
+}
+
+// HistoryDir is shown in the UI so users know where scans are kept.
+func (a *App) HistoryDir() string {
+	d, err := history.Dir()
+	if err != nil {
+		return ""
+	}
+	return d
+}
+
+// ExportReport writes the executive HTML summary of the current inventory,
+// including the changes since the previous scan kept in the history.
+func (a *App) ExportReport() (string, error) {
+	a.mu.Lock()
+	inv := a.inv
+	a.mu.Unlock()
+	if inv == nil {
+		return "", errors.New("no hay inventario: escanea o abre uno del historial")
+	}
+	data, err := report.Render(inv, reportOptions(inv))
+	if err != nil {
+		return "", err
+	}
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Guardar informe ejecutivo",
+		DefaultFilename: "gcetools-informe-" + inv.Meta.StartedAt.Format("20060102-1504") + ".html",
+		Filters:         []runtime.FileFilter{{DisplayName: "HTML", Pattern: "*.html"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+	runtime.BrowserOpenURL(a.ctx, "file://"+filepath.ToSlash(path))
+	return path, nil
+}
+
+// reportOptions adds the comparison with the previous history entry, if any.
+func reportOptions(inv *model.Inventory) report.Options {
+	opt := report.Options{Website: update.Website}
+	if prev, ok := history.Previous(inv.Meta.StartedAt); ok {
+		if old, err := history.Load(prev.ID); err == nil {
+			opt.Diff = diff.Compare(diff.Input{Inv: old, Label: "Historial " + prev.ID}, diff.Input{Inv: inv, Label: "Actual"})
+			opt.DiffSince = prev.StartedAt
+		}
+	}
+	return opt
+}
+
+// ---------- sign in with Google (OAuth client of the organization) ----------
+
+func (a *App) OAuthStatus() auth.OAuthStatus { return auth.GetOAuthStatus() }
+
+// OAuthPickClient loads the organization's "Desktop app" client JSON into
+// the OS keyring.
+func (a *App) OAuthPickClient() (auth.OAuthStatus, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Cliente OAuth de tu organización (client_secret_….json)",
+		Filters: []runtime.FileFilter{{DisplayName: "JSON (*.json)", Pattern: "*.json"}},
+	})
+	if err != nil || path == "" {
+		return auth.GetOAuthStatus(), err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return auth.OAuthStatus{}, err
+	}
+	c, err := auth.ParseOAuthClient(data)
+	if err != nil {
+		return auth.OAuthStatus{}, err
+	}
+	if err := auth.SetOAuthClient(c); err != nil {
+		return auth.OAuthStatus{}, err
+	}
+	return auth.GetOAuthStatus(), nil
+}
+
+// OAuthLogin opens the browser and waits (up to 5 minutes) for the consent.
+func (a *App) OAuthLogin() (auth.OAuthStatus, error) {
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.mu.Lock()
+	a.loginCancel = cancel
+	a.mu.Unlock()
+	defer func() {
+		cancel()
+		a.mu.Lock()
+		a.loginCancel = nil
+		a.mu.Unlock()
+	}()
+	if _, err := auth.Login(ctx, func(u string) { runtime.BrowserOpenURL(a.ctx, u) }); err != nil {
+		return auth.GetOAuthStatus(), err
+	}
+	return auth.GetOAuthStatus(), nil
+}
+
+// OAuthCancel aborts a pending OAuthLogin.
+func (a *App) OAuthCancel() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.loginCancel != nil {
+		a.loginCancel()
+	}
+}
+
+// OAuthLogout signs out; all=true also forgets the organization's client.
+func (a *App) OAuthLogout(all bool) (auth.OAuthStatus, error) {
+	err := auth.ForgetOAuth(all)
+	return auth.GetOAuthStatus(), err
 }

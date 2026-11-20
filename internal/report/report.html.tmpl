@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe gceTools · {{.Scanned}}</title>
+<style>
+  :root {
+    --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --bg: #ffffff; --panel: #f6f8fc;
+    --accent: #0b57d0; --high: #b3261e; --high-bg: #fce8e6; --med: #8a5300; --med-bg: #fef3d6; --low-bg: #eceff1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 48px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 2px solid var(--accent); padding-bottom: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 24px; font-weight: 600; }
+  h2 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  .muted { color: var(--muted); }
+  .meta { text-align: right; font-size: 12px; color: var(--muted); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 20px; }
+  .kpi { background: var(--panel); border-radius: 10px; padding: 12px 14px; border: 1px solid transparent; }
+  .kpi.alert { border-color: var(--high); }
+  .kpi .l { font-size: 12px; color: var(--muted); }
+  .kpi .v { font-size: 22px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .s { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sev { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .sev.Alta { background: var(--high-bg); color: var(--high); }
+  .sev.Media { background: var(--med-bg); color: var(--med); }
+  .sev.Baja { background: var(--low-bg); color: var(--muted); }
+  .detail { color: var(--muted); font-size: 12px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  ul.plain { margin: 0; padding-left: 18px; }
+  footer { margin-top: 36px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  a { color: var(--accent); }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } .meta { text-align: left; } }
+  @media print {
+    main { padding: 0; max-width: none; }
+    .kpi { break-inside: avoid; }
+    section { break-inside: avoid-page; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Informe de inventario de Compute Engine</h1>
+      <div class="muted">Escaneo del {{.Scanned}} · {{.ProjectsOK}} de {{.Projects}} proyectos leídos</div>
+    </div>
+    <div class="meta">{{if .Identity}}Identidad: {{.Identity}}<br>{{end}}Generado el {{.Generated}}</div>
+  </header>
+
+  <div class="kpis">
+    {{range .KPIs}}<div class="kpi{{if .Alert}} alert{{end}}"><div class="l">{{.Label}}</div><div class="v">{{.Value}}</div><div class="s">{{.Sub}}</div></div>
+    {{end}}
+  </div>
+
+  {{if .HasDiff}}
+  <section>
+    <h2>Cambios desde el escaneo del {{.DiffSince}}</h2>
+    <p>{{.Added}} recursos nuevos, {{.Removed}} eliminados y {{.Modified}} modificados{{if .CostDelta}}; diferencia de coste estimado: <b>{{.CostDelta}}</b>/mes{{end}}.</p>
+    {{if .Relevant}}
+    <table>
+      <thead><tr><th>Cambio relevante</th><th>Proyecto</th><th>Recurso</th><th>Detalle</th></tr></thead>
+      <tbody>{{range .Relevant}}<tr><td>{{.Reason}}</td><td>{{.Project}}</td><td>{{.Resource}}</td><td class="detail">{{.What}}</td></tr>{{end}}</tbody>
+    </table>
+    {{else}}<p class="muted">Ningún cambio relevante (redimensionados, reglas abiertas a Internet, discos huérfanos nuevos…).</p>{{end}}
+  </section>
+  {{end}}
+
+  <section>
+    <h2>Hallazgos principales</h2>
+    {{if .Findings}}
+    <table>
+      <thead><tr><th>Severidad</th><th>Hallazgo</th><th>Proyecto</th><th>Recurso</th></tr></thead>
+      <tbody>{{range .Findings}}<tr><td><span class="sev {{.Severity}}">{{.Severity}}</span></td><td>{{.Rule}}<div class="detail">{{.Detail}}</div></td><td>{{.Project}}</td><td>{{.Resource}}</td></tr>{{end}}</tbody>
+    </table>
+    <p class="note">{{len .Findings}} de {{.FindingsTotal}} hallazgos ({{.High}} altos, {{.Medium}} medios, {{.Low}} bajos). La lista completa está en la pestaña gHealth del inventario.</p>
+    {{else}}<p class="muted">Sin hallazgos de severidad alta o media.</p>{{end}}
+  </section>
+
+  {{if .Costs}}
+  <section>
+    <h2>Coste mensual por proyecto</h2>
+    <table>
+      <thead><tr><th>Proyecto</th><th class="num">VMs encendidas</th>{{if .Currency}}<th class="num">Estimado lista ({{.Currency}})</th>{{end}}{{if .RealCurrency}}<th class="num">Real neto ({{.RealCurrency}})</th>{{end}}</tr></thead>
+      <tbody>{{$cur := .Currency}}{{$real := .RealCurrency}}{{range .Costs}}<tr><td>{{.Project}}</td><td class="num">{{.VMs}}</td>{{if $cur}}<td class="num">{{n0 .List}}</td>{{end}}{{if $real}}<td class="num">{{if .HasReal}}{{n0 .Real}}{{end}}</td>{{end}}</tr>{{end}}</tbody>
+    </table>
+    <p class="note">{{if .CostsMore}}Y {{.CostsMore}} proyectos más. {{end}}El estimado usa precios de lista on-demand (730 h/mes) sin descuentos; el real, si aparece, es el neto de la exportación de facturación.</p>
+  </section>
+  {{end}}
+
+  {{if .Failed}}
+  <section>
+    <h2>Proyectos no leídos por completo</h2>
+    <ul class="plain">{{range .Failed}}<li>{{.}}</li>{{end}}</ul>
+    <p class="note">Sus datos pueden faltar o estar incompletos. El detalle está en la pestaña gErrors.</p>
+  </section>
+  {{end}}
+
+  <footer>
+    <span>Generado con gceTools {{.Version}} · solo lectura (scope cloud-platform.read-only)</span>
+    {{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{end}}
+  </footer>
+</main>
+</body>
+</html>

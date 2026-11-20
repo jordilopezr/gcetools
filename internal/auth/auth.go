@@ -1,7 +1,8 @@
-// Package auth builds a read-only Google Cloud token source from one of three
+// Package auth builds a read-only Google Cloud token source from one of four
 // methods: Application Default Credentials (gcloud user login or a key pointed
-// to by GOOGLE_APPLICATION_CREDENTIALS), a service account JSON key, or
-// impersonation of a service account by the ADC identity.
+// to by GOOGLE_APPLICATION_CREDENTIALS), a service account JSON key,
+// impersonation of a service account by the ADC identity, or sign-in with
+// Google through the organization's own OAuth client (oauth.go).
 package auth
 
 import (
@@ -121,6 +122,15 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		s.TokenSource = ts
 		s.Identity = target
 
+	case OAuth:
+		// Quota for user tokens of an OAuth client goes to the client's
+		// project, so no quota project header is needed.
+		ts, account, project, err := oauthSession(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.TokenSource, s.Identity, s.ProjectHint = ts, account, project
+
 	default:
 		return nil, fmt.Errorf("método de autenticación desconocido: %q", cfg.Method)
 	}
@@ -128,6 +138,9 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 	s.TokenSource = oauth2.ReuseTokenSource(nil, s.TokenSource)
 	tok, err := s.TokenSource.Token()
 	if err != nil {
+		if cfg.Method == OAuth && strings.Contains(err.Error(), "invalid_grant") {
+			return nil, errors.New("la sesión de Google ha caducado o se revocó el acceso: vuelve a iniciar sesión en Conexión")
+		}
 		if cfg.Method != KeyFile && (strings.Contains(err.Error(), "invalid_rapt") || strings.Contains(err.Error(), "invalid_grant")) {
 			return nil, errors.New("la sesión de gcloud ha caducado o tu organización exige volver a autenticarse. " +
 				"Ejecuta `gcloud auth application-default login` y vuelve a conectar")

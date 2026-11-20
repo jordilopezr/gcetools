@@ -5,6 +5,7 @@ import {update} from '../models';
 import {model} from '../models';
 import {core} from '../models';
 import {health} from '../models';
+import {history} from '../models';
 import {profile} from '../models';
 import {auth} from '../models';
 
@@ -20,6 +21,8 @@ export function Connect(arg1:string,arg2:string):Promise<main.SessionInfo>;
 
 export function CurrentSnapshot():Promise<main.SnapshotInfo>;
 
+export function DeleteHistory(arg1:string):Promise<void>;
+
 export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DetectADC():Promise<main.ADCStatus>;
@@ -32,13 +35,33 @@ export function Export(arg1:string,arg2:string):Promise<string>;
 
 export function ExportDiff(arg1:string,arg2:string):Promise<string>;
 
+export function ExportReport():Promise<string>;
+
 export function GetInventory():Promise<model.Inventory>;
 
 export function HealthRules():Promise<Array<health.Rule>>;
 
+export function HistoryDir():Promise<string>;
+
+export function HistorySnapshot(arg1:string):Promise<main.SnapshotInfo>;
+
+export function ListHistory():Promise<Array<history.Summary>>;
+
 export function ListProfiles():Promise<Array<profile.Profile>>;
 
 export function ListProjects(arg1:string):Promise<Array<core.Project>>;
+
+export function OAuthCancel():Promise<void>;
+
+export function OAuthLogin():Promise<auth.OAuthStatus>;
+
+export function OAuthLogout(arg1:boolean):Promise<auth.OAuthStatus>;
+
+export function OAuthPickClient():Promise<auth.OAuthStatus>;
+
+export function OAuthStatus():Promise<auth.OAuthStatus>;
+
+export function OpenHistory(arg1:string):Promise<model.Inventory>;
 
 export function PickServiceAccountKey():Promise<auth.KeyInfo>;
 

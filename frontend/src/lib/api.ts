@@ -33,7 +33,14 @@ export interface HealthOptions {
   disabled: string[]
 }
 export interface HealthRule { id: string; title: string; category: string; severity: string; param?: string; labels: string }
-export interface ScanOptions { concurrency: number; health: HealthOptions; modules: Modules }
+export interface ScanOptions { concurrency: number; health: HealthOptions; modules: Modules; saveHistory?: boolean; profile?: string }
+export interface HistoryEntry {
+  id: string; startedAt: string; identity: string; version: string; profile: string
+  projects: number; projectsOk: number; cancelled: boolean
+  vms: number; running: number; vcpu: number; memoryGB: number; disks: number; diskGB: number; orphans: number
+  currency: string; costList: number; costReal: number; savings: number
+  high: number; medium: number; low: number; sizeBytes: number
+}
 export interface Footprint { projectId: string; number: string; vms: number; running: number; disks: number; other: number }
 export interface Profile {
   name: string; auth?: string; keyPath?: string; impersonate?: string
@@ -43,7 +50,8 @@ export interface Profile {
 export interface AboutInfo { version: string; website: string; donate: string; license: string; licenseUrl: string; releases: string }
 export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
 export interface SnapshotInfo { path: string; name: string; startedAt: string; identity: string; version: string; projects: number; vms: number }
-export type AuthMethod = 'adc' | 'sa' | 'impersonate'
+export type AuthMethod = 'adc' | 'sa' | 'impersonate' | 'oauth'
+export interface OAuthStatus { available: boolean; client: string; projectId: string; account: string; error?: string }
 export type ExportFormat = 'xlsx' | 'csv' | 'json'
 
 export interface Api {
@@ -73,6 +81,28 @@ export interface Api {
   deleteProfile(name: string): Promise<void>
   discover(scope: string): Promise<Footprint[]>
   healthRules(): Promise<HealthRule[]>
+  listHistory(): Promise<HistoryEntry[]>
+  openHistory(id: string): Promise<Inventory>
+  deleteHistory(id: string): Promise<void>
+  historySnapshot(id: string): Promise<SnapshotInfo>
+  historyDir(): Promise<string>
+  exportReport(): Promise<string>
+  oauthStatus(): Promise<OAuthStatus>
+  oauthPickClient(): Promise<OAuthStatus>
+  oauthLogin(): Promise<OAuthStatus>
+  oauthCancel(): Promise<void>
+  oauthLogout(all: boolean): Promise<OAuthStatus>
+}
+
+/** Compare path prefix for history entries (see app.go HistoryPrefix). */
+export const HISTORY = 'history:'
+
+/** Whether scans are saved to the history (per-viewer preference, default on). */
+export function loadSaveHistory(): boolean {
+  try { return localStorage.getItem('saveHistory') !== 'false' } catch { return true }
+}
+export function storeSaveHistory(v: boolean) {
+  try { localStorage.setItem('saveHistory', String(v)) } catch { /* storage unavailable */ }
 }
 
 /** Pseudo-path that selects the inventory in memory (see app.go). */
@@ -105,6 +135,17 @@ const wailsApi: Api = {
   deleteProfile: (n) => App.DeleteProfile(n),
   discover: async (scope) => ((await App.Discover(scope)) as unknown as Footprint[]) ?? [],
   healthRules: async () => ((await App.HealthRules()) as unknown as HealthRule[]) ?? [],
+  listHistory: async () => ((await App.ListHistory()) as unknown as HistoryEntry[]) ?? [],
+  openHistory: async (id) => (await App.OpenHistory(id)) as unknown as Inventory,
+  deleteHistory: (id) => App.DeleteHistory(id),
+  historySnapshot: async (id) => (await App.HistorySnapshot(id)) as unknown as SnapshotInfo,
+  historyDir: () => App.HistoryDir(),
+  exportReport: () => App.ExportReport(),
+  oauthStatus: async () => (await App.OAuthStatus()) as unknown as OAuthStatus,
+  oauthPickClient: async () => (await App.OAuthPickClient()) as unknown as OAuthStatus,
+  oauthLogin: async () => (await App.OAuthLogin()) as unknown as OAuthStatus,
+  oauthCancel: () => App.OAuthCancel(),
+  oauthLogout: async (all) => (await App.OAuthLogout(all)) as unknown as OAuthStatus,
 }
 
 const inWails = typeof window !== 'undefined' && (window as unknown as { go?: unknown }).go !== undefined

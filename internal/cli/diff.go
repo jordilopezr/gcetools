@@ -37,6 +37,8 @@ Comandos:
   diff      compara dos snapshots JSON (gcetools diff --help)
   profiles  lista los perfiles de escaneo guardados
   rules     lista las reglas de gHealth y cómo exceptuar recursos
+  login     inicia sesión con Google sin gcloud (cliente OAuth de tu organización)
+  logout    cierra la sesión de Google guardada en el llavero
   version   muestra la versión y si hay una más reciente
 `
 
@@ -55,6 +57,10 @@ func Dispatch(args []string) (code int, ok bool) {
 		return Profiles(), true
 	case "rules":
 		return RulesList(), true
+	case "login":
+		return Login(args[1:]), true
+	case "logout":
+		return Logout(args[1:]), true
 	case "version", "--version":
 		return Version(), true
 	case "help", "--help", "-h":

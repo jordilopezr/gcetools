@@ -1,5 +1,5 @@
 // Mock backend for UI work in a plain browser (no Wails, no GCP).
-import type { Api, Column, Footprint, HealthRule, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
+import type { Api, Column, Footprint, HealthRule, HistoryEntry, OAuthStatus, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
 
 const projects: Project[] = [
   ['acme-prod-erp', 'ERP producción', 'folders/1201'], ['acme-prod-web', 'Web producción', 'folders/1201'],
@@ -138,6 +138,24 @@ const snapshots: SnapshotInfo[] = [
 // Mirrors health.Rules (internal/health/health.go).
 const healthRules: HealthRule[] = [{"id": "orphan-disk", "title": "Disco huérfano", "category": "Coste", "severity": "Alta", "labels": "disco o proyecto"}, {"id": "stopped-vm", "title": "VM parada más de N días", "category": "Coste", "severity": "Media", "param": "stoppedDays", "labels": "VM o proyecto"}, {"id": "unused-ip", "title": "IP externa reservada sin uso", "category": "Coste", "severity": "Media", "labels": "proyecto"}, {"id": "unused-reservation", "title": "Reserva con capacidad sin usar", "category": "Coste", "severity": "Media", "labels": "proyecto"}, {"id": "cud-expiring", "title": "Commitment (CUD) que vence pronto sin renovación", "category": "Coste", "severity": "Media", "param": "cudDays", "labels": "proyecto"}, {"id": "cpu-low", "title": "VM infrautilizada (CPU p95 baja)", "category": "Coste", "severity": "Media", "param": "cpuLowPct", "labels": "VM o proyecto"}, {"id": "old-family", "title": "Familia de máquina antigua (N1)", "category": "Coste", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "old-snapshots", "title": "Snapshots manuales antiguos", "category": "Coste", "severity": "Baja", "param": "snapshotDays", "labels": "proyecto"}, {"id": "firewall-open", "title": "Regla de firewall abierta a Internet", "category": "Seguridad", "severity": "Alta", "labels": "proyecto"}, {"id": "default-sa", "title": "Service account por defecto de Compute", "category": "Seguridad", "severity": "Media", "labels": "VM o proyecto"}, {"id": "public-ip", "title": "VM con IP pública", "category": "Seguridad", "severity": "Media", "labels": "VM o proyecto"}, {"id": "no-secure-boot", "title": "Secure Boot deshabilitado", "category": "Seguridad", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "template-image", "title": "Template con imagen obsoleta, deprecada o antigua", "category": "Seguridad", "severity": "Media", "param": "imageDays", "labels": "template o proyecto"}, {"id": "snapshot-schedule", "title": "VM con discos sin snapshot schedule", "category": "Protección de datos", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "cpu-high", "title": "CPU saturada", "category": "Rendimiento", "severity": "Media", "param": "cpuHighPct", "labels": "VM o proyecto"}, {"id": "mem-high", "title": "Memoria saturada", "category": "Rendimiento", "severity": "Media", "param": "memHighPct", "labels": "VM o proyecto"}, {"id": "boot-pd-standard", "title": "Disco de arranque pd-standard", "category": "Rendimiento", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "quota", "title": "Cuota regional casi agotada", "category": "Capacidad", "severity": "Media", "param": "quotaPct", "labels": "proyecto"}, {"id": "no-labels", "title": "VM sin labels", "category": "Gobierno", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "stopped-no-disks", "title": "VM parada sin discos", "category": "Gobierno", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "no-deletion-protection", "title": "Deletion protection deshabilitada", "category": "Operación", "severity": "Baja", "labels": "VM o proyecto"}, {"id": "no-ops-agent", "title": "Sin Ops Agent", "category": "Operación", "severity": "Baja", "labels": "VM o proyecto"}]
 
+// Twelve weekly scans with a plausible drift, newest first.
+let historyEntries: HistoryEntry[] = Array.from({ length: 12 }, (_, i) => {
+  const w = 11 - i // 0 = oldest
+  const d = new Date(Date.UTC(2026, 8, 1 + w * 7, 8, 0, 0))
+  const vms = 52 + Math.round(w * 0.8 + (w % 3 === 0 ? 1 : 0))
+  return {
+    id: `${d.toISOString().slice(0, 10).replace(/-/g, '')}-080000`, startedAt: d.toISOString(), identity: 'demo@example.com',
+    version: w < 6 ? '0.5.0' : '0.6.0', profile: 'Producción', projects: 6, projectsOk: w === 4 ? 5 : 6, cancelled: false,
+    vms, running: vms - 6 + (w % 2), vcpu: vms * 4 + w * 2, memoryGB: vms * 15, disks: vms + 9, diskGB: vms * 180, orphans: Math.max(1, 6 - Math.floor(w / 2)),
+    currency: 'USD', costList: Math.round(17200 + w * 210 + (w === 7 ? 900 : 0)), costReal: 0, savings: Math.round(2100 - w * 60),
+    high: Math.max(2, 14 - w), medium: 30 - Math.floor(w / 2), low: 70 + w, sizeBytes: 1_400_000 + w * 20_000,
+  }
+})
+
+let oauth: OAuthStatus = { available: true, client: '', projectId: '', account: '' }
+let loginTimer: ReturnType<typeof setTimeout> | undefined
+let oauthCancelReject: (() => void) | undefined
+
 let picks = 0
 let profiles: Profile[] = [{
   name: 'Producción', query: '', projects: ['acme-prod-erp', 'acme-prod-web'], concurrency: 8,
@@ -160,6 +178,7 @@ export const mockApi: Api = {
   pickKey: async () => ({ clientEmail: 'inventory@acme-tools.iam.gserviceaccount.com', projectId: 'acme-tools', keyId: 'f3a1…' }),
   connect: async (method, sa) => {
     await sleep(500)
+    if (method === 'oauth' && !oauth.account) throw new Error('no has iniciado sesión con Google en gceTools')
     const identity = method === 'sa' ? 'inventory@acme-tools.iam.gserviceaccount.com' : method === 'impersonate' ? sa : 'demo@example.com'
     return { identity, method, projectHint: 'acme-tools' }
   },
@@ -230,4 +249,32 @@ export const mockApi: Api = {
     return fp
   },
   healthRules: async () => healthRules,
+  listHistory: async () => historyEntries,
+  openHistory: async (id) => {
+    await sleep(300)
+    const e = historyEntries.find(x => x.id === id)
+    if (!e) throw new Error('escaneo no encontrado')
+    const inv = buildInventory(projects.map(p => p.id))
+    inv.meta = { ...inv.meta, startedAt: e.startedAt, finishedAt: e.startedAt }
+    inventory = inv
+    return inv
+  },
+  deleteHistory: async (id) => { historyEntries = historyEntries.filter(x => x.id !== id) },
+  historySnapshot: async (id) => {
+    const e = historyEntries.find(x => x.id === id)
+    if (!e) throw new Error('escaneo no encontrado')
+    const s: SnapshotInfo = { path: `history:${id}`, name: `Historial ${id}`, startedAt: e.startedAt, identity: e.identity, version: e.version, projects: e.projects, vms: e.vms }
+    known.set(s.path, s)
+    return s
+  },
+  historyDir: async () => '/home/demo/.local/share/gcetools/history',
+  exportReport: async () => '/home/demo/gcetools-informe-demo.html',
+  oauthStatus: async () => oauth,
+  oauthPickClient: async () => (oauth = { ...oauth, client: '482917300000-demo.apps.googleusercontent.com', projectId: 'acme-tools', account: '' }),
+  oauthLogin: () => new Promise((resolve, reject) => {
+    loginTimer = setTimeout(() => resolve(oauth = { ...oauth, account: 'demo@example.com' }), 1500)
+    oauthCancelReject = () => reject(new Error('inicio de sesión cancelado'))
+  }),
+  oauthCancel: async () => { clearTimeout(loginTimer); oauthCancelReject?.() },
+  oauthLogout: async (all) => (oauth = all ? { available: true, client: '', projectId: '', account: '' } : { ...oauth, account: '' }),
 }

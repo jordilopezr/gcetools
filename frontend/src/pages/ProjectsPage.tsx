@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, GridApi, SelectionChangedEvent } from 'ag-grid-community'
-import { api, errorText, type Footprint, type HealthOptions, type HealthRule, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
+import { api, errorText, loadSaveHistory, type Footprint, type HealthOptions, type HealthRule, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
 import { gridTheme, Icon } from '../components/ui'
 import type { ScanState } from '../App'
 
@@ -162,7 +162,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
   const start = async () => {
     try {
       onScanStart()
-      await api.startScan(selected, { concurrency, health, modules })
+      await api.startScan(selected, { concurrency, health, modules, saveHistory: loadSaveHistory(), profile: profileName })
     } catch (e) { notify(errorText(e)) }
   }
 

@@ -7,8 +7,9 @@ import ProjectsPage from './pages/ProjectsPage'
 import InventoryPage from './pages/InventoryPage'
 import AboutPage, { type UpdateState } from './pages/AboutPage'
 import ComparePage, { type CompareState } from './pages/ComparePage'
+import HistoryPage from './pages/HistoryPage'
 
-type Page = 'connect' | 'projects' | 'inventory' | 'compare' | 'about'
+type Page = 'connect' | 'projects' | 'inventory' | 'compare' | 'history' | 'about'
 type Theme = 'system' | 'light' | 'dark'
 
 export interface ScanState {
@@ -89,6 +90,17 @@ export default function App() {
 
   const notify = useCallback((m: string) => setSnack(m), [])
 
+  const openHistory = async (id: string) => {
+    try { setInventory(await api.openHistory(id)); setPage('inventory') } catch (e) { setSnack(errorText(e)) }
+  }
+  const compareHistory = async (beforeId: string, afterId: string) => {
+    try {
+      const [before, after] = await Promise.all([api.historySnapshot(beforeId), api.historySnapshot(afterId)])
+      setCompare({ before, after, result: await api.compare(before.path, after.path) })
+      setPage('compare')
+    } catch (e) { setSnack(errorText(e)) }
+  }
+
   const disconnect = async () => {
     await api.disconnect()
     setSession(null); setInventory(null); setScan({ running: false, progress: null, log: [] }); setPage('connect')
@@ -100,6 +112,7 @@ export default function App() {
     { id: 'projects', icon: 'folder_open', label: 'Proyectos', enabled: !!session },
     { id: 'inventory', icon: 'table_view', label: 'Inventario', enabled: !!inventory },
     { id: 'compare', icon: 'compare_arrows', label: 'Comparar', enabled: true },
+    { id: 'history', icon: 'history', label: 'Historial', enabled: true },
   ]
   const updateAvailable = update.status === 'done' && !!update.info?.available
   const themeIcon = theme === 'dark' ? 'dark_mode' : theme === 'light' ? 'light_mode' : 'contrast'
@@ -180,6 +193,7 @@ export default function App() {
           onScanStart={() => setScan({ running: true, progress: null, log: [] })} />}
         {page === 'inventory' && inventory && <InventoryPage inventory={inventory} notify={notify} />}
         {page === 'compare' && <ComparePage state={compare} setState={setCompare} hasInventory={!!inventory} notify={notify} />}
+        {page === 'history' && <HistoryPage notify={notify} onOpen={openHistory} onCompare={compareHistory} />}
         {page === 'about' && <AboutPage about={about} update={update} onCheck={() => checkUpdate(false)}
           autoCheck={autoCheck} setAutoCheck={setAutoCheck} />}
       </main>

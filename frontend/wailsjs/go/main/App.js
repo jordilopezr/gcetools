@@ -26,6 +26,10 @@ export function CurrentSnapshot() {
   return window['go']['main']['App']['CurrentSnapshot']();
 }
 
+export function DeleteHistory(arg1) {
+  return window['go']['main']['App']['DeleteHistory'](arg1);
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
@@ -50,6 +54,10 @@ export function ExportDiff(arg1, arg2) {
   return window['go']['main']['App']['ExportDiff'](arg1, arg2);
 }
 
+export function ExportReport() {
+  return window['go']['main']['App']['ExportReport']();
+}
+
 export function GetInventory() {
   return window['go']['main']['App']['GetInventory']();
 }
@@ -58,12 +66,48 @@ export function HealthRules() {
   return window['go']['main']['App']['HealthRules']();
 }
 
+export function HistoryDir() {
+  return window['go']['main']['App']['HistoryDir']();
+}
+
+export function HistorySnapshot(arg1) {
+  return window['go']['main']['App']['HistorySnapshot'](arg1);
+}
+
+export function ListHistory() {
+  return window['go']['main']['App']['ListHistory']();
+}
+
 export function ListProfiles() {
   return window['go']['main']['App']['ListProfiles']();
 }
 
 export function ListProjects(arg1) {
   return window['go']['main']['App']['ListProjects'](arg1);
+}
+
+export function OAuthCancel() {
+  return window['go']['main']['App']['OAuthCancel']();
+}
+
+export function OAuthLogin() {
+  return window['go']['main']['App']['OAuthLogin']();
+}
+
+export function OAuthLogout(arg1) {
+  return window['go']['main']['App']['OAuthLogout'](arg1);
+}
+
+export function OAuthPickClient() {
+  return window['go']['main']['App']['OAuthPickClient']();
+}
+
+export function OAuthStatus() {
+  return window['go']['main']['App']['OAuthStatus']();
+}
+
+export function OpenHistory(arg1) {
+  return window['go']['main']['App']['OpenHistory'](arg1);
 }
 
 export function PickServiceAccountKey() {

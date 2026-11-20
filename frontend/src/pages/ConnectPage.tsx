@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, errorText, type ADCStatus, type AuthMethod, type KeyInfo, type SessionInfo } from '../lib/api'
+import { api, errorText, type ADCStatus, type AuthMethod, type KeyInfo, type OAuthStatus, type SessionInfo } from '../lib/api'
 import { Icon } from '../components/ui'
 
 interface Props {
@@ -9,7 +9,8 @@ interface Props {
 }
 
 const methods: { id: AuthMethod; icon: string; title: string; text: string }[] = [
-  { id: 'adc', icon: 'person', title: 'Mi cuenta de Google', text: 'Usa las credenciales de gcloud (Application Default Credentials). Verás los proyectos a los que tienes acceso.' },
+  { id: 'oauth', icon: 'account_circle', title: 'Iniciar sesión con Google', text: 'Sin instalar gcloud: inicias sesión en el navegador y la sesión queda guardada en el llavero del sistema.' },
+  { id: 'adc', icon: 'terminal', title: 'Credenciales de gcloud', text: 'Usa las credenciales de gcloud (Application Default Credentials). Verás los proyectos a los que tienes acceso.' },
   { id: 'sa', icon: 'key', title: 'Service account (JSON)', text: 'Carga la clave JSON de una service account. La clave solo se mantiene en memoria.' },
   { id: 'impersonate', icon: 'badge', title: 'Impersonar service account', text: 'Tu cuenta obtiene tokens de corta duración de una SA. No requiere claves; ideal si la organización las bloquea.' },
 ]
@@ -21,8 +22,28 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [oauth, setOauth] = useState<OAuthStatus | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
 
-  useEffect(() => { api.detectADC().then(setAdc).catch(() => setAdc({ found: false, identity: '' })) }, [])
+  useEffect(() => {
+    api.detectADC().then(setAdc).catch(() => setAdc({ found: false, identity: '' }))
+    api.oauthStatus().then(o => { setOauth(o); if (o.account) setMethod('oauth') }).catch(() => setOauth(null))
+  }, [])
+
+  const pickClient = async () => {
+    try { setOauth(await api.oauthPickClient()); setError(null) } catch (e) { setError(errorText(e)) }
+  }
+  const signIn = async () => {
+    setSigningIn(true); setError(null)
+    try {
+      const o = await api.oauthLogin()
+      setOauth(o)
+      if (o.account) await connectWith('oauth')
+    } catch (e) { setError(errorText(e)); setOauth(await api.oauthStatus()) } finally { setSigningIn(false) }
+  }
+  const signOut = async (all: boolean) => {
+    try { setOauth(await api.oauthLogout(all)) } catch (e) { setError(errorText(e)) }
+  }
 
   const pickKey = async () => {
     try {
@@ -31,12 +52,13 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
     } catch (e) { setError(errorText(e)) }
   }
 
-  const canConnect = method === 'adc' ? !!adc?.found : method === 'sa' ? !!key : target.includes('@')
+  const canConnect = method === 'adc' ? !!adc?.found : method === 'sa' ? !!key : method === 'oauth' ? !!oauth?.account : target.includes('@')
 
-  const connect = async () => {
+  const connect = () => connectWith(method)
+  const connectWith = async (m: AuthMethod) => {
     setBusy(true); setError(null)
     try {
-      const s = await api.connect(method, target)
+      const s = await api.connect(m, target)
       notify(`Conectado como ${s.identity}`)
       onConnected(s)
     } catch (e) { setError(errorText(e)) } finally { setBusy(false) }
@@ -58,7 +80,7 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
         </div>
       )}
 
-      <div className="method-grid" role="radiogroup" aria-label="Método de autenticación">
+      <div className="method-grid" role="radiogroup" aria-label="Método de autenticación" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {methods.map(m => (
           <button key={m.id} role="radio" aria-checked={method === m.id}
             className={`method ${method === m.id ? 'selected' : ''}`} onClick={() => setMethod(m.id)}>
@@ -74,6 +96,46 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
       </div>
 
       <div className="card outlined col">
+        {method === 'oauth' && (oauth?.error ? (
+          <div className="col" style={{ gap: 6 }}>
+            <div className="row"><span className="badge sev-Alta">Llavero no disponible</span></div>
+            <span className="body-m selectable">{oauth.error}</span>
+            <span className="body-s muted">gceTools solo guarda la sesión en el llavero del sistema (en Linux, un servicio Secret Service como GNOME Keyring o KWallet). Usa otro método mientras tanto.</span>
+          </div>
+        ) : !oauth?.client ? (
+          <div className="col" style={{ gap: 10 }}>
+            <span className="body-m">
+              Necesitas el <b>cliente OAuth de tu organización</b> (tipo "App de escritorio", archivo <span className="mono">client_secret_….json</span>).
+              Lo crea una vez el administrador de Google Cloud en <i>APIs y servicios → Credenciales</i>; con un consentimiento de tipo <b>Interno</b> no hace falta verificar la app con Google.
+            </span>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn tonal" onClick={pickClient}><Icon name="upload_file" />Cargar cliente OAuth (JSON)</button>
+              <button className="btn text" onClick={() => api.openURL('https://github.com/jordilopezr/gcetools#iniciar-sesi%C3%B3n-con-google')}><Icon name="help" />Cómo crearlo</button>
+            </div>
+          </div>
+        ) : oauth.account ? (
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <span className="badge ok">Sesión guardada</span>
+            <span className="title-s selectable">{oauth.account}</span>
+            <span className="body-s muted">Cliente de {oauth.projectId || 'tu organización'}</span>
+            <span className="spacer" />
+            <button className="btn text" onClick={() => signOut(false)}><Icon name="logout" />Cerrar sesión</button>
+            <button className="btn text" onClick={() => signOut(true)}>Olvidar cliente</button>
+          </div>
+        ) : (
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            {signingIn ? <>
+              <Icon name="progress_activity" />
+              <span className="body-m">Completa el inicio de sesión en el navegador que se ha abierto…</span>
+              <button className="btn text" onClick={() => api.oauthCancel()}>Cancelar</button>
+            </> : <>
+              <button className="btn filled" onClick={signIn}><Icon name="account_circle" />Iniciar sesión con Google</button>
+              <span className="body-s muted">Cliente {oauth.client.split('-')[0]}… de {oauth.projectId || 'tu organización'}</span>
+              <button className="btn text" onClick={pickClient}>Cambiar cliente</button>
+            </>}
+          </div>
+        ))}
+
         {method === 'adc' && (adc === null ? (
           <div className="row muted"><Icon name="hourglass_empty" /> Buscando credenciales…</div>
         ) : adc.found ? (
