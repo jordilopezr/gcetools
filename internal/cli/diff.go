@@ -39,7 +39,7 @@ Comandos:
   diff      compara dos snapshots JSON (gcetools diff --help)
   profiles  lista los perfiles de escaneo guardados
   rules     lista las reglas de gHealth y cómo exceptuar recursos
-  login     inicia sesión con Google sin gcloud (cliente OAuth de tu organización)
+  login     inicia sesión con Google sin gcloud (la sesión queda en el llavero)
   logout    cierra la sesión de Google guardada en el llavero
   version   muestra la versión y si hay una más reciente
 

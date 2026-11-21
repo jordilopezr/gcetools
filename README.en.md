@@ -10,6 +10,8 @@ It reads every project the identity can reach and exports to XLSX (one sheet per
 - **Languages:** English and Spanish (UI, inventory, report and CLI).
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, with a Material 3 UI and AG Grid Community.
 
+**[Full manual for the app and the CLI →](docs/manual.en.md)**
+
 ## Tabs
 
 | Tab | RVTools | Contents |

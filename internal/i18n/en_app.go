@@ -13,7 +13,7 @@ Comandos:
   diff      compara dos snapshots JSON (gcetools diff --help)
   profiles  lista los perfiles de escaneo guardados
   rules     lista las reglas de gHealth y cómo exceptuar recursos
-  login     inicia sesión con Google sin gcloud (cliente OAuth de tu organización)
+  login     inicia sesión con Google sin gcloud (la sesión queda en el llavero)
   logout    cierra la sesión de Google guardada en el llavero
   version   muestra la versión y si hay una más reciente
 
@@ -27,7 +27,7 @@ Commands:
   diff      compare two JSON snapshots (gcetools diff --help)
   profiles  list the saved scan profiles
   rules     list the gHealth rules and how to exempt resources
-  login     sign in with Google without gcloud (your organization's OAuth client)
+  login     sign in with Google without gcloud (the session stays in the keyring)
   logout    sign out of the Google session stored in the keyring
   version   show the version and whether a newer one exists
 
@@ -117,9 +117,10 @@ Options:
 Uso:
   gcetools login [--client client_secret_….json]
 
-Usa el cliente OAuth "App de escritorio" de tu organización (ver README,
-"Iniciar sesión con Google"). El cliente y el token se guardan en el llavero
-del sistema; después: gcetools scan --auth oauth
+Abre el navegador para iniciar sesión con Google. El token se guarda en el
+llavero del sistema; después: gcetools scan --auth oauth
+Si tu organización bloquea apps externas, usa su propio cliente OAuth
+("App de escritorio") con --client (ver docs/manual.md).
 
 Opciones:
 `: `gcetools login — sign in with Google without gcloud
@@ -127,9 +128,10 @@ Opciones:
 Usage:
   gcetools login [--client client_secret_….json]
 
-Uses your organization's "Desktop app" OAuth client (see README,
-"Sign in with Google"). The client and the token are stored in the system
-keyring; then: gcetools scan --auth oauth
+Opens your browser to sign in with Google. The token is stored in the
+system keyring; then: gcetools scan --auth oauth
+If your organization blocks third-party apps, use its own OAuth client
+("Desktop app") with --client (see docs/manual.en.md).
 
 Options:
 `,
@@ -168,7 +170,7 @@ Exempt a resource:          label gcetools-ignore=<id> (or gcetools-ignore-<id>=
 		"modo rápido: lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory (con --discover, una sola lectura para todo el ámbito)": "fast mode: read VMs, disks, snapshots, images, templates, MIGs and networks from Cloud Asset Inventory (with --discover, a single read for the whole scope)",
 		"reglas de gHealth a desactivar, separadas por comas (gcetools rules las lista)":                                                                             "comma-separated gHealth rules to disable (gcetools rules lists them)",
 		"termina con código 3 si hay cambios relevantes":                                                                                                             "exit with code 3 if there are relevant changes",
-		"JSON del cliente OAuth de tu organización (solo la primera vez o para cambiarlo)":                                                                           "your organization's OAuth client JSON (only the first time or to change it)",
+		"JSON del cliente OAuth propio de tu organización (opcional; solo si bloquea apps externas)":                                                                 "your organization's own OAuth client JSON (optional; only if it blocks third-party apps)",
 		"olvida también el cliente OAuth de la organización":                                                                                                         "also forget the organization's OAuth client",
 
 		// ---------- CLI: output and errors ----------

@@ -10,6 +10,8 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 - **Idiomas:** español e inglés (interfaz, inventario, informe y CLI).
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, con interfaz Material 3 y AG Grid Community.
 
+**[Manual completo de la app y del CLI →](docs/manual.md)**
+
 ## Pestañas (MVP)
 
 | Pestaña | RVTools | Contenido |

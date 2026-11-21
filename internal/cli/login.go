@@ -18,9 +18,10 @@ const loginUsage = `gcetools login — inicia sesión con Google sin gcloud
 Uso:
   gcetools login [--client client_secret_….json]
 
-Usa el cliente OAuth "App de escritorio" de tu organización (ver README,
-"Iniciar sesión con Google"). El cliente y el token se guardan en el llavero
-del sistema; después: gcetools scan --auth oauth
+Abre el navegador para iniciar sesión con Google. El token se guarda en el
+llavero del sistema; después: gcetools scan --auth oauth
+Si tu organización bloquea apps externas, usa su propio cliente OAuth
+("App de escritorio") con --client (ver docs/manual.md).
 
 Opciones:
 `
@@ -28,7 +29,7 @@ Opciones:
 func Login(args []string) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.Usage = func() { fmt.Fprint(fs.Output(), i18n.T(loginUsage)); fs.PrintDefaults() }
-	client := fs.String("client", "", i18n.T("JSON del cliente OAuth de tu organización (solo la primera vez o para cambiarlo)"))
+	client := fs.String("client", "", i18n.T("JSON del cliente OAuth propio de tu organización (opcional; solo si bloquea apps externas)"))
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
