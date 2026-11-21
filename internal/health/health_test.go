@@ -208,3 +208,31 @@ func TestThresholds(t *testing.T) {
 		t.Errorf("quota threshold: %v", findings(inv))
 	}
 }
+
+func TestManagedVMsSkipPerVMRules(t *testing.T) {
+	inv := collect.NewInventory()
+	old := time.Now().Add(-90 * 24 * time.Hour)
+	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "gke-node", "zone": "z", "status": "TERMINATED", "lastStop": old,
+		"managedBy": "GKE", "labels": "goog-gke-node=", "externalIP": "34.1.1.1", "secureBoot": true})
+	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "pet", "zone": "z", "status": "TERMINATED", "lastStop": old,
+		"labels": "a=b", "secureBoot": true})
+	inv.Sheet(collect.SPerf).Add(model.Row{"project": "p", "vm": "gke-node", "zone": "z", "status": "RUNNING", "samples": int64(500), "cpuP95": 50.0})
+	Evaluate(inv, DefaultOptions(), time.Now())
+	ids := map[string]bool{}
+	for _, r := range findings(inv) {
+		ids[r["resource"].(string)+"/"+r["ruleId"].(string)] = true
+	}
+	for _, id := range []string{"stopped-vm", "stopped-no-disks", "no-deletion-protection", "no-ops-agent"} {
+		if ids["gke-node/"+id] {
+			t.Errorf("GKE node must skip %s", id)
+		}
+	}
+	if !ids["gke-node/public-ip"] {
+		t.Error("public-ip still applies to GKE nodes")
+	}
+	for _, id := range []string{"stopped-vm", "stopped-no-disks", "no-deletion-protection"} {
+		if !ids["pet/"+id] {
+			t.Errorf("regular VM must keep %s", id)
+		}
+	}
+}

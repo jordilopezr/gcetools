@@ -24,7 +24,8 @@ function buildInventory(ids: string[]): Inventory {
     for (let i = 0; i < count; i++, n++) {
       const [mt, cpu, ram] = pick(types, n), zone = pick(zones, n + i)
       const status = n % 7 === 3 ? 'TERMINATED' : 'RUNNING'
-      const name = `${p.split('-').slice(1).join('-')}-vm-${String(i + 1).padStart(2, '0')}`
+      const gke = p === 'acme-data-lake' && i >= 2
+      const name = gke ? `gke-lake-default-pool-8f3a${i}` : `${p.split('-').slice(1).join('-')}-vm-${String(i + 1).padStart(2, '0')}`
       vcpu += cpu; mem += ram
       info.push({
         project: p, name, id: String(5810000000000 + n * 3571), zone, region: zone.replace(/-[a-z]$/, ''), status,
@@ -37,6 +38,7 @@ function buildInventory(ids: string[]): Inventory {
         serviceAccount: n % 6 === 0 ? `${482917300000}-compute@developer.gserviceaccount.com` : `app@${p}.iam.gserviceaccount.com`,
         labels: n % 8 === 0 ? '' : `app=erp; env=${p.includes('prod') ? 'prod' : 'dev'}`, deletionProtection: n % 3 === 0,
         secureBoot: n % 4 !== 1,
+        ...(gke ? { managedBy: 'GKE', gkeCluster: 'lake', gkeNodePool: 'default-pool', mig: 'gke-lake-default-pool-grp', labels: 'goog-gke-node=; goog-k8s-cluster-name=lake' } : {}),
       })
       disks.push({ project: p, name: `${name}-boot`, location: zone, type: n % 9 === 0 ? 'pd-standard' : 'pd-balanced', sizeGB: 50, status: 'READY', users: name, orphan: false, created: '2024-05-01T09:00:00Z' })
     }
@@ -63,7 +65,8 @@ function buildInventory(ids: string[]): Inventory {
       col('lastStart', 'Último arranque', 'datetime'), col('lastStop', 'Última parada', 'datetime'), col('internalIP', 'IP interna'),
       col('externalIP', 'IP externa'), col('network', 'VPC'), col('subnet', 'Subred'), col('os', 'SO (licencia)'),
       col('bootDiskGB', 'Disco boot (GB)', 'gb'), col('totalDiskGB', 'Discos total (GB)', 'gb'), col('serviceAccount', 'Service account'),
-      col('labels', 'Labels'), col('deletionProtection', 'Deletion protection', 'bool'), col('secureBoot', 'Secure Boot', 'bool')] },
+      col('labels', 'Labels'), col('deletionProtection', 'Deletion protection', 'bool'), col('secureBoot', 'Secure Boot', 'bool'),
+      col('mig', 'MIG'), col('managedBy', 'Gestionada por'), col('gkeCluster', 'Clúster (GKE/Dataproc)'), col('gkeNodePool', 'Node pool GKE')] },
     { name: 'gDisks', title: 'Todos los discos', description: 'Inventario de discos, incluidos los huérfanos', rows: disks, columns: [
       col('project', 'Proyecto'), col('name', 'Disco'), col('location', 'Ubicación'), col('type', 'Tipo'), col('sizeGB', 'Tamaño (GB)', 'gb'),
       col('status', 'Estado'), col('users', 'VMs'), col('orphan', 'Huérfano', 'bool'), col('created', 'Creado', 'datetime'), col('lastDetach', 'Último detach', 'datetime')] },

@@ -115,7 +115,7 @@ func TestProjectCollect(t *testing.T) {
 	vm := inv.Sheet(SInfo).Rows[0]
 	checks := map[string]any{
 		"vcpu": int64(4), "memoryGB": 16.0, "region": "europe-west1", "externalIP": "34.1.1.1",
-		"network": "shared", "os": "debian-12-bookworm", "image": "debian-12", "mig": "web-mig", "labels": "env=prod",
+		"network": "shared", "os": "debian-12-bookworm", "image": "debian-12", "mig": "web-mig", "managedBy": "MIG", "labels": "env=prod",
 		"bootDiskGB": 50.0,
 	}
 	for k, want := range checks {
@@ -207,6 +207,29 @@ func TestTemplateImage(t *testing.T) {
 		n, p := templateImage(c.src, "p")
 		if n != c.name || p != c.project {
 			t.Errorf("templateImage(%q) = %q, %q; want %q, %q", c.src, n, p, c.name, c.project)
+		}
+	}
+}
+
+func TestManagedBy(t *testing.T) {
+	cases := []struct {
+		name   string
+		labels map[string]string
+		meta   map[string]string
+		mig    string
+		want   managed
+	}{
+		{"gke labels", map[string]string{"goog-gke-node": "", "goog-k8s-cluster-name": "prod", "goog-k8s-node-pool-name": "pool-1"}, nil, "gke-prod-pool-1-grp", managed{"GKE", "prod", "pool-1"}},
+		{"gke metadata", map[string]string{"goog-gke-node": ""}, map[string]string{"cluster-name": "dev", "kube-labels": "a=b,cloud.google.com/gke-nodepool=default-pool"}, "", managed{"GKE", "dev", "default-pool"}},
+		{"dataproc", map[string]string{"goog-dataproc-cluster-name": "etl"}, nil, "", managed{"Dataproc", "etl", ""}},
+		{"dataflow", map[string]string{"dataflow_job_id": "2026-11"}, nil, "", managed{"Dataflow", "", ""}},
+		{"batch", map[string]string{"goog-batch-job-uid": "j1"}, nil, "", managed{"Batch", "", ""}},
+		{"mig", nil, nil, "web", managed{"MIG", "", ""}},
+		{"plain", map[string]string{"env": "prod"}, map[string]string{"cluster-name": "x"}, "", managed{}},
+	}
+	for _, c := range cases {
+		if got := managedBy(c.labels, c.meta, c.mig); got != c.want {
+			t.Errorf("%s: managedBy = %+v, want %+v", c.name, got, c.want)
 		}
 	}
 }

@@ -7,11 +7,28 @@ interface Props { inventory: Inventory; notify: (m: string) => void }
 
 const primarySheets = ['gInfo', 'gHealth', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
 
+// VMs created by a Google service; MIG members are the user's own and stay visible.
+const serviceManaged = new Set(['GKE', 'Dataproc', 'Dataflow', 'Batch'])
+// Column holding the VM name in each per-VM sheet.
+const vmColumn: Record<string, string> = { gInfo: 'name', gCPU: 'name', gMemory: 'name', gDisk: 'vm', gNetwork: 'vm', gPerf: 'vm', gTools: 'vm', gLicense: 'vm', gHealth: 'resource' }
+const HIDE_KEY = 'gcetools.hideManaged'
+
 export default function InventoryPage({ inventory, notify }: Props) {
+  const [hideManaged, setHideManaged] = useState(() => { try { return localStorage.getItem(HIDE_KEY) === '1' } catch { return false } })
+  const toggleManaged = (v: boolean) => { setHideManaged(v); try { localStorage.setItem(HIDE_KEY, v ? '1' : '0') } catch { /* ignore */ } }
+  const managed = useMemo(() => {
+    const vms = inventory.sheets.find(s => s.name === 'gInfo')?.rows ?? []
+    return new Set(vms.filter(r => serviceManaged.has(String(r.managedBy ?? ''))).map(r => `${r.project}/${r.name}`))
+  }, [inventory])
   const sheets = useMemo(() => {
     const order = (n: string) => { const i = primarySheets.indexOf(n); return i < 0 ? 99 : i }
-    return [...inventory.sheets].sort((a, b) => order(a.name) - order(b.name))
-  }, [inventory])
+    const sorted = [...inventory.sheets].sort((a, b) => order(a.name) - order(b.name))
+    if (!hideManaged || managed.size === 0) return sorted
+    return sorted.map(s => {
+      const col = vmColumn[s.name]
+      return col ? { ...s, rows: s.rows.filter(r => !managed.has(`${r.project}/${r[col]}`)) } : s
+    })
+  }, [inventory, hideManaged, managed])
   const [exporting, setExporting] = useState(false)
 
   const stats = useMemo(() => {
@@ -92,6 +109,14 @@ export default function InventoryPage({ inventory, notify }: Props) {
           </div>
         ))}
       </div>
+
+      {managed.size > 0 && (
+        <label className="row body-m" style={{ gap: 10, cursor: 'pointer', alignSelf: 'flex-start' }}>
+          <input type="checkbox" checked={hideManaged} onChange={e => toggleManaged(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: 'var(--md-primary)' }} />
+          Ocultar las {managed.size.toLocaleString('es-ES')} VMs gestionadas por GKE, Dataproc, Dataflow o Batch
+        </label>
+      )}
 
       <SheetBrowser key={m.startedAt} sheets={sheets} />
     </div>

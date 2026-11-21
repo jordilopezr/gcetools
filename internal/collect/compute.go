@@ -203,14 +203,19 @@ func (c *collector) addInstance(in *compute.Instance) {
 	if in.Tags != nil {
 		tags = strings.Join(in.Tags.Items, "; ")
 	}
-	mig := ""
+	meta := map[string]string{}
 	if in.Metadata != nil {
 		for _, it := range in.Metadata.Items {
-			if it.Key == "created-by" && it.Value != nil {
-				mig = last(*it.Value)
+			if it.Value != nil {
+				meta[it.Key] = *it.Value
 			}
 		}
 	}
+	mig := ""
+	if v := meta["created-by"]; strings.Contains(v, "instanceGroupManagers/") {
+		mig = last(v)
+	}
+	mgd := managedBy(in.Labels, meta, mig)
 	secureBoot, vtpm := false, false
 	if s := in.ShieldedInstanceConfig; s != nil {
 		secureBoot, vtpm = s.EnableSecureBoot, s.EnableVtpm
@@ -233,6 +238,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		"gpus": strings.Join(gpus, "; "), "serviceAccount": sa, "scopes": scopes,
 		"labels": labels(in.Labels), "tags": tags, "deletionProtection": in.DeletionProtection,
 		"secureBoot": secureBoot, "vtpm": vtpm, "confidential": confidential, "mig": mig,
+		"managedBy": mgd.service, "gkeCluster": mgd.cluster, "gkeNodePool": mgd.pool,
 		"hostname": in.Hostname, "selfLink": in.SelfLink,
 	})
 	c.add(SCPU, model.Row{
@@ -379,4 +385,46 @@ func templateImage(src, project string) (name, imageProject string) {
 		name = "family/" + name
 	}
 	return name, imageProject
+}
+
+// managed describes the Google service that creates and owns a VM.
+type managed struct{ service, cluster, pool string }
+
+// managedBy recognises VMs created by Google services from the labels and
+// metadata those services set. GKE nodes are also MIG members, so the more
+// specific service wins.
+func managedBy(lb, meta map[string]string, mig string) managed {
+	has := func(keys ...string) bool {
+		for _, k := range keys {
+			if _, ok := lb[k]; ok {
+				return true
+			}
+		}
+		return false
+	}
+	if has("goog-gke-node", "goog-k8s-cluster-name") || meta["cluster-name"] != "" && meta["kube-labels"] != "" {
+		m := managed{service: "GKE", cluster: lb["goog-k8s-cluster-name"], pool: lb["goog-k8s-node-pool-name"]}
+		if m.cluster == "" {
+			m.cluster = meta["cluster-name"]
+		}
+		if m.pool == "" {
+			for _, kv := range strings.Split(meta["kube-labels"], ",") {
+				if k, v, ok := strings.Cut(kv, "="); ok && k == "cloud.google.com/gke-nodepool" {
+					m.pool = v
+				}
+			}
+		}
+		return m
+	}
+	switch {
+	case has("goog-dataproc-cluster-name"):
+		return managed{service: "Dataproc", cluster: lb["goog-dataproc-cluster-name"]}
+	case has("goog-dataflow-job-id", "dataflow_job_id"):
+		return managed{service: "Dataflow"}
+	case has("goog-batch-job-uid", "batch-job-id"):
+		return managed{service: "Batch"}
+	case mig != "":
+		return managed{service: "MIG"}
+	}
+	return managed{}
 }

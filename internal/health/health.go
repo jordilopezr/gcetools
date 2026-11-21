@@ -117,6 +117,14 @@ var Rules = []Rule{
 	{"no-ops-agent", "Sin Ops Agent", "Operación", Low, "", onVM},
 }
 
+// skipManaged lists rules that do not apply to VMs created and replaced by a
+// Google service (GKE, Dataproc, Dataflow, Batch) or by a MIG: those VMs are
+// disposable, so protecting or monitoring each one is the service's job.
+var skipManaged = map[string]bool{
+	"stopped-vm": true, "stopped-no-disks": true, "no-deletion-protection": true,
+	"snapshot-schedule": true, "no-ops-agent": true,
+}
+
 // Result summarizes what was left out, for gMetaData.
 type Result struct {
 	Findings   int      `json:"findings"`
@@ -153,8 +161,13 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		projectLabels[str(r, "projectId")] = str(r, "labels")
 	}
 	vmLabels := map[string]string{}
+	managedVM := map[string]bool{} // project/vm created by GKE, Dataproc, a MIG…
 	for _, r := range rows(collect.SInfo) {
-		vmLabels[str(r, "project")+"/"+str(r, "name")] = str(r, "labels")
+		k := str(r, "project") + "/" + str(r, "name")
+		vmLabels[k] = str(r, "labels")
+		if str(r, "managedBy") != "" || str(r, "mig") != "" {
+			managedVM[k] = true
+		}
 	}
 	diskLabels := map[string]string{}
 	for _, r := range rows(collect.SDisks) {
@@ -163,7 +176,7 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 
 	var fs []finding
 	add := func(f finding) {
-		if slices.Contains(opt.Disabled, f.id) {
+		if slices.Contains(opt.Disabled, f.id) || skipManaged[f.id] && managedVM[f.project+"/"+f.resource] {
 			return
 		}
 		for _, l := range append(f.labels, projectLabels[f.project]) {
@@ -203,7 +216,7 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		if str(r, "labels") == "" {
 			add(finding{"no-labels", Low, "Gobierno", "VM sin labels", p, n, z, "Dificulta el reparto de costes", lb})
 		}
-		if !boolean(r, "deletionProtection") && str(r, "mig") == "" {
+		if !boolean(r, "deletionProtection") {
 			add(finding{"no-deletion-protection", Low, "Operación", "Deletion protection deshabilitada", p, n, z, "", lb})
 		}
 		if f := str(r, "family"); f == "n1" || f == "custom" {
@@ -235,14 +248,8 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		}
 	}
 
-	// Disks of VMs with no snapshot schedule. One finding per VM; MIG members
+	// Disks of VMs with no snapshot schedule. One finding per VM; managed VMs
 	// are skipped (stateless by design) and orphans already have their own rule.
-	migVM := map[string]bool{}
-	for _, r := range rows(collect.SInfo) {
-		if str(r, "mig") != "" {
-			migVM[str(r, "project")+"/"+str(r, "name")] = true
-		}
-	}
 	type vmDisks struct {
 		project, vm, zone string
 		disks             []string
@@ -255,7 +262,7 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		}
 		p := str(r, "project")
 		for _, vm := range strings.Split(str(r, "users"), "; ") {
-			if vm == "" || migVM[p+"/"+vm] {
+			if vm == "" || managedVM[p+"/"+vm] {
 				continue
 			}
 			k := p + "/" + vm
