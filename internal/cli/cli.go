@@ -34,6 +34,7 @@ Ejemplos:
   gcetools scan --auth sa --key ./sa.json --query "parent:folders/123456" --out inv.zip
   gcetools scan --auth impersonate --impersonate inventory@prj.iam.gserviceaccount.com --projects a,b
   gcetools scan --discover organizations/123456 --out inventario.json
+  gcetools scan --discover organizations/123456 --fast --out inventario.xlsx
   gcetools scan --profile produccion --out inventario.xlsx
   gcetools scan --save-history --report informe.html --out inventario.xlsx
   gcetools scan --billing-table finops-prj.billing.gcp_billing_export_resource_v1_XXXX --out inventario.xlsx
@@ -67,6 +68,7 @@ func Run(args []string) int {
 	billMaxGB := fs.Int("billing-max-gb", 50, "no ejecutar la consulta de BigQuery si leería más GB que esto")
 	reportPath := fs.String("report", "", "genera además el informe ejecutivo en HTML en esta ruta")
 	saveHistory := fs.Bool("save-history", false, "guarda también el resultado en el historial local (el mismo que usa la app)")
+	fast := fs.Bool("fast", false, "modo rápido: lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory (con --discover, una sola lectura para todo el ámbito)")
 	disableRules := fs.String("disable-rules", "", "reglas de gHealth a desactivar, separadas por comas (gcetools rules las lista)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -199,6 +201,12 @@ func Run(args []string) int {
 	if set["billing-max-gb"] || mods.BillingMaxGB == 0 {
 		mods.BillingMaxGB = *billMaxGB
 	}
+	if set["fast"] {
+		mods.Fast = *fast
+	}
+	if mods.Fast && (set["discover"] || mods.FastScope == "") {
+		mods.FastScope = *disc
+	}
 	for _, m := range strings.Split(*modules, ",") {
 		switch strings.TrimSpace(m) {
 		case "osconfig":
@@ -312,6 +320,9 @@ func Profiles() int {
 		}
 		if p.Discover != "" {
 			what = append(what, "descubrimiento CAI en "+p.Discover)
+		}
+		if p.Modules.Fast {
+			what = append(what, "modo rápido")
 		}
 		if p.Auth != "" && p.Auth != "adc" {
 			what = append(what, "auth "+p.Auth)

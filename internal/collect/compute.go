@@ -13,6 +13,9 @@ import (
 // ---------- disks (gDisks) ----------
 
 func (c *collector) collectDisks() error {
+	if ok, err := each(c, "Disk", func(d *compute.Disk) { c.disks[d.SelfLink] = d; c.addDisk(d) }); ok {
+		return err
+	}
 	return c.svc.Disks.AggregatedList(c.project).Context(c.ctx).
 		Pages(c.ctx, func(page *compute.DiskAggregatedList) error {
 			for _, scoped := range page.Items {
@@ -53,6 +56,9 @@ func (c *collector) addDisk(d *compute.Disk) {
 // ---------- instances (gInfo, gCPU, gMemory, gDisk, gNetwork, gLicense) ----------
 
 func (c *collector) collectInstances() error {
+	if ok, err := each(c, "Instance", c.addInstance); ok {
+		return err
+	}
 	return c.svc.Instances.AggregatedList(c.project).Context(c.ctx).
 		Pages(c.ctx, func(page *compute.InstanceAggregatedList) error {
 			for _, scoped := range page.Items {
@@ -71,11 +77,16 @@ func (c *collector) machineType(zone, name string) *compute.MachineType {
 	if mt, ok := c.mtypes[key]; ok {
 		return mt
 	}
+	if mt := c.svcs.MachineTypes.get(key); mt != nil {
+		c.mtypes[key] = mt
+		return mt
+	}
 	mt, err := c.svc.MachineTypes.Get(c.project, zone, name).Context(c.ctx).Do()
 	if err != nil {
-		mt = nil
+		mt = nil // failures stay per project: another project may have access
 	}
 	c.mtypes[key] = mt
+	c.svcs.MachineTypes.put(key, mt)
 	return mt
 }
 
@@ -259,21 +270,28 @@ func (c *collector) addInstance(in *compute.Instance) {
 // ---------- snapshots ----------
 
 func (c *collector) collectSnapshots() error {
+	if ok, err := each(c, "Snapshot", c.addSnapshot); ok {
+		return err
+	}
 	return c.svc.Snapshots.List(c.project).Context(c.ctx).Pages(c.ctx, func(page *compute.SnapshotList) error {
 		for _, s := range page.Items {
-			var age any
-			if t, ok := ts(s.CreationTimestamp).(time.Time); ok {
-				age = int64(c.now.Sub(t).Hours() / 24)
-			}
-			c.add(SSnapshot, model.Row{
-				"project": c.project, "name": s.Name, "sourceDisk": last(s.SourceDisk),
-				"diskSizeGB": float64(s.DiskSizeGb), "storageGB": round2(float64(s.StorageBytes) / (1 << 30)),
-				"status": s.Status, "created": ts(s.CreationTimestamp), "ageDays": age, "type": s.SnapshotType,
-				"autoCreated": s.AutoCreated, "locations": strings.Join(s.StorageLocations, "; "),
-				"encryption": encryption(s.SnapshotEncryptionKey), "labels": labels(s.Labels),
-			})
+			c.addSnapshot(s)
 		}
 		return nil
+	})
+}
+
+func (c *collector) addSnapshot(s *compute.Snapshot) {
+	var age any
+	if t, ok := ts(s.CreationTimestamp).(time.Time); ok {
+		age = int64(c.now.Sub(t).Hours() / 24)
+	}
+	c.add(SSnapshot, model.Row{
+		"project": c.project, "name": s.Name, "sourceDisk": last(s.SourceDisk),
+		"diskSizeGB": float64(s.DiskSizeGb), "storageGB": round2(float64(s.StorageBytes) / (1 << 30)),
+		"status": s.Status, "created": ts(s.CreationTimestamp), "ageDays": age, "type": s.SnapshotType,
+		"autoCreated": s.AutoCreated, "locations": strings.Join(s.StorageLocations, "; "),
+		"encryption": encryption(s.SnapshotEncryptionKey), "labels": labels(s.Labels),
 	})
 }
 
@@ -281,6 +299,13 @@ func (c *collector) collectSnapshots() error {
 
 func (c *collector) collectMIGs() error {
 	autoscalers := map[string]*compute.Autoscaler{} // target MIG selfLink -> autoscaler
+	if ok, err := each(c, "Autoscaler", func(a *compute.Autoscaler) { autoscalers[a.Target] = a }); ok {
+		if err != nil {
+			return err
+		}
+		_, err = each(c, "InstanceGroupManager", func(m *compute.InstanceGroupManager) { c.addMIG(m, autoscalers) })
+		return err
+	}
 	err := c.svc.Autoscalers.AggregatedList(c.project).Context(c.ctx).
 		Pages(c.ctx, func(page *compute.AutoscalerAggregatedList) error {
 			for _, scoped := range page.Items {
@@ -297,76 +322,87 @@ func (c *collector) collectMIGs() error {
 		Pages(c.ctx, func(page *compute.InstanceGroupManagerAggregatedList) error {
 			for _, scoped := range page.Items {
 				for _, m := range scoped.InstanceGroupManagers {
-					loc, scope := last(m.Zone), "zonal"
-					if loc == "" {
-						loc, scope = last(m.Region), "regional"
-					}
-					row := model.Row{
-						"project": c.project, "name": m.Name, "location": loc, "scope": scope,
-						"template": last(m.InstanceTemplate), "targetSize": m.TargetSize,
-						"stable": m.Status != nil && m.Status.IsStable, "autoscaling": false,
-						"baseInstanceName": m.BaseInstanceName,
-					}
-					hcs := make([]string, 0, len(m.AutoHealingPolicies))
-					for _, h := range m.AutoHealingPolicies {
-						hcs = append(hcs, last(h.HealthCheck))
-					}
-					row["autoHealing"] = strings.Join(hcs, "; ")
-					if m.UpdatePolicy != nil {
-						row["updateType"] = m.UpdatePolicy.Type
-					}
-					if a := autoscalers[m.SelfLink]; a != nil && a.AutoscalingPolicy != nil {
-						p := a.AutoscalingPolicy
-						row["autoscaling"] = p.Mode != "OFF"
-						row["autoscalingMode"] = p.Mode
-						row["minReplicas"] = p.MinNumReplicas
-						row["maxReplicas"] = p.MaxNumReplicas
-						if p.CpuUtilization != nil {
-							row["cpuTarget"] = p.CpuUtilization.UtilizationTarget
-						}
-					}
-					c.add(SMIG, row)
+					c.addMIG(m, autoscalers)
 				}
 			}
 			return nil
 		})
 }
 
+func (c *collector) addMIG(m *compute.InstanceGroupManager, autoscalers map[string]*compute.Autoscaler) {
+	loc, scope := last(m.Zone), "zonal"
+	if loc == "" {
+		loc, scope = last(m.Region), "regional"
+	}
+	row := model.Row{
+		"project": c.project, "name": m.Name, "location": loc, "scope": scope,
+		"template": last(m.InstanceTemplate), "targetSize": m.TargetSize,
+		"stable": m.Status != nil && m.Status.IsStable, "autoscaling": false,
+		"baseInstanceName": m.BaseInstanceName,
+	}
+	hcs := make([]string, 0, len(m.AutoHealingPolicies))
+	for _, h := range m.AutoHealingPolicies {
+		hcs = append(hcs, last(h.HealthCheck))
+	}
+	row["autoHealing"] = strings.Join(hcs, "; ")
+	if m.UpdatePolicy != nil {
+		row["updateType"] = m.UpdatePolicy.Type
+	}
+	if a := autoscalers[m.SelfLink]; a != nil && a.AutoscalingPolicy != nil {
+		p := a.AutoscalingPolicy
+		row["autoscaling"] = p.Mode != "OFF"
+		row["autoscalingMode"] = p.Mode
+		row["minReplicas"] = p.MinNumReplicas
+		row["maxReplicas"] = p.MaxNumReplicas
+		if p.CpuUtilization != nil {
+			row["cpuTarget"] = p.CpuUtilization.UtilizationTarget
+		}
+	}
+	c.add(SMIG, row)
+}
+
 // ---------- instance templates ----------
 
 func (c *collector) collectTemplates() error {
+	if ok, err := each(c, "InstanceTemplate", c.addTemplate); ok {
+		return err
+	}
 	return c.svc.InstanceTemplates.List(c.project).Context(c.ctx).Pages(c.ctx, func(page *compute.InstanceTemplateList) error {
 		for _, t := range page.Items {
-			row := model.Row{"project": c.project, "name": t.Name, "created": ts(t.CreationTimestamp)}
-			if p := t.Properties; p != nil {
-				row["machineType"] = p.MachineType
-				row["labels"] = labels(p.Labels)
-				for _, d := range p.Disks {
-					if d.Boot && d.InitializeParams != nil {
-						row["diskType"] = d.InitializeParams.DiskType
-						row["diskGB"] = float64(d.InitializeParams.DiskSizeGb)
-						row["image"], row["imageProject"] = templateImage(d.InitializeParams.SourceImage, c.project)
-					}
-				}
-				if len(p.NetworkInterfaces) > 0 {
-					row["network"] = last(p.NetworkInterfaces[0].Network)
-				}
-				if len(p.ServiceAccounts) > 0 {
-					row["serviceAccount"] = p.ServiceAccounts[0].Email
-				}
-				row["provisioning"] = "STANDARD"
-				if s := p.Scheduling; s != nil {
-					if s.ProvisioningModel != "" {
-						row["provisioning"] = s.ProvisioningModel
-					} else if s.Preemptible {
-						row["provisioning"] = "PREEMPTIBLE"
-					}
-				}
-			}
-			c.add(STemplate, row)
+			c.addTemplate(t)
 		}
 		return nil
 	})
+}
+
+func (c *collector) addTemplate(t *compute.InstanceTemplate) {
+	row := model.Row{"project": c.project, "name": t.Name, "created": ts(t.CreationTimestamp)}
+	if p := t.Properties; p != nil {
+		row["machineType"] = p.MachineType
+		row["labels"] = labels(p.Labels)
+		for _, d := range p.Disks {
+			if d.Boot && d.InitializeParams != nil {
+				row["diskType"] = d.InitializeParams.DiskType
+				row["diskGB"] = float64(d.InitializeParams.DiskSizeGb)
+				row["image"], row["imageProject"] = templateImage(d.InitializeParams.SourceImage, c.project)
+			}
+		}
+		if len(p.NetworkInterfaces) > 0 {
+			row["network"] = last(p.NetworkInterfaces[0].Network)
+		}
+		if len(p.ServiceAccounts) > 0 {
+			row["serviceAccount"] = p.ServiceAccounts[0].Email
+		}
+		row["provisioning"] = "STANDARD"
+		if s := p.Scheduling; s != nil {
+			if s.ProvisioningModel != "" {
+				row["provisioning"] = s.ProvisioningModel
+			} else if s.Preemptible {
+				row["provisioning"] = "PREEMPTIBLE"
+			}
+		}
+	}
+	c.add(STemplate, row)
 }
 
 // templateImage splits a template's source image into its name and project.

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gcetools/internal/model"
@@ -32,6 +33,41 @@ type Services struct {
 	Monitoring  *monitoring.Service
 	Recommender *recommender.Service
 	MetricsDays int // look-back window for gPerf (default 30)
+	// Assets enables the fast mode: the resources in AssetTypes come from
+	// Cloud Asset Inventory. If it fails for a project, that project falls
+	// back to the Compute API.
+	Assets AssetSource
+	// MachineTypes shares vCPU/RAM lookups between projects (optional).
+	MachineTypes *MachineTypeCache
+}
+
+// MachineTypeCache holds machine types by zone/name. A machine type has the
+// same shape in every project, so a scan needs one lookup per type and zone.
+type MachineTypeCache struct {
+	mu sync.Mutex
+	m  map[string]*compute.MachineType
+}
+
+func NewMachineTypeCache() *MachineTypeCache {
+	return &MachineTypeCache{m: map[string]*compute.MachineType{}}
+}
+
+func (mc *MachineTypeCache) get(key string) *compute.MachineType {
+	if mc == nil {
+		return nil
+	}
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	return mc.m[key]
+}
+
+func (mc *MachineTypeCache) put(key string, mt *compute.MachineType) {
+	if mc == nil || mt == nil {
+		return
+	}
+	mc.mu.Lock()
+	mc.m[key] = mt
+	mc.mu.Unlock()
 }
 
 // Stats summarises one project for the gProject sheet.
@@ -65,6 +101,7 @@ type collector struct {
 	vms     map[string]vmRef                // instance id -> summary (for metrics)
 	zones   map[string]bool                 // zones holding VMs or disks
 	regions map[string]bool                 // regions holding VMs, disks or addresses
+	assets  Assets                          // fast mode: prefetched resources (nil = Compute API)
 	stats   Stats
 }
 
@@ -88,6 +125,17 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 	}
 	for _, s := range inv.Sheets {
 		c.sheets[s.Name] = s
+	}
+
+	if svcs.Assets != nil {
+		report("cloudasset")
+		a, err := svcs.Assets.Project(ctx, projectID)
+		if err != nil && ctx.Err() == nil {
+			kind, msg := Classify(err)
+			inv.AddError(model.ScanError{Project: projectID, Collector: "cloudasset", Kind: kind,
+				Message: msg + " (se usó la Compute API)"})
+		}
+		c.assets = a
 	}
 
 	steps := []step{

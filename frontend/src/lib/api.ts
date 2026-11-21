@@ -26,6 +26,7 @@ export interface ADCStatus { found: boolean; identity: string }
 export interface Modules {
   osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string
   billingTable?: string; billingMonth?: string; billingMaxGB?: number
+  fast?: boolean; fastScope?: string
 }
 export interface HealthOptions {
   stoppedDays: number; snapshotDays: number; imageDays: number

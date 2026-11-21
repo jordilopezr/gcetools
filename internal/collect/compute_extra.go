@@ -20,26 +20,16 @@ func (c *collector) ageDays(created string) any {
 }
 
 func (c *collector) collectImages() error {
+	if ok, err := each(c, "Image", c.addImage); ok {
+		if err != nil {
+			return err
+		}
+		_, err = each(c, "MachineImage", c.addMachineImage)
+		return err
+	}
 	err := c.svc.Images.List(c.project).Context(c.ctx).Pages(c.ctx, func(page *compute.ImageList) error {
 		for _, im := range page.Items {
-			dep := ""
-			if im.Deprecated != nil {
-				dep = im.Deprecated.State
-			}
-			src := last(im.SourceDisk)
-			if src == "" {
-				src = last(im.SourceImage)
-			}
-			if src == "" {
-				src = last(im.SourceSnapshot)
-			}
-			c.add(SImage, model.Row{
-				"project": c.project, "name": im.Name, "kind": "Image", "family": im.Family, "status": im.Status,
-				"deprecated": dep, "diskSizeGB": float64(im.DiskSizeGb),
-				"storageGB": round2(float64(im.ArchiveSizeBytes) / (1 << 30)), "created": ts(im.CreationTimestamp),
-				"ageDays": c.ageDays(im.CreationTimestamp), "source": src, "licenses": joinLast(im.Licenses),
-				"locations": strings.Join(im.StorageLocations, "; "), "architecture": im.Architecture, "labels": labels(im.Labels),
-			})
+			c.addImage(im)
 		}
 		return nil
 	})
@@ -48,14 +38,39 @@ func (c *collector) collectImages() error {
 	}
 	return c.svc.MachineImages.List(c.project).Context(c.ctx).Pages(c.ctx, func(page *compute.MachineImageList) error {
 		for _, mi := range page.Items {
-			c.add(SImage, model.Row{
-				"project": c.project, "name": mi.Name, "kind": "Machine image", "status": mi.Status,
-				"storageGB": round2(float64(mi.TotalStorageBytes) / (1 << 30)), "created": ts(mi.CreationTimestamp),
-				"ageDays": c.ageDays(mi.CreationTimestamp), "source": last(mi.SourceInstance),
-				"locations": strings.Join(mi.StorageLocations, "; "), "labels": labels(mi.Labels),
-			})
+			c.addMachineImage(mi)
 		}
 		return nil
+	})
+}
+
+func (c *collector) addImage(im *compute.Image) {
+	dep := ""
+	if im.Deprecated != nil {
+		dep = im.Deprecated.State
+	}
+	src := last(im.SourceDisk)
+	if src == "" {
+		src = last(im.SourceImage)
+	}
+	if src == "" {
+		src = last(im.SourceSnapshot)
+	}
+	c.add(SImage, model.Row{
+		"project": c.project, "name": im.Name, "kind": "Image", "family": im.Family, "status": im.Status,
+		"deprecated": dep, "diskSizeGB": float64(im.DiskSizeGb),
+		"storageGB": round2(float64(im.ArchiveSizeBytes) / (1 << 30)), "created": ts(im.CreationTimestamp),
+		"ageDays": c.ageDays(im.CreationTimestamp), "source": src, "licenses": joinLast(im.Licenses),
+		"locations": strings.Join(im.StorageLocations, "; "), "architecture": im.Architecture, "labels": labels(im.Labels),
+	})
+}
+
+func (c *collector) addMachineImage(mi *compute.MachineImage) {
+	c.add(SImage, model.Row{
+		"project": c.project, "name": mi.Name, "kind": "Machine image", "status": mi.Status,
+		"storageGB": round2(float64(mi.TotalStorageBytes) / (1 << 30)), "created": ts(mi.CreationTimestamp),
+		"ageDays": c.ageDays(mi.CreationTimestamp), "source": last(mi.SourceInstance),
+		"locations": strings.Join(mi.StorageLocations, "; "), "labels": labels(mi.Labels),
 	})
 }
 

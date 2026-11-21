@@ -162,7 +162,9 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
   const start = async () => {
     try {
       onScanStart()
-      await api.startScan(selected, { concurrency, health, modules, saveHistory: loadSaveHistory(), profile: profileName })
+      const sc = scope.trim()
+      const fastScope = modules.fast && /^(organizations|folders)\/\d+$/.test(sc) ? sc : ''
+      await api.startScan(selected, { concurrency, health, modules: { ...modules, fastScope }, saveHistory: loadSaveHistory(), profile: profileName })
     } catch (e) { notify(errorText(e)) }
   }
 
@@ -293,6 +295,10 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
         )}
         <span className="body-s muted">Si la API no está habilitada en un proyecto, el módulo se omite sin marcarlo como error.</span>
         <span className="spacer" />
+        <button className={`chip ${modules.fast ? 'selected' : ''}`} onClick={() => setModules(m => ({ ...m, fast: !m.fast }))} aria-pressed={!!modules.fast}
+          title="Lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory: una consulta por proyecto, o una sola para toda la organización o carpeta indicada en el ámbito de detección. Puede reflejar cambios con unos minutos de retraso. Necesita roles/cloudasset.viewer.">
+          <Icon name={modules.fast ? 'check' : 'bolt'} size="sm" />Modo rápido (Cloud Asset Inventory)
+        </button>
         <button className={`chip ${modules.billingTable ? 'selected' : ''}`} onClick={() => setShowBilling(v => !v)} aria-expanded={showBilling}
           title="Coste neto real del mes (con CUD, SUD y descuentos) desde la exportación de facturación a BigQuery">
           <Icon name={modules.billingTable ? 'check' : 'receipt_long'} size="sm" />Coste real (BigQuery)

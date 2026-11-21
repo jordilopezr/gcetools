@@ -2,6 +2,7 @@ package collect
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -231,5 +232,73 @@ func TestManagedBy(t *testing.T) {
 		if got := managedBy(c.labels, c.meta, c.mig); got != c.want {
 			t.Errorf("%s: managedBy = %+v, want %+v", c.name, got, c.want)
 		}
+	}
+}
+
+// staticAssets returns the same resources the fake Compute API serves, the
+// way Cloud Asset Inventory stores them (one JSON object per resource).
+type staticAssets struct{ a Assets }
+
+func (s staticAssets) Project(context.Context, string) (Assets, error) { return s.a, nil }
+
+func TestFastModeMatchesComputeAPI(t *testing.T) {
+	svcs := fakeServices(t)
+	svcs.OSConfig, svcs.Monitoring, svcs.Recommender = nil, nil, nil
+	normal := NewInventory()
+	Project(context.Background(), svcs, "p1", normal, func(string) {})
+
+	a := Assets{}
+	for _, typ := range AssetTypes {
+		a[typ] = nil
+	}
+	a["Disk"] = []json.RawMessage{
+		json.RawMessage(`{"name":"vm-1","selfLink":"https://x/projects/p1/zones/europe-west1-b/disks/vm-1","zone":"https://x/zones/europe-west1-b","type":"https://x/diskTypes/pd-balanced","sizeGb":"50","users":["https://x/instances/vm-1"],"sourceImage":"https://x/images/debian-12","status":"READY"}`),
+		json.RawMessage(`{"name":"old","selfLink":"https://x/disks/old","zone":"https://x/zones/europe-west1-b","type":"https://x/diskTypes/pd-ssd","sizeGb":"500","status":"READY"}`),
+	}
+	a["Instance"] = []json.RawMessage{json.RawMessage(`{"name":"vm-1","id":"42","zone":"https://x/zones/europe-west1-b","machineType":"https://x/machineTypes/e2-standard-4",
+		"status":"RUNNING","creationTimestamp":"2024-01-02T03:04:05.000-07:00",
+		"networkInterfaces":[{"name":"nic0","network":"https://x/projects/host/global/networks/shared","subnetwork":"https://x/subnetworks/sn","networkIP":"10.0.0.2","accessConfigs":[{"natIP":"34.1.1.1","networkTier":"PREMIUM"}]}],
+		"disks":[{"source":"https://x/projects/p1/zones/europe-west1-b/disks/vm-1","boot":true,"deviceName":"boot","licenses":["https://x/projects/vm-migration/global/licenses/vmmigration-license","https://x/projects/debian-cloud/global/licenses/debian-12-bookworm"]}],
+		"serviceAccounts":[{"email":"1-compute@developer.gserviceaccount.com","scopes":["https://www.googleapis.com/auth/cloud-platform"]}],
+		"labels":{"env":"prod"},"metadata":{"items":[{"key":"created-by","value":"projects/1/zones/z/instanceGroupManagers/web-mig"}]}}`)}
+	a["Firewall"] = []json.RawMessage{json.RawMessage(`{"name":"ssh","network":"https://x/networks/default","direction":"INGRESS","priority":1000,"allowed":[{"IPProtocol":"tcp","ports":["22"]}],"sourceRanges":["0.0.0.0/0"]}`)}
+	a["GlobalAddress"] = []json.RawMessage{json.RawMessage(`{"name":"lb","address":"34.2.2.2","addressType":"EXTERNAL","status":"RESERVED"}`)}
+
+	svcs.Assets = staticAssets{a}
+	fast := NewInventory()
+	st := Project(context.Background(), svcs, "p1", fast, func(string) {})
+	if st.Status != "OK" || st.VMs != 1 || st.Disks != 2 {
+		t.Fatalf("fast stats = %+v, errors = %v", st, fast.Errors)
+	}
+	for _, name := range []string{SInfo, SDisks, SDisk, SNetwork, SLicense, SFirewall, SCPU, SMemory} {
+		n, f := normal.Sheet(name).Rows, fast.Sheet(name).Rows
+		if len(n) != len(f) {
+			t.Errorf("%s: %d rows with the Compute API, %d in fast mode", name, len(n), len(f))
+			continue
+		}
+		for i := range n {
+			if fmt.Sprint(n[i]) != fmt.Sprint(f[i]) {
+				t.Errorf("%s row %d differs:\n api  %v\n fast %v", name, i, n[i], f[i])
+			}
+		}
+	}
+	if r := fast.Sheet(SAddress).Rows; len(r) != 1 || r[0]["location"] != "global" {
+		t.Errorf("global address = %v", r)
+	}
+}
+
+func TestFastModeBadAsset(t *testing.T) {
+	svcs := fakeServices(t)
+	svcs.OSConfig, svcs.Monitoring, svcs.Recommender = nil, nil, nil
+	a := Assets{}
+	for _, typ := range AssetTypes {
+		a[typ] = nil
+	}
+	a["Snapshot"] = []json.RawMessage{json.RawMessage(`{"name":`)}
+	svcs.Assets = staticAssets{a}
+	inv := NewInventory()
+	st := Project(context.Background(), svcs, "p1", inv, func(string) {})
+	if !strings.HasPrefix(st.Status, "Parcial") || len(inv.Errors) != 1 || inv.Errors[0].Collector != "snapshots" {
+		t.Errorf("status %q, errors %v", st.Status, inv.Errors)
 	}
 }

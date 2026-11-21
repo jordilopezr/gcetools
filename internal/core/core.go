@@ -93,6 +93,11 @@ type Modules struct {
 	BillingTable string `json:"billingTable"`
 	BillingMonth string `json:"billingMonth"` // YYYYMM; empty = previous month
 	BillingMaxGB int    `json:"billingMaxGB"` // refuse queries above this; 0 = 50 GB
+	// Fast reads instances, disks, snapshots, images, templates, MIGs and
+	// networks from Cloud Asset Inventory instead of the Compute API. With an
+	// organization or folder in FastScope, one listing covers every project.
+	Fast      bool   `json:"fast"`
+	FastScope string `json:"fastScope"`
 }
 
 func AllModules() Modules {
@@ -286,6 +291,10 @@ func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, err
 		return s, err
 	}
 	s.MetricsDays = m.MetricsDays
+	s.MachineTypes = collect.NewMachineTypeCache()
+	if m.Fast {
+		s.Assets = e.newAssetSource(m.FastScope)
+	}
 	if m.OSConfig {
 		if s.OSConfig, err = osconfig.NewService(ctx, option.WithHTTPClient(e.Client)); err != nil {
 			return s, err
@@ -307,6 +316,13 @@ func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, err
 
 func modulesText(m Modules) string {
 	var on []string
+	if m.Fast {
+		mode := "modo rápido con Cloud Asset Inventory (puede reflejar cambios con unos minutos de retraso)"
+		if m.FastScope != "" {
+			mode += " en " + m.FastScope
+		}
+		on = append(on, mode)
+	}
 	if m.OSConfig {
 		on = append(on, "OS Config")
 	}
