@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/i18n"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/impersonate"
@@ -66,13 +68,13 @@ func ParseKey(data []byte) (KeyInfo, error) {
 		PrivateKey   string `json:"private_key"`
 	}
 	if err := json.Unmarshal(data, &k); err != nil {
-		return KeyInfo{}, fmt.Errorf("el archivo no es un JSON válido: %w", err)
+		return KeyInfo{}, fmt.Errorf(i18n.T("el archivo no es un JSON válido: %w"), err)
 	}
 	if k.Type != "service_account" {
-		return KeyInfo{}, fmt.Errorf("tipo de credencial %q no soportado: se esperaba \"service_account\"", k.Type)
+		return KeyInfo{}, fmt.Errorf(i18n.T("tipo de credencial %q no soportado: se esperaba \"service_account\""), k.Type)
 	}
 	if k.ClientEmail == "" || k.PrivateKey == "" {
-		return KeyInfo{}, errors.New("la clave no contiene client_email o private_key")
+		return KeyInfo{}, errors.New(i18n.T("la clave no contiene client_email o private_key"))
 	}
 	return KeyInfo{ClientEmail: k.ClientEmail, ProjectID: k.ProjectID, KeyID: k.PrivateKeyID}, nil
 }
@@ -83,7 +85,7 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 	case ADC:
 		creds, err := google.FindDefaultCredentials(ctx, Scope)
 		if err != nil {
-			return nil, fmt.Errorf("no se encontraron credenciales ADC (ejecuta `gcloud auth application-default login`): %w", err)
+			return nil, fmt.Errorf(i18n.T("no se encontraron credenciales ADC (ejecuta `gcloud auth application-default login`): %w"), err)
 		}
 		s.TokenSource = creds.TokenSource
 		s.ProjectHint = creds.ProjectID
@@ -97,7 +99,7 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		}
 		creds, err := google.CredentialsFromJSONWithType(ctx, cfg.KeyJSON, google.ServiceAccount, Scope)
 		if err != nil {
-			return nil, fmt.Errorf("clave de service account inválida: %w", err)
+			return nil, fmt.Errorf(i18n.T("clave de service account inválida: %w"), err)
 		}
 		s.TokenSource = creds.TokenSource
 		s.Identity = info.ClientEmail
@@ -106,18 +108,18 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 	case Impersonate:
 		target := strings.TrimSpace(cfg.TargetSA)
 		if !strings.Contains(target, "@") {
-			return nil, errors.New("indica el email de la service account a impersonar")
+			return nil, errors.New(i18n.T("indica el email de la service account a impersonar"))
 		}
 		base, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
 		if err != nil {
-			return nil, fmt.Errorf("la impersonación necesita credenciales ADC: %w", err)
+			return nil, fmt.Errorf(i18n.T("la impersonación necesita credenciales ADC: %w"), err)
 		}
 		ts, err := impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
 			TargetPrincipal: target,
 			Scopes:          []string{Scope},
 		}, option.WithCredentials(base))
 		if err != nil {
-			return nil, fmt.Errorf("no se pudo impersonar %s: %w", target, err)
+			return nil, fmt.Errorf(i18n.T("no se pudo impersonar %s: %w"), target, err)
 		}
 		s.TokenSource = ts
 		s.Identity = target
@@ -132,26 +134,25 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		s.TokenSource, s.Identity, s.ProjectHint = ts, account, project
 
 	default:
-		return nil, fmt.Errorf("método de autenticación desconocido: %q", cfg.Method)
+		return nil, fmt.Errorf(i18n.T("método de autenticación desconocido: %q"), cfg.Method)
 	}
 
 	s.TokenSource = oauth2.ReuseTokenSource(nil, s.TokenSource)
 	tok, err := s.TokenSource.Token()
 	if err != nil {
 		if cfg.Method == OAuth && strings.Contains(err.Error(), "invalid_grant") {
-			return nil, errors.New("la sesión de Google ha caducado o se revocó el acceso: vuelve a iniciar sesión en Conexión")
+			return nil, errors.New(i18n.T("la sesión de Google ha caducado o se revocó el acceso: vuelve a iniciar sesión en Conexión"))
 		}
 		if cfg.Method != KeyFile && (strings.Contains(err.Error(), "invalid_rapt") || strings.Contains(err.Error(), "invalid_grant")) {
-			return nil, errors.New("la sesión de gcloud ha caducado o tu organización exige volver a autenticarse. " +
-				"Ejecuta `gcloud auth application-default login` y vuelve a conectar")
+			return nil, errors.New(i18n.T("la sesión de gcloud ha caducado o tu organización exige volver a autenticarse. Ejecuta `gcloud auth application-default login` y vuelve a conectar"))
 		}
-		return nil, fmt.Errorf("no se pudo obtener un token: %w", err)
+		return nil, fmt.Errorf(i18n.T("no se pudo obtener un token: %w"), err)
 	}
 	if s.Identity == "" {
 		s.Identity = emailFromTokenInfo(ctx, tok.AccessToken)
 	}
 	if s.Identity == "" {
-		s.Identity = "Usuario (ADC)"
+		s.Identity = i18n.T("Usuario (ADC)")
 	}
 	return s, nil
 }
@@ -166,14 +167,14 @@ func DetectADC(ctx context.Context) (found bool, identity string) {
 	}
 	id := identityFromCredsJSON(creds.JSON)
 	if id == "" {
-		id = "Usuario de gcloud"
+		id = i18n.T("Usuario de gcloud")
 	}
 	return true, id
 }
 
 func identityFromCredsJSON(data []byte) string {
 	if len(data) == 0 {
-		return "Cuenta de servicio del entorno (metadata server)"
+		return i18n.T("Cuenta de servicio del entorno (metadata server)")
 	}
 	var c struct {
 		Type        string `json:"type"`

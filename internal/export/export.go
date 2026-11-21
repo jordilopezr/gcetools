@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	"github.com/xuri/excelize/v2"
@@ -51,7 +52,7 @@ func Write(inv *model.Inventory, path string, f Format, csvSep rune) (string, er
 	case JSON:
 		return path, writeJSON(inv, path)
 	}
-	return "", fmt.Errorf("formato no soportado: %s", f)
+	return "", fmt.Errorf(i18n.T("formato no soportado: %s"), f)
 }
 
 // ---------- XLSX ----------
@@ -118,7 +119,7 @@ func writeXLSX(inv *model.Inventory, path string) error {
 					}
 				case model.TBool:
 					if b, ok := v.(bool); ok {
-						vals[ci] = map[bool]string{true: "Sí", false: "No"}[b]
+						vals[ci] = map[bool]string{true: i18n.T("Sí"), false: i18n.T("No")}[b]
 					}
 				default:
 					vals[ci] = v
@@ -247,10 +248,10 @@ func ReadJSON(path string) (*model.Inventory, error) {
 	defer f.Close()
 	var inv model.Inventory
 	if err := json.NewDecoder(f).Decode(&inv); err != nil {
-		return nil, fmt.Errorf("%s no es un snapshot JSON de gceTools: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf(i18n.T("%s no es un snapshot JSON de gceTools: %w"), filepath.Base(path), err)
 	}
 	if inv.Meta.Tool == "" && len(inv.Sheets) == 0 {
-		return nil, fmt.Errorf("%s no es un snapshot JSON de gceTools", filepath.Base(path))
+		return nil, fmt.Errorf(i18n.T("%s no es un snapshot JSON de gceTools"), filepath.Base(path))
 	}
 	return &inv, nil
 }

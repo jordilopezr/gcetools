@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	compute "google.golang.org/api/compute/v1"
@@ -187,7 +188,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		for _, l := range ad.Licenses {
 			c.add(SLicense, model.Row{
 				"project": c.project, "vm": in.Name, "zone": zone, "disk": diskName,
-				"category": licenseCategory(last(l)), "license": last(l), "licenseProject": projectOf(l),
+				"category": i18n.T(licenseCategory(last(l))), "license": last(l), "licenseProject": projectOf(l),
 			})
 		}
 		c.add(SDisk, model.Row{

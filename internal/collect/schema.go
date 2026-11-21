@@ -1,6 +1,9 @@
 package collect
 
-import "gcetools/internal/model"
+import (
+	"gcetools/internal/i18n"
+	"gcetools/internal/model"
+)
 
 // Sheet names. The "g" prefix mirrors RVTools' "v" prefix (vInfo -> gInfo).
 const (
@@ -34,8 +37,10 @@ const (
 	SMeta     = "gMetaData"
 )
 
+// c builds a column; the Spanish title is translated into the current
+// language (TestSchemaTranslated checks every title has an English entry).
 func c(key, title string, t model.ColType, width float64) model.Column {
-	return model.Column{Key: key, Title: title, Type: t, Width: width}
+	return model.Column{Key: key, Title: i18n.T(title), Type: t, Width: width}
 }
 
 const (
@@ -48,10 +53,11 @@ const (
 	M = model.TMoney
 )
 
-// NewInventory returns an empty inventory with every MVP sheet in display order.
+// NewInventory returns an empty inventory with every MVP sheet in display
+// order, with titles and descriptions in the current language.
 func NewInventory() *model.Inventory {
 	sheet := func(name, title, desc string, cols ...model.Column) *model.Sheet {
-		return &model.Sheet{Name: name, Title: title, Description: desc, Columns: cols, Rows: []model.Row{}}
+		return &model.Sheet{Name: name, Title: i18n.T(title), Description: i18n.T(desc), Columns: cols, Rows: []model.Row{}}
 	}
 	return &model.Inventory{Errors: []model.ScanError{}, Sheets: []*model.Sheet{
 		sheet(SInfo, "Instancias", "Una fila por VM (equivale a vInfo)",

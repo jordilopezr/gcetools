@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"gcetools/internal/auth"
+	"gcetools/internal/i18n"
 )
 
 const loginUsage = `gcetools login — inicia sesión con Google sin gcloud
@@ -26,50 +27,50 @@ Opciones:
 
 func Login(args []string) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprint(fs.Output(), loginUsage); fs.PrintDefaults() }
-	client := fs.String("client", "", "JSON del cliente OAuth de tu organización (solo la primera vez o para cambiarlo)")
+	fs.Usage = func() { fmt.Fprint(fs.Output(), i18n.T(loginUsage)); fs.PrintDefaults() }
+	client := fs.String("client", "", i18n.T("JSON del cliente OAuth de tu organización (solo la primera vez o para cambiarlo)"))
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *client != "" {
 		data, err := os.ReadFile(*client)
 		if err != nil {
-			return fail("%v", err)
+			return fail(err.Error())
 		}
 		c, err := auth.ParseOAuthClient(data)
 		if err != nil {
-			return fail("%v", err)
+			return fail(err.Error())
 		}
 		if err := auth.SetOAuthClient(c); err != nil {
-			return fail("%v", err)
+			return fail(err.Error())
 		}
 	}
 	if st := auth.GetOAuthStatus(); st.Error != "" {
-		return fail("%s", st.Error)
+		return fail(st.Error)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	account, err := auth.Login(ctx, func(u string) {
-		fmt.Fprintf(os.Stderr, "Abre este enlace para iniciar sesión (se intenta abrir solo):\n\n  %s\n\nEsperando…\n", u)
+		fmt.Fprint(os.Stderr, i18n.Tf("Abre este enlace para iniciar sesión (se intenta abrir solo):\n\n  %s\n\nEsperando…\n", u))
 		openBrowser(u)
 	})
 	if err != nil {
-		return fail("%v", err)
+		return fail(err.Error())
 	}
-	fmt.Fprintf(os.Stderr, "Sesión iniciada como %s. Usa: gcetools scan --auth oauth\n", account)
+	fmt.Fprint(os.Stderr, i18n.Tf("Sesión iniciada como %s. Usa: gcetools scan --auth oauth\n", account))
 	return 0
 }
 
 func Logout(args []string) int {
 	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
-	all := fs.Bool("all", false, "olvida también el cliente OAuth de la organización")
+	all := fs.Bool("all", false, i18n.T("olvida también el cliente OAuth de la organización"))
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if err := auth.ForgetOAuth(*all); err != nil {
-		return fail("%v", err)
+		return fail(err.Error())
 	}
-	fmt.Fprintln(os.Stderr, "Sesión de Google cerrada.")
+	fmt.Fprintln(os.Stderr, i18n.T("Sesión de Google cerrada."))
 	return 0
 }
 

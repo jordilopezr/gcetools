@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gcetools/internal/collect"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	cloudasset "google.golang.org/api/cloudasset/v1"
@@ -56,7 +57,7 @@ func ValidScope(s string) bool { return reScope.MatchString(s) }
 func (e *Engine) Discover(ctx context.Context, scope string) ([]Footprint, error) {
 	scope = strings.TrimSpace(scope)
 	if !ValidScope(scope) {
-		return nil, fmt.Errorf("ámbito no válido %q: usa organizations/123, folders/456 o projects/mi-proyecto", scope)
+		return nil, fmt.Errorf(i18n.T("ámbito no válido %q: usa organizations/123, folders/456 o projects/mi-proyecto"), scope)
 	}
 	// With user credentials Cloud Asset needs a quota project; try it first
 	// and fall back to the plain client (service accounts bill their own).
@@ -80,9 +81,9 @@ func (e *Engine) Discover(ctx context.Context, scope string) ([]Footprint, error
 	kind, msg := collect.Classify(firstErr)
 	switch kind {
 	case model.ErrPermission:
-		msg += fmt.Sprintf(". Hace falta roles/cloudasset.viewer en %s", scope)
+		msg += i18n.Tf(". Hace falta roles/cloudasset.viewer en %s", scope)
 	case model.ErrAPIDisabled:
-		msg += ". Habilita la Cloud Asset API en el quota project (o en el proyecto de la service account)"
+		msg += i18n.T(". Habilita la Cloud Asset API en el quota project (o en el proyecto de la service account)")
 	}
 	return nil, fmt.Errorf("Cloud Asset Inventory: %s", msg)
 }

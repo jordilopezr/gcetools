@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	compute "google.golang.org/api/compute/v1"
@@ -103,7 +104,7 @@ func (c *collector) addFirewall(f *compute.Firewall) {
 	srcTags := append(slices.Clone(f.SourceTags), f.SourceServiceAccounts...)
 	targets := append(slices.Clone(f.TargetTags), f.TargetServiceAccounts...)
 	if len(targets) == 0 {
-		targets = []string{"(todas las instancias)"}
+		targets = []string{i18n.T("(todas las instancias)")}
 	}
 	open := f.Direction == "INGRESS" && action == "ALLOW" && !f.Disabled &&
 		(slices.Contains(f.SourceRanges, "0.0.0.0/0") || slices.Contains(f.SourceRanges, "::/0"))

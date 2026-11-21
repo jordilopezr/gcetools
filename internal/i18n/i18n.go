@@ -83,8 +83,15 @@ func Tf(format string, args ...any) string {
 // dictionary can be split by area.
 var en = map[string]string{}
 
+// conflicts records keys added twice with different translations
+// (dictionary files are split by area; TestCoverage reports them).
+var conflicts []string
+
 func add(m map[string]string) {
 	for k, v := range m {
+		if old, ok := en[k]; ok && old != v {
+			conflicts = append(conflicts, fmt.Sprintf("%q: %q / %q", k, old, v))
+		}
 		en[k] = v
 	}
 }

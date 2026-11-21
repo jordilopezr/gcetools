@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/health"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
@@ -19,9 +21,12 @@ import (
 var files embed.FS
 
 var tmpl = template.Must(template.New("report.html.tmpl").Funcs(template.FuncMap{
-	"n0": func(v float64) string { return group(math.Round(v), 0) },
-	"n2": func(v float64) string { return group(v, 2) },
-	"lc": strings.ToLower,
+	"n0":   func(v float64) string { return group(math.Round(v), 0) },
+	"n2":   func(v float64) string { return group(v, 2) },
+	"lc":   strings.ToLower,
+	"t":    i18n.T,
+	"tf":   i18n.Tf,
+	"lang": i18n.Lang,
 	"pct": func(a, b float64) string {
 		if b == 0 {
 			return ""
@@ -35,7 +40,9 @@ type KPI struct {
 	Alert             bool
 }
 
-type Finding struct{ Severity, Rule, Project, Resource, Detail string }
+// Finding is one row of the top findings; Level is the internal severity
+// (health.High…), used as CSS class whatever the language of the scan.
+type Finding struct{ Severity, Level, Rule, Project, Resource, Detail string }
 
 type ProjectCost struct {
 	Project    string
@@ -90,7 +97,7 @@ func build(inv *model.Inventory, opt Options) Data {
 		opt.Now = time.Now()
 	}
 	m := inv.Meta
-	d := Data{Generated: opt.Now.Format("02/01/2006 15:04"), Scanned: m.StartedAt.Local().Format("02/01/2006 15:04"),
+	d := Data{Generated: opt.Now.Format(dateTimeLayout()), Scanned: m.StartedAt.Local().Format(dateTimeLayout()),
 		Identity: m.Identity, Version: m.Version, Projects: m.Projects, ProjectsOK: m.ProjectsOK, Currency: m.Currency,
 		Website: opt.Website}
 	rows := func(name string) []model.Row {
@@ -155,16 +162,16 @@ func build(inv *model.Inventory, opt Options) Data {
 	}
 
 	d.KPIs = []KPI{
-		{Label: "VMs", Value: group(float64(vms), 0), Sub: group(float64(running), 0) + " encendidas"},
-		{Label: "vCPU / RAM", Value: group(vcpu, 0), Sub: group(mem, 0) + " GB de RAM"},
-		{Label: "Discos", Value: group(diskGB/1024, 1) + " TB", Sub: group(float64(disks), 0) + " discos"},
-		{Label: "Discos huérfanos", Value: group(float64(orphans), 0), Sub: group(orphanGB, 0) + " GB sin VM", Alert: orphans > 0},
+		{Label: "VMs", Value: group(float64(vms), 0), Sub: i18n.Tf("%s encendidas", group(float64(running), 0))},
+		{Label: "vCPU / RAM", Value: group(vcpu, 0), Sub: i18n.Tf("%s GB de RAM", group(mem, 0))},
+		{Label: i18n.T("Discos"), Value: group(diskGB/1024, 1) + " TB", Sub: i18n.Tf("%s discos", group(float64(disks), 0))},
+		{Label: i18n.T("Discos huérfanos"), Value: group(float64(orphans), 0), Sub: i18n.Tf("%s GB sin VM", group(orphanGB, 0)), Alert: orphans > 0},
 	}
 	if m.Currency != "" {
-		d.KPIs = append(d.KPIs, KPI{Label: "Coste estimado/mes", Value: group(listTotal, 0) + " " + m.Currency, Sub: "precio de lista on-demand"})
+		d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Coste estimado/mes"), Value: group(listTotal, 0) + " " + m.Currency, Sub: i18n.T("precio de lista on-demand")})
 	}
 	if d.RealCurrency != "" {
-		d.KPIs = append(d.KPIs, KPI{Label: "Coste real " + monthName(d.RealMonth), Value: group(realTotal, 0) + " " + d.RealCurrency, Sub: "neto, con descuentos"})
+		d.KPIs = append(d.KPIs, KPI{Label: i18n.Tf("Coste real %s", monthName(d.RealMonth)), Value: group(realTotal, 0) + " " + d.RealCurrency, Sub: i18n.T("neto, con descuentos")})
 	}
 	if savings > 0 {
 		cur := m.Currency
@@ -174,25 +181,28 @@ func build(inv *model.Inventory, opt Options) Data {
 				break
 			}
 		}
-		d.KPIs = append(d.KPIs, KPI{Label: "Ahorro posible/mes", Value: group(savings, 0) + " " + cur, Sub: "según Google Recommender"})
+		d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Ahorro posible/mes"), Value: group(savings, 0) + " " + cur, Sub: i18n.T("según Google Recommender")})
 	}
 
 	for _, r := range rows("gHealth") {
-		switch str(r, "severity") {
-		case "Alta":
+		// The inventory may come from a scan in another language: compare
+		// internal severities.
+		level := health.Level(str(r, "severity"))
+		switch level {
+		case health.High:
 			d.High++
-		case "Media":
+		case health.Medium:
 			d.Medium++
-		case "Baja":
+		case health.Low:
 			d.Low++
 		}
 		d.FindingsTotal++
-		if len(d.Findings) < 10 && str(r, "severity") != "Baja" {
-			d.Findings = append(d.Findings, Finding{str(r, "severity"), str(r, "rule"), str(r, "project"), str(r, "resource"), str(r, "detail")})
+		if len(d.Findings) < 10 && level != health.Low {
+			d.Findings = append(d.Findings, Finding{str(r, "severity"), level, str(r, "rule"), str(r, "project"), str(r, "resource"), str(r, "detail")})
 		}
 	}
-	d.KPIs = append(d.KPIs, KPI{Label: "Hallazgos altos", Value: group(float64(d.High), 0),
-		Sub: group(float64(d.Medium), 0) + " medios · " + group(float64(d.Low), 0) + " bajos", Alert: d.High > 0})
+	d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Hallazgos altos"), Value: group(float64(d.High), 0),
+		Sub: i18n.Tf("%s medios · %s bajos", group(float64(d.Medium), 0), group(float64(d.Low), 0)), Alert: d.High > 0})
 
 	for _, c := range byProject {
 		d.Costs = append(d.Costs, *c)
@@ -215,7 +225,7 @@ func build(inv *model.Inventory, opt Options) Data {
 
 	if opt.Diff != nil {
 		d.HasDiff = true
-		d.DiffSince = opt.DiffSince.Local().Format("02/01/2006")
+		d.DiffSince = opt.DiffSince.Local().Format(dateLayout())
 		for _, r := range opt.Diff.Sheet("Resumen").Rows {
 			d.Added += int(num(r["added"]))
 			d.Removed += int(num(r["removed"]))
@@ -234,7 +244,9 @@ func build(inv *model.Inventory, opt Options) Data {
 			}
 		}
 		for _, r := range opt.Diff.Sheet("Metadatos").Rows {
-			if r["property"] == "Diferencia de coste/mes" {
+			// The comparison is labelled in the current language; accept the
+			// Spanish source too.
+			if p := str(r, "property"); p == "Diferencia de coste/mes" || p == i18n.T("Diferencia de coste/mes") {
 				d.CostDelta = str(r, "value")
 			}
 		}
@@ -247,12 +259,36 @@ func monthName(yyyymm string) string {
 	if err != nil {
 		return yyyymm
 	}
+	if i18n.Lang() == i18n.EN {
+		return t.Format("January 2006")
+	}
 	months := []string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"}
 	return months[t.Month()-1] + " " + t.Format("2006")
 }
 
-// group formats with Spanish separators: 12.345,6
+// dateTimeLayout and dateLayout follow the language: 18/11/2026 in Spanish,
+// Nov 18, 2026 in English.
+func dateTimeLayout() string {
+	if i18n.Lang() == i18n.EN {
+		return "Jan 2, 2006 15:04"
+	}
+	return "02/01/2006 15:04"
+}
+
+func dateLayout() string {
+	if i18n.Lang() == i18n.EN {
+		return "Jan 2, 2006"
+	}
+	return "02/01/2006"
+}
+
+// group formats with the separators of the language: 12.345,6 in Spanish,
+// 12,345.6 in English.
 func group(v float64, decimals int) string {
+	thousands, point := byte('.'), ","
+	if i18n.Lang() == i18n.EN {
+		thousands, point = ',', "."
+	}
 	neg := v < 0
 	v = math.Abs(v)
 	p := math.Pow10(decimals)
@@ -263,7 +299,7 @@ func group(v float64, decimals int) string {
 	digits := []byte(itoa(ip))
 	for i, c := range digits {
 		if i > 0 && (len(digits)-i)%3 == 0 {
-			s = append(s, '.')
+			s = append(s, thousands)
 		}
 		s = append(s, c)
 	}
@@ -273,7 +309,7 @@ func group(v float64, decimals int) string {
 		for len(f) < decimals {
 			f = "0" + f
 		}
-		out += "," + f
+		out += point + f
 	}
 	if neg && out != "0" {
 		out = "-" + out

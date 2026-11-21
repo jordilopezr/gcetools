@@ -15,6 +15,7 @@ import (
 	"gcetools/internal/billing"
 	"gcetools/internal/collect"
 	"gcetools/internal/health"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 	"gcetools/internal/pricing"
 
@@ -29,7 +30,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.6.0"
+var Version = "0.7.0"
 
 type Engine struct {
 	Session *auth.Session
@@ -73,7 +74,7 @@ func (e *Engine) ListProjects(ctx context.Context, query string) ([]Project, err
 	})
 	if err != nil {
 		_, msg := collect.Classify(err)
-		return nil, fmt.Errorf("no se pudieron listar proyectos: %s", msg)
+		return nil, fmt.Errorf(i18n.T("no se pudieron listar proyectos: %s"), msg)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
@@ -200,9 +201,11 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		st, scanned := stats[p.ID]
 		status := st.Status
 		if !scanned {
-			status = "No escaneado"
+			status = i18n.T("No escaneado")
 		}
-		if strings.HasPrefix(status, "OK") { // also "OK (sin osconfig)": optional modules do not make a project fail
+		// Also "OK (sin osconfig)" / "OK (without osconfig)": optional modules do
+		// not make a project fail. Statuses start with "OK" in every language.
+		if strings.HasPrefix(status, "OK") {
 			inv.Meta.ProjectsOK++
 		}
 		lbl := make([]string, 0, len(p.Labels))
@@ -224,7 +227,7 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 			e.Client, withQuotaProject(e.Client, e.Session.QuotaProject))
 		if err != nil {
 			kind, msg := collect.Classify(err)
-			inv.AddError(model.ScanError{Project: "(todos)", Collector: "pricing", Kind: kind, Message: msg})
+			inv.AddError(model.ScanError{Project: i18n.T("(todos)"), Collector: "pricing", Kind: kind, Message: msg})
 		} else {
 			r := pricing.Apply(inv, pricing.NewIndex(cat))
 			priced = &r
@@ -243,7 +246,7 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 			MaxGB: opt.Modules.BillingMaxGB}, ids, time.Now())
 		if err != nil {
 			kind, msg := collect.Classify(err)
-			inv.AddError(model.ScanError{Project: "(todos)", Collector: "billing", Kind: kind, Message: msg})
+			inv.AddError(model.ScanError{Project: i18n.T("(todos)"), Collector: "billing", Kind: kind, Message: msg})
 		} else {
 			billed, billedRes = d, billing.Apply(inv, d)
 		}
@@ -260,25 +263,25 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 	m := inv.Meta
 	meta := inv.Sheet(collect.SMeta)
 	for _, kv := range [][2]string{
-		{"Herramienta", m.Tool + " " + m.Version},
-		{"Identidad", m.Identity},
-		{"Método de autenticación", m.AuthMethod},
-		{"Scope OAuth", auth.Scope},
-		{"Módulos opcionales", modulesText(opt.Modules)},
-		{"Quota project", e.Session.QuotaProject},
-		{"Moneda de costes", m.Currency},
-		{"Base de los costes", map[bool]string{true: "Precio de lista on-demand del Cloud Billing Catalog, 730 h/mes; sin SUD, CUD ni descuentos negociados", false: "No estimados"}[priced != nil]},
-		{"Sin tarifa", unpricedText(priced)},
-		{"Coste real (BigQuery)", billingText(billed, billedRes)},
-		{"Reglas de salud desactivadas", strings.Join(hres.Disabled, ", ")},
-		{"Hallazgos ocultos por labels gcetools-ignore", fmt.Sprint(hres.Suppressed)},
-		{"Inicio", m.StartedAt.Format(time.RFC3339)},
-		{"Fin", m.FinishedAt.Format(time.RFC3339)},
-		{"Duración", m.FinishedAt.Sub(m.StartedAt).Round(time.Second).String()},
-		{"Proyectos seleccionados", fmt.Sprint(m.Projects)},
-		{"Proyectos OK", fmt.Sprint(m.ProjectsOK)},
-		{"Errores", fmt.Sprint(m.Errors)},
-		{"Cancelado", map[bool]string{true: "Sí", false: "No"}[m.Cancelled]},
+		{i18n.T("Herramienta"), m.Tool + " " + m.Version},
+		{i18n.T("Identidad"), m.Identity},
+		{i18n.T("Método de autenticación"), m.AuthMethod},
+		{i18n.T("Scope OAuth"), auth.Scope},
+		{i18n.T("Módulos opcionales"), modulesText(opt.Modules)},
+		{i18n.T("Quota project"), e.Session.QuotaProject},
+		{i18n.T("Moneda de costes"), m.Currency},
+		{i18n.T("Base de los costes"), map[bool]string{true: i18n.T("Precio de lista on-demand del Cloud Billing Catalog, 730 h/mes; sin SUD, CUD ni descuentos negociados"), false: i18n.T("No estimados")}[priced != nil]},
+		{i18n.T("Sin tarifa"), unpricedText(priced)},
+		{i18n.T("Coste real (BigQuery)"), billingText(billed, billedRes)},
+		{i18n.T("Reglas de salud desactivadas"), strings.Join(hres.Disabled, ", ")},
+		{i18n.T("Hallazgos ocultos por labels gcetools-ignore"), fmt.Sprint(hres.Suppressed)},
+		{i18n.T("Inicio"), m.StartedAt.Format(time.RFC3339)},
+		{i18n.T("Fin"), m.FinishedAt.Format(time.RFC3339)},
+		{i18n.T("Duración"), m.FinishedAt.Sub(m.StartedAt).Round(time.Second).String()},
+		{i18n.T("Proyectos seleccionados"), fmt.Sprint(m.Projects)},
+		{i18n.T("Proyectos OK"), fmt.Sprint(m.ProjectsOK)},
+		{i18n.T("Errores"), fmt.Sprint(m.Errors)},
+		{i18n.T("Cancelado"), map[bool]string{true: i18n.T("Sí"), false: i18n.T("No")}[m.Cancelled]},
 	} {
 		meta.Add(model.Row{"property": kv[0], "value": kv[1]})
 	}
@@ -317,9 +320,9 @@ func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, err
 func modulesText(m Modules) string {
 	var on []string
 	if m.Fast {
-		mode := "modo rápido con Cloud Asset Inventory (puede reflejar cambios con unos minutos de retraso)"
+		mode := i18n.T("modo rápido con Cloud Asset Inventory (puede reflejar cambios con unos minutos de retraso)")
 		if m.FastScope != "" {
-			mode += " en " + m.FastScope
+			mode = i18n.Tf("%s en %s", mode, m.FastScope)
 		}
 		on = append(on, mode)
 	}
@@ -327,19 +330,19 @@ func modulesText(m Modules) string {
 		on = append(on, "OS Config")
 	}
 	if m.Monitoring {
-		on = append(on, fmt.Sprintf("Cloud Monitoring (%d días)", m.MetricsDays))
+		on = append(on, i18n.Tf("Cloud Monitoring (%d días)", m.MetricsDays))
 	}
 	if m.Recommender {
 		on = append(on, "Recommender")
 	}
 	if m.Pricing {
-		on = append(on, "coste estimado")
+		on = append(on, i18n.T("coste estimado"))
 	}
 	if m.BillingTable != "" {
-		on = append(on, "coste real (BigQuery)")
+		on = append(on, i18n.T("coste real (BigQuery)"))
 	}
 	if len(on) == 0 {
-		return "ninguno"
+		return i18n.T("ninguno")
 	}
 	return strings.Join(on, ", ")
 }
@@ -348,11 +351,11 @@ func billingText(d *billing.Data, r billing.Result) string {
 	if d == nil {
 		return ""
 	}
-	kind := "exportación estándar: solo por proyecto"
+	kind := i18n.T("exportación estándar: solo por proyecto")
 	if d.Detailed {
-		kind = fmt.Sprintf("exportación detallada: %.0f%% atribuido a VMs y discos", 100*r.Attributed/max(r.Net, 0.01))
+		kind = i18n.Tf("exportación detallada: %.0f%% atribuido a VMs y discos", 100*r.Attributed/max(r.Net, 0.01))
 	}
-	return fmt.Sprintf("%s, mes %s, neto %.2f %s (%s); BigQuery leyó %.2f GB", d.Table, d.Month, r.Net, d.Currency,
+	return i18n.Tf("%s, mes %s, neto %.2f %s (%s); BigQuery leyó %.2f GB", d.Table, d.Month, r.Net, d.Currency,
 		kind, float64(d.BytesRead)/1e9)
 }
 

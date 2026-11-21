@@ -1,19 +1,20 @@
 # gceTools
 
-[![build](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml/badge.svg)](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml) · Licencia GPL-3.0 · [gcetools.jordilopezr.com](https://gcetools.jordilopezr.com)
+[![build](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml/badge.svg)](https://github.com/jordilopezr/gcetools/actions/workflows/build.yml) · Licencia GPL-3.0 · [gcetools.jordilopezr.com](https://gcetools.jordilopezr.com) · **[English](README.en.md)**
 
 Inventario de Google Compute Engine al estilo RVTools: aplicación de escritorio para Windows, Linux y macOS, más un modo de línea de comandos.
 Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja por pestaña), CSV (ZIP) o JSON.
 
 - **Solo lectura:** pide únicamente el scope `cloud-platform.read-only`.
 - **Autenticación:** inicio de sesión con Google sin gcloud (sesión guardada en el llavero del sistema), credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
+- **Idiomas:** español e inglés (interfaz, inventario, informe y CLI).
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, con interfaz Material 3 y AG Grid Community.
 
 ## Pestañas (MVP)
 
 | Pestaña | RVTools | Contenido |
 |---|---|---|
-| gInfo | vInfo | Una fila por VM: machine type, vCPU, RAM, estado, IPs, SO, discos, SA, labels, Shielded VM, MIG… |
+| gInfo | vInfo | Una fila por VM: machine type, vCPU, RAM, estado, IPs, SO, discos, SA, labels, Shielded VM, MIG, servicio que la gestiona (GKE, Dataproc…) |
 | gCPU / gMemory | vCPU / vMemory | Detalle de CPU y memoria |
 | gDisk | vDisk | Discos conectados a cada VM |
 | gNetwork | vNetwork | NICs, alias IP, IP externa, proyecto de la VPC (Shared VPC) |
@@ -51,6 +52,36 @@ Para usar gceTools sin instalar Google Cloud CLI: **Conexión → Iniciar sesió
 - O usar un cliente OAuth propio: en un proyecto de la organización, *APIs y servicios → Pantalla de consentimiento de OAuth* con tipo **Interno**, y *Credenciales → ID de cliente de OAuth* de tipo **App de escritorio**. Se reparte el JSON y cada usuario lo carga en **Conexión → Opciones avanzadas → Usar el cliente OAuth de mi organización** (o `gcetools-cli login --client client_secret_….json`). Con un cliente propio, la cuota de las APIs opcionales (Recommender, Cloud Asset, Cloud Billing) se carga a ese proyecto, que debe tenerlas habilitadas.
 
 Las compilaciones hechas desde el código fuente no incluyen el cliente de gceTools (se inyecta al publicar las releases); en ellas solo funciona el cliente propio.
+
+### Idioma
+
+La interfaz está en español e inglés: el selector está en la barra superior (icono de traducción) y por defecto se usa el idioma del sistema.
+
+- Los escaneos, las exportaciones XLSX/CSV y el informe se generan en el idioma activo: títulos de pestañas y columnas, reglas de salud, estados y metadatos. Los nombres de las pestañas (`gInfo`, `gDisks`…) no cambian, para no romper scripts que lean los archivos.
+- Al abrir un escaneo del historial o un snapshot JSON, las cabeceras se muestran en el idioma activo; los textos de los hallazgos quedan en el idioma en que se escaneó.
+- En consola: `--lang es|en` (o la variable `GCETOOLS_LANG`); si no se indica, se usa el idioma del sistema.
+
+### VMs gestionadas por GKE, Dataproc, Dataflow o Batch
+
+gInfo indica en **Gestionada por** qué servicio creó cada VM (GKE, Dataproc, Dataflow, Batch o MIG) y, para GKE y Dataproc, el **clúster** y el **node pool**. Se detecta por los labels y metadatos que ponen esos servicios.
+
+- Las reglas de salud que no tienen sentido en VMs desechables se omiten para ellas: VM parada, VM parada sin discos, deletion protection, snapshot schedule y Ops Agent. El resto (IP pública, service account por defecto, Secure Boot…) se sigue evaluando.
+- En **Inventario**, la casilla **Ocultar las VMs gestionadas** quita los nodos de GKE, Dataproc, Dataflow y Batch de las pestañas por VM (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense y gHealth). Los miembros de MIGs propios siguen visibles.
+
+### Modo rápido con Cloud Asset Inventory
+
+En organizaciones con muchos proyectos, el **modo rápido** (Proyectos → **Modo rápido (Cloud Asset Inventory)**, o `--fast`) lee VMs, discos, snapshots, imágenes, machine images, templates, MIGs, autoscalers, VPCs, subredes, firewalls e IPs de Cloud Asset Inventory en vez de la Compute API:
+
+- **Sin ámbito:** una lectura por proyecto en lugar de una docena de llamadas.
+- **Con una organización o carpeta** en el ámbito de detección (o `--discover`): una sola lectura paginada para todos los proyectos.
+- Reservas, commitments, sole-tenant, cuotas y los módulos opcionales (OS Config, Monitoring, Recommender) se siguen leyendo por proyecto, porque CAI no los incluye o no tiene esos datos.
+- **Retraso:** CAI puede tardar unos minutos en reflejar cambios recientes; gMetaData indica que el escaneo usó el modo rápido.
+- Si CAI falla en un proyecto (permisos, API deshabilitada), ese proyecto se lee con la Compute API y el motivo queda en gErrors.
+- Necesita `roles/cloudasset.viewer` en el ámbito y la Cloud Asset API habilitada en el quota project (o en el proyecto de la service account o del cliente OAuth).
+
+```bash
+gcetools-cli scan --discover organizations/123456 --fast --out inventario.xlsx
+```
 
 ### Historial y tendencias
 
@@ -157,15 +188,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.6.0-linux-amd64.deb
+sudo apt install ./gcetools-0.7.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.6.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.7.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.6.0-linux-x86_64.AppImage && ./gcetools-0.6.0-linux-x86_64.AppImage
+chmod +x gcetools-0.7.0-linux-x86_64.AppImage && ./gcetools-0.7.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.
@@ -241,6 +272,8 @@ gcetools-cli scan --profile produccion --discover organizations/123456
 gcetools-cli profiles
 gcetools-cli scan --save-history --report "informe-$(date +%F).html"   # historial + informe para la tarea semanal
 gcetools-cli login && gcetools-cli scan --auth oauth
+gcetools-cli scan --discover organizations/123456 --fast           # modo rápido con Cloud Asset Inventory
+gcetools-cli --lang en scan --out inventory.xlsx                    # inventario en inglés
 gcetools-cli version
 ```
 
@@ -256,7 +289,7 @@ gceTools solo hace lecturas. Casi todas las APIs que usa son gratuitas; pueden f
 | Resource Manager | Listar proyectos | Gratis |
 | Cloud Billing Catalog | Precios del coste estimado (caché de 24 h) | Gratis |
 | Recommender | Recomendaciones | Gratis |
-| Cloud Asset Inventory | Descubrir proyectos con Compute | Gratis (cuota: 400 búsquedas/min por proyecto) |
+| Cloud Asset Inventory | Descubrir proyectos con Compute y modo rápido | Gratis (con cuotas por minuto por proyecto) |
 | Cloud Monitoring | Métricas de CPU y RAM (gPerf) | 0,50 USD por millón de series devueltas; el primer millón al mes por cuenta de facturación es gratis |
 | BigQuery | Coste real (opcional, desactivado por defecto) | Por datos leídos (1 TiB gratis al mes); gceTools estima antes y respeta un límite de GB |
 | OS Config | SO y agentes (gTools) | Leer es gratis. VM Manager cobra por VM con agente activo (0,003 USD/h, 100 VMs gratis por cuenta de facturación), pero eso depende de tener el agente, no de gceTools |
@@ -269,7 +302,7 @@ Como referencia, un escaneo pide unas 2 series de Monitoring por VM (CPU y RAM):
 - Mínimos: `roles/compute.viewer` y `roles/browser` (a nivel de organización o carpeta para tener visión global).
 - gTools: `roles/osconfig.inventoryViewer`, con la API de OS Config habilitada en el proyecto y el agente en las VMs.
 - gPerf: `roles/monitoring.viewer`.
-- Descubrimiento con Cloud Asset Inventory: `roles/cloudasset.viewer` en la organización o carpeta.
+- Descubrimiento y modo rápido con Cloud Asset Inventory: `roles/cloudasset.viewer` en la organización, carpeta o proyecto.
 - Coste real: `roles/bigquery.jobUser` en el proyecto de la tabla de facturación y `roles/bigquery.dataViewer` en su dataset.
 - gRecommend: `roles/recommender.computeViewer`. Con credenciales de usuario, Google exige un quota project: se usa el `quota_project_id` de ADC (`gcloud auth application-default set-quota-project <proyecto>`), que debe tener la Recommender API habilitada.
 - Sin `resourcemanager.projects.list` se pueden añadir proyectos a mano por ID.
@@ -278,9 +311,10 @@ Como referencia, un escaneo pide unas 2 series de Monitoring por VM (CPU y RAM):
 
 ```
 main.go, app.go           Arranque de Wails + métodos expuestos al frontend
-internal/auth             ADC / clave JSON / impersonación
+internal/auth             ADC / clave JSON / impersonación / inicio de sesión con Google
 internal/core             Descubrimiento de proyectos, escaneo concurrente, HTTP con rate-limit y reintentos
-internal/collect          Un colector por tipo de recurso (aggregatedList) + esquema de pestañas
+internal/collect          Un colector por tipo de recurso (aggregatedList o Cloud Asset Inventory) + esquema de pestañas
+internal/i18n             Traducciones (el texto en español es la clave; inglés en en_*.go)
 internal/health           Reglas de gHealth
 internal/diff             Comparación de dos inventarios (altas, bajas y cambios)
 internal/pricing          Catálogo de Cloud Billing y cálculo de coste estimado
@@ -296,10 +330,12 @@ assets/brand/             Identidad visual: SVG maestros, iconos por plataforma,
 
 Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escribe su colector y regístralo en `Project()` (collect.go). La UI y los exportadores la muestran sin más cambios.
 
+Para traducir: envuelve el texto con `i18n.T("…")` o `i18n.Tf("…", args)` en Go y con `t('…')` en el frontend, y añade la versión en inglés a `internal/i18n/en_*.go` o a `frontend/src/lib/i18n.en.ts`. `go test ./internal/i18n` y `npm --prefix frontend run check:i18n` fallan si falta alguna.
+
 ## Pendiente
 
-- Colector completo basado en Cloud Asset Inventory (hoy CAI solo se usa para descubrir proyectos)
 - Firma de los ejecutables de Windows
+- Pestaña de postura de seguridad (gSecurity)
 
 ## Actualizaciones
 

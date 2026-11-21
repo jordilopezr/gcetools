@@ -2,6 +2,7 @@
 // second axis). 2px line, recessive grid, last point marked and labelled,
 // crosshair + tooltip on hover, keyboard-free but with an accessible summary.
 import { useMemo, useRef, useState } from 'react'
+import { locale, t } from '../lib/i18n'
 
 export interface Point { t: Date; v: number }
 
@@ -15,7 +16,7 @@ interface Props {
 const W = 360 // viewBox width; the SVG scales to its container
 const PAD = { top: 12, right: 14, bottom: 22, left: 46 }
 
-const fmtDay = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+const fmtDay = (d: Date) => d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 
 function niceTicks(min: number, max: number, count = 3): number[] {
   if (min === max) { min -= 1; max += 1 }
@@ -68,7 +69,7 @@ export default function TrendChart({ title, points, format, height = 150 }: Prop
   const [hx, hy] = geo.xy[hi]
   return (
     <figure className="card outlined" style={{ margin: 0, padding: '12px 14px', position: 'relative' }}
-      aria-label={`${title}: ${format(points[last].v)} el ${fmtDay(points[last].t)}`}>
+      aria-label={t('{0}: {1} el {2}', title, format(points[last].v), fmtDay(points[last].t))}>
       <figcaption className="row" style={{ gap: 8, alignItems: 'baseline' }}>
         <span className="title-s">{title}</span>
         <span className="spacer" />
@@ -98,7 +99,7 @@ export default function TrendChart({ title, points, format, height = 150 }: Prop
           background: 'var(--md-inverse-surface)', color: 'var(--md-inverse-on-surface)', padding: '6px 10px',
           borderRadius: 8, pointerEvents: 'none', whiteSpace: 'nowrap', boxShadow: 'var(--md-elevation-2, 0 2px 6px rgba(0,0,0,.2))',
         }}>
-          <div>{points[hover].t.toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+          <div>{points[hover].t.toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' })}</div>
           <div className="title-s">{format(points[hover].v)}</div>
         </div>
       )}

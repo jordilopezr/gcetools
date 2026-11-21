@@ -28,6 +28,8 @@ import (
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+
+	"gcetools/internal/i18n"
 )
 
 // OAuth is the sign-in-with-Google method.
@@ -119,17 +121,17 @@ func ParseOAuthClient(data []byte) (OAuthClient, error) {
 		Type string          `json:"type"`
 	}
 	if err := json.Unmarshal(data, &f); err != nil {
-		return OAuthClient{}, fmt.Errorf("el archivo no es un JSON válido: %w", err)
+		return OAuthClient{}, fmt.Errorf(i18n.T("el archivo no es un JSON válido: %w"), err)
 	}
 	switch {
 	case f.Installed != nil && f.Installed.ClientID != "":
 		return OAuthClient{ClientID: f.Installed.ClientID, ClientSecret: f.Installed.ClientSecret, ProjectID: f.Installed.ProjectID}, nil
 	case f.Web != nil:
-		return OAuthClient{}, errors.New("es un cliente de tipo \"Aplicación web\": crea uno de tipo \"App de escritorio\"")
+		return OAuthClient{}, errors.New(i18n.T("es un cliente de tipo \"Aplicación web\": crea uno de tipo \"App de escritorio\""))
 	case f.Type == "service_account":
-		return OAuthClient{}, errors.New("es una clave de service account: úsala en la opción \"Service account (JSON)\"")
+		return OAuthClient{}, errors.New(i18n.T("es una clave de service account: úsala en la opción \"Service account (JSON)\""))
 	}
-	return OAuthClient{}, errors.New("no es un cliente OAuth de Google (falta la sección \"installed\")")
+	return OAuthClient{}, errors.New(i18n.T("no es un cliente OAuth de Google (falta la sección \"installed\")"))
 }
 
 func load() (stored, error) {
@@ -138,7 +140,7 @@ func load() (stored, error) {
 		return stored{}, nil
 	}
 	if err != nil {
-		return stored{}, fmt.Errorf("llavero del sistema no disponible: %w", err)
+		return stored{}, fmt.Errorf(i18n.T("llavero del sistema no disponible: %w"), err)
 	}
 	var s stored
 	if err := json.Unmarshal([]byte(v), &s); err != nil {
@@ -159,7 +161,7 @@ func save(s stored) error {
 		return err
 	}
 	if err := ring.Set(keyringService, keyringUser, string(b)); err != nil {
-		return fmt.Errorf("no se pudo guardar en el llavero del sistema: %w", err)
+		return fmt.Errorf(i18n.T("no se pudo guardar en el llavero del sistema: %w"), err)
 	}
 	return nil
 }
@@ -234,7 +236,7 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 	}
 	client, ok := s.effective()
 	if !ok {
-		return "", errors.New("esta compilación no incluye el cliente OAuth de gceTools: carga el cliente OAuth de tu organización")
+		return "", errors.New(i18n.T("esta compilación no incluye el cliente OAuth de gceTools: carga el cliente OAuth de tu organización"))
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -252,7 +254,7 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 	srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if q.Get("state") != state {
-			http.Error(w, "estado inválido", http.StatusBadRequest)
+			http.Error(w, i18n.T("estado inválido"), http.StatusBadRequest)
 			return
 		}
 		res := result{code: q.Get("code"), err: q.Get("error")}
@@ -276,25 +278,25 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 	case res = <-done:
 	case <-ctx.Done():
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", errors.New("se agotó el tiempo de espera del inicio de sesión (5 minutos)")
+			return "", errors.New(i18n.T("se agotó el tiempo de espera del inicio de sesión (5 minutos)"))
 		}
-		return "", errors.New("inicio de sesión cancelado")
+		return "", errors.New(i18n.T("inicio de sesión cancelado"))
 	}
 	switch res.err {
 	case "":
 	case "access_denied":
-		return "", errors.New("se denegó el acceso en la pantalla de consentimiento")
+		return "", errors.New(i18n.T("se denegó el acceso en la pantalla de consentimiento"))
 	case "admin_policy_enforced", "org_internal":
-		return "", errors.New("tu organización no permite esta app: pide a tu administrador que la autorice o usa el cliente OAuth de tu organización (opciones avanzadas)")
+		return "", errors.New(i18n.T("tu organización no permite esta app: pide a tu administrador que la autorice o usa el cliente OAuth de tu organización (opciones avanzadas)"))
 	default:
-		return "", fmt.Errorf("Google devolvió el error %q", res.err)
+		return "", fmt.Errorf(i18n.T("Google devolvió el error %q"), res.err)
 	}
 	tok, err := cfg.Exchange(ctx, res.code, oauth2.VerifierOption(verifier))
 	if err != nil {
-		return "", fmt.Errorf("no se pudo completar el inicio de sesión: %w", err)
+		return "", fmt.Errorf(i18n.T("no se pudo completar el inicio de sesión: %w"), err)
 	}
 	if tok.RefreshToken == "" {
-		return "", errors.New("Google no devolvió un token de refresco; revoca el acceso de la app en tu cuenta de Google y vuelve a intentarlo")
+		return "", errors.New(i18n.T("Google no devolvió un token de refresco; revoca el acceso de la app en tu cuenta de Google y vuelve a intentarlo"))
 	}
 	account = emailFromIDToken(tok)
 	if account == "" {
@@ -311,7 +313,7 @@ func oauthSession(ctx context.Context) (oauth2.TokenSource, string, string, erro
 		return nil, "", "", err
 	}
 	if s.RefreshToken == "" || s.TokenClient.ClientID == "" {
-		return nil, "", "", errors.New("no has iniciado sesión con Google en gceTools")
+		return nil, "", "", errors.New(i18n.T("no has iniciado sesión con Google en gceTools"))
 	}
 	ts := oauthConfig(s.TokenClient, "").TokenSource(context.WithoutCancel(ctx), &oauth2.Token{RefreshToken: s.RefreshToken})
 	return ts, s.Account, s.TokenClient.ProjectID, nil

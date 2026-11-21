@@ -8,7 +8,7 @@ import InventoryPage from './pages/InventoryPage'
 import AboutPage, { type UpdateState } from './pages/AboutPage'
 import ComparePage, { type CompareState } from './pages/ComparePage'
 import HistoryPage from './pages/HistoryPage'
-import { getLang, setLang as storeLang, type Lang } from './lib/i18n'
+import { getLang, setLang as storeLang, t, type Lang } from './lib/i18n'
 
 type Page = 'connect' | 'projects' | 'inventory' | 'compare' | 'history' | 'about'
 type Theme = 'system' | 'light' | 'dark'
@@ -60,7 +60,7 @@ export default function App() {
     try {
       const info = await api.checkUpdate()
       setUpdate({ status: 'done', info })
-      if (info.available && silent) setSnack(`Hay una versión nueva de gceTools: ${info.latest}`)
+      if (info.available && silent) setSnack(t('Hay una versión nueva de gceTools: {0}', info.latest))
     } catch (e) {
       setUpdate({ status: 'error', error: errorText(e) })
     }
@@ -69,8 +69,8 @@ export default function App() {
   useEffect(() => { api.appInfo().then(setAbout).catch(() => { /* non-fatal */ }) }, [])
   useEffect(() => {
     if (!autoCheck) return
-    const t = setTimeout(() => checkUpdate(true), 2500)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => checkUpdate(true), 2500)
+    return () => clearTimeout(timer)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- once at startup
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function App() {
       try {
         setInventory(await api.getInventory())
         setPage('inventory')
-        setSnack(meta.cancelled ? 'Escaneo cancelado: se muestran resultados parciales' : 'Escaneo completado')
+        setSnack(meta.cancelled ? t('Escaneo cancelado: se muestran resultados parciales') : t('Escaneo completado'))
       } catch (e) { setSnack(errorText(e)) }
     })
     const offE = api.onError(msg => { setScan(s => ({ ...s, running: false })); setSnack(msg) })
@@ -120,11 +120,11 @@ export default function App() {
   }
 
   const nav: { id: Page; icon: string; label: string; enabled: boolean }[] = [
-    { id: 'connect', icon: 'key', label: 'Conexión', enabled: true },
-    { id: 'projects', icon: 'folder_open', label: 'Proyectos', enabled: !!session },
-    { id: 'inventory', icon: 'table_view', label: 'Inventario', enabled: !!inventory },
-    { id: 'compare', icon: 'compare_arrows', label: 'Comparar', enabled: true },
-    { id: 'history', icon: 'history', label: 'Historial', enabled: true },
+    { id: 'connect', icon: 'key', label: t('Conexión'), enabled: true },
+    { id: 'projects', icon: 'folder_open', label: t('Proyectos'), enabled: !!session },
+    { id: 'inventory', icon: 'table_view', label: t('Inventario'), enabled: !!inventory },
+    { id: 'compare', icon: 'compare_arrows', label: t('Comparar'), enabled: true },
+    { id: 'history', icon: 'history', label: t('Historial'), enabled: true },
   ]
   const updateAvailable = update.status === 'done' && !!update.info?.available
   const themeIcon = theme === 'dark' ? 'dark_mode' : theme === 'light' ? 'light_mode' : 'contrast'
@@ -137,25 +137,25 @@ export default function App() {
           <div>
             <div className="brand-name">gceTools</div>
           </div>
-          <span className="brand-sub">Inventario de Compute Engine</span>
+          <span className="brand-sub">{t('Inventario de Compute Engine')}</span>
         </div>
         <div className="spacer" />
         {updateAvailable && (
           <button className="assist" style={{ border: 0, cursor: 'pointer', background: 'var(--md-primary-container)', color: 'var(--md-on-primary-container)' }}
-            onClick={() => setPage('about')} title="Ver novedades y descargar">
+            onClick={() => setPage('about')} title={t('Ver novedades y descargar')}>
             <span className="avatar" style={{ background: 'var(--md-primary)' }}><Icon name="arrow_upward" size="sm" /></span>
-            Versión {update.info!.latest} disponible
+            {t('Versión {0} disponible', update.info!.latest)}
           </button>
         )}
-        {api.mock && <span className="badge sev-Media" title="Ejecutándose fuera de Wails con datos simulados">Modo demo</span>}
+        {api.mock && <span className="badge sev-Media" title={t('Ejecutándose fuera de Wails con datos simulados')}>{t('Modo demo')}</span>}
         <Menu trigger={open => (
-          <button className="icon-btn" onClick={open} aria-label="Tema" title="Tema"><Icon name={themeIcon} /></button>
+          <button className="icon-btn" onClick={open} aria-label={t('Tema')} title={t('Tema')}><Icon name={themeIcon} /></button>
         )}>
-          {close => (['system', 'light', 'dark'] as Theme[]).map(t => (
-            <button key={t} onClick={() => { setTheme(t); close() }}>
-              <Icon name={t === 'dark' ? 'dark_mode' : t === 'light' ? 'light_mode' : 'contrast'} />
-              <span>{{ system: 'Según el sistema', light: 'Claro', dark: 'Oscuro' }[t]}</span>
-              {theme === t && <><span className="spacer" /><Icon name="check" size="sm" /></>}
+          {close => (['system', 'light', 'dark'] as Theme[]).map(th => (
+            <button key={th} onClick={() => { setTheme(th); close() }}>
+              <Icon name={th === 'dark' ? 'dark_mode' : th === 'light' ? 'light_mode' : 'contrast'} />
+              <span>{{ system: t('Según el sistema'), light: t('Claro'), dark: t('Oscuro') }[th]}</span>
+              {theme === th && <><span className="spacer" /><Icon name="check" size="sm" /></>}
             </button>
           ))}
         </Menu>
@@ -165,7 +165,7 @@ export default function App() {
           {close => (['es', 'en'] as Lang[]).map(l => (
             <button key={l} onClick={() => { close(); if (l !== lang) setLang(l) }}>
               <span style={{ width: 24, fontWeight: 600 }}>{l.toUpperCase()}</span>
-              <span>{l === 'es' ? 'Español' : 'English'}</span>
+              <span>{l === 'es' ? 'Español' : 'English'}</span>{/* i18n-ignore: native language names */}
               {lang === l && <><span className="spacer" /><Icon name="check" size="sm" /></>}
             </button>
           ))}
@@ -181,16 +181,16 @@ export default function App() {
             {close => <>
               <div style={{ padding: '8px 16px' }}>
                 <div className="title-s selectable">{session.identity}</div>
-                <div className="sub">{{ adc: 'Credenciales de gcloud (ADC)', sa: 'Clave de service account', impersonate: 'Impersonación' }[session.method] ?? session.method}</div>
+                <div className="sub">{{ adc: t('Credenciales de gcloud (ADC)'), sa: t('Clave de service account'), impersonate: t('Impersonación') }[session.method] ?? session.method}</div>
               </div>
               <hr />
-              <button onClick={() => { close(); disconnect() }}><Icon name="logout" /><span>Desconectar</span></button>
+              <button onClick={() => { close(); disconnect() }}><Icon name="logout" /><span>{t('Desconectar')}</span></button>
             </>}
           </Menu>
         )}
       </header>
 
-      <nav className="rail" aria-label="Navegación">
+      <nav className="rail" aria-label={t('Navegación')}>
         {nav.map(n => (
           <button key={n.id} className={`rail-item ${page === n.id ? 'active' : ''}`} disabled={!n.enabled}
             onClick={() => setPage(n.id)} aria-current={page === n.id ? 'page' : undefined}>
@@ -203,9 +203,9 @@ export default function App() {
           aria-current={page === 'about' ? 'page' : undefined} style={{ marginBottom: 16 }}>
           <span className="rail-pill" style={{ position: 'relative' }}>
             <Icon name="info" />
-            {updateAvailable && <span className="rail-dot" aria-label="Actualización disponible" />}
+            {updateAvailable && <span className="rail-dot" aria-label={t('Actualización disponible')} />}
           </span>
-          <span className="rail-label">Acerca de</span>
+          <span className="rail-label">{t('Acerca de')}</span>
         </button>
       </nav>
 

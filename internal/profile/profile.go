@@ -16,6 +16,7 @@ import (
 
 	"gcetools/internal/core"
 	"gcetools/internal/health"
+	"gcetools/internal/i18n"
 )
 
 type Profile struct {
@@ -70,7 +71,7 @@ func List() ([]Profile, error) {
 	}
 	var f file
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("%s está dañado: %w", p, err)
+		return nil, fmt.Errorf(i18n.T("%s está dañado: %w"), p, err)
 	}
 	if f.Profiles == nil {
 		f.Profiles = []Profile{}
@@ -95,22 +96,22 @@ func Get(name string) (Profile, error) {
 		names[i] = p.Name
 	}
 	if len(names) == 0 {
-		return Profile{}, fmt.Errorf("no existe el perfil %q (no hay perfiles guardados)", name)
+		return Profile{}, fmt.Errorf(i18n.T("no existe el perfil %q (no hay perfiles guardados)"), name)
 	}
-	return Profile{}, fmt.Errorf("no existe el perfil %q (disponibles: %s)", name, strings.Join(names, ", "))
+	return Profile{}, fmt.Errorf(i18n.T("no existe el perfil %q (disponibles: %s)"), name, strings.Join(names, ", "))
 }
 
 // Save creates or replaces the profile with the same name.
 func Save(p Profile) error {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" {
-		return errors.New("el perfil necesita un nombre")
+		return errors.New(i18n.T("el perfil necesita un nombre"))
 	}
 	if len(p.Name) > 60 {
-		return errors.New("el nombre del perfil es demasiado largo (máximo 60 caracteres)")
+		return errors.New(i18n.T("el nombre del perfil es demasiado largo (máximo 60 caracteres)"))
 	}
 	if p.Discover != "" && !core.ValidScope(p.Discover) {
-		return fmt.Errorf("ámbito de descubrimiento no válido %q", p.Discover)
+		return fmt.Errorf(i18n.T("ámbito de descubrimiento no válido %q"), p.Discover)
 	}
 	p.Updated = time.Now()
 	all, err := List()

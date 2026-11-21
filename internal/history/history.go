@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
@@ -79,7 +80,7 @@ var Dir = func() (string, error) {
 		}
 	}
 	if base == "" {
-		return "", errors.New("no se encontró la carpeta de datos del usuario")
+		return "", errors.New(i18n.T("no se encontró la carpeta de datos del usuario"))
 	}
 	return filepath.Join(base, "gcetools", "history"), nil
 }
@@ -131,12 +132,12 @@ func Summarize(inv *model.Inventory) Summary {
 		}
 	}
 	for _, r := range rows("gHealth") {
-		switch r["severity"] {
-		case "Alta":
+		switch r["severity"] { // Spanish or English, depending on the scan's language
+		case "Alta", "High":
 			s.High++
-		case "Media":
+		case "Media", "Medium":
 			s.Medium++
-		case "Baja":
+		case "Baja", "Low":
 			s.Low++
 		}
 	}
@@ -213,7 +214,7 @@ func List() ([]Summary, error) {
 // Load reads one stored inventory.
 func Load(id string) (*model.Inventory, error) {
 	if !reID.MatchString(id) {
-		return nil, fmt.Errorf("identificador de historial no válido: %q", id)
+		return nil, fmt.Errorf(i18n.T("identificador de historial no válido: %q"), id)
 	}
 	dir, err := Dir()
 	if err != nil {
@@ -225,7 +226,7 @@ func Load(id string) (*model.Inventory, error) {
 // Delete removes one stored scan.
 func Delete(id string) error {
 	if !reID.MatchString(id) {
-		return fmt.Errorf("identificador de historial no válido: %q", id)
+		return fmt.Errorf(i18n.T("identificador de historial no válido: %q"), id)
 	}
 	dir, err := Dir()
 	if err != nil {

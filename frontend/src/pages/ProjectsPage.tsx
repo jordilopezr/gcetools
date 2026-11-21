@@ -4,6 +4,7 @@ import type { ColDef, GridApi, SelectionChangedEvent } from 'ag-grid-community'
 import { api, errorText, loadSaveHistory, type Footprint, type HealthOptions, type HealthRule, type Modules, type Profile, type Project, type SessionInfo } from '../lib/api'
 import { gridTheme, Icon } from '../components/ui'
 import type { ScanState } from '../App'
+import { locale, sevKey, t } from '../lib/i18n'
 
 interface Props {
   session: SessionInfo
@@ -12,15 +13,16 @@ interface Props {
   notify: (m: string) => void
 }
 
-const stepLabel: Record<string, string> = {
-  disks: 'discos', instances: 'instancias', snapshots: 'snapshots', migs: 'MIGs', templates: 'templates',
-  networks: 'VPCs', subnets: 'subredes', firewalls: 'firewall', addresses: 'IPs', done: 'completado',
-  images: 'imágenes', reservations: 'reservas', commitments: 'commitments', soletenant: 'nodos sole-tenant',
-  quotas: 'cuotas', osconfig: 'inventario de SO', monitoring: 'métricas', recommender: 'recomendaciones',
-}
+// built on each call so the labels follow the current language
+const stepLabel = (): Record<string, string> => ({
+  disks: t('discos'), instances: t('instancias'), snapshots: 'snapshots', migs: 'MIGs', templates: 'templates',
+  networks: 'VPCs', subnets: t('subredes'), firewalls: 'firewall', addresses: 'IPs', done: t('completado'),
+  images: t('imágenes'), reservations: t('reservas'), commitments: 'commitments', soletenant: t('nodos sole-tenant'),
+  quotas: t('cuotas'), osconfig: t('inventario de SO'), monitoring: t('métricas'), recommender: t('recomendaciones'),
+})
 
 const defaultHealth: HealthOptions = { stoppedDays: 30, snapshotDays: 90, imageDays: 180, cpuLowPct: 10, cpuHighPct: 90, memHighPct: 90, quotaPct: 80, cudDays: 60, disabled: [] }
-const paramUnit: Record<string, string> = { stoppedDays: 'días', snapshotDays: 'días', imageDays: 'días', cudDays: 'días', cpuLowPct: '%', cpuHighPct: '%', memHighPct: '%', quotaPct: '%' }
+const paramUnit = (p: string) => (p.endsWith('Days') ? t('días') : p.endsWith('Pct') ? '%' : '')
 type NumericHealth = Exclude<keyof HealthOptions, 'disabled'>
 const fpTotal = (f?: Footprint) => (f ? f.vms + f.disks + f.other : 0)
 const selectStyle = { height: 36, borderRadius: 8, border: '1px solid var(--md-outline)', background: 'transparent', color: 'inherit', padding: '0 8px' }
@@ -45,7 +47,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     const d = new Date()
     for (let i = 1; i <= 6; i++) {
       const m = new Date(d.getFullYear(), d.getMonth() - i, 1)
-      out.push({ v: `${m.getFullYear()}${String(m.getMonth() + 1).padStart(2, '0')}`, label: m.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }) })
+      out.push({ v: `${m.getFullYear()}${String(m.getMonth() + 1).padStart(2, '0')}`, label: m.toLocaleDateString(locale(), { month: 'long', year: 'numeric' }) })
     }
     return out
   }, [])
@@ -102,11 +104,11 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
       setProjects(cur => {
         const known = new Set(cur.map(p => p.id))
         const extra = fps.filter(f => !known.has(f.projectId)).map(f => ({
-          id: f.projectId, name: '(encontrado por Cloud Asset Inventory)', number: f.number, parent: '', state: '', created: '', labels: null,
+          id: f.projectId, name: t('(encontrado por Cloud Asset Inventory)'), number: f.number, parent: '', state: '', created: '', labels: null,
         }))
         return [...cur, ...extra]
       })
-      notify(`Cloud Asset Inventory: ${withCompute.length} proyectos con recursos de Compute en ${sc.trim()}`)
+      notify(t('Cloud Asset Inventory: {0} proyectos con recursos de Compute en {1}', withCompute.length, sc.trim()))
     } catch (e) { notify(errorText(e)) } finally { setDiscovering(false) }
   }
 
@@ -124,7 +126,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     const missing = ids.filter(id => !list.some(x => x.id === id))
     if (missing.length) {
       pending.current = ids
-      setProjects(cur => [...missing.map(id => ({ id, name: '(del perfil)', number: '', parent: '', state: '', created: '', labels: null })), ...cur])
+      setProjects(cur => [...missing.map(id => ({ id, name: t('(del perfil)'), number: '', parent: '', state: '', created: '', labels: null })), ...cur])
     }
     if (p.discover) await runDiscover(p.discover, ids)
   }
@@ -140,21 +142,21 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     try {
       await api.saveProfile(p)
       setProfiles(await api.listProfiles()); setProfileName(p.name); setSaving(null)
-      notify(`Perfil "${p.name}" guardado`)
+      notify(t('Perfil "{0}" guardado', p.name))
     } catch (e) { notify(errorText(e)) }
   }
 
   const deleteProfile = async () => {
     try {
       await api.deleteProfile(profileName)
-      setProfiles(await api.listProfiles()); notify(`Perfil "${profileName}" eliminado`); setProfileName(''); setConfirmDelete(false)
+      setProfiles(await api.listProfiles()); notify(t('Perfil "{0}" eliminado', profileName)); setProfileName(''); setConfirmDelete(false)
     } catch (e) { notify(errorText(e)) }
   }
 
   const addManual = () => {
     const ids = manual.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean)
     const known = new Set(projects.map(p => p.id))
-    const extra = ids.filter(id => !known.has(id)).map(id => ({ id, name: '(añadido manualmente)', number: '', parent: '', state: '', created: '', labels: null }))
+    const extra = ids.filter(id => !known.has(id)).map(id => ({ id, name: t('(añadido manualmente)'), number: '', parent: '', state: '', created: '', labels: null }))
     setProjects(p => [...extra, ...p]); setManual('')
     setTimeout(() => gridApi.current?.forEachNode(n => { if (ids.includes(n.data!.id)) n.setSelected(true) }))
   }
@@ -170,14 +172,14 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
 
   const columnDefs = useMemo<ColDef<Project>[]>(() => [
     { field: 'id', headerName: 'Project ID', flex: 2, minWidth: 200 },
-    { field: 'name', headerName: 'Nombre', flex: 2, minWidth: 180 },
-    { field: 'number', headerName: 'Número', width: 150 },
-    { field: 'parent', headerName: 'Padre', width: 170 },
+    { field: 'name', headerName: t('Nombre'), flex: 2, minWidth: 180 },
+    { field: 'number', headerName: t('Número'), width: 150 },
+    { field: 'parent', headerName: t('Padre'), width: 170 },
     ...(footprint ? [
       { colId: 'caiVms', headerName: 'VMs (CAI)', width: 125, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.vms ?? 0, sort: 'desc' },
-      { colId: 'caiRunning', headerName: 'Encendidas', width: 115, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.running ?? 0 },
-      { colId: 'caiDisks', headerName: 'Discos', width: 100, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.disks ?? 0 },
-      { colId: 'caiOther', headerName: 'Otros', width: 95, type: 'rightAligned', headerTooltip: 'Snapshots, imágenes, templates, reservas y commitments', valueGetter: p => footprint[p.data!.id]?.other ?? 0 },
+      { colId: 'caiRunning', headerName: t('Encendidas'), width: 115, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.running ?? 0 },
+      { colId: 'caiDisks', headerName: t('Discos'), width: 100, type: 'rightAligned', valueGetter: p => footprint[p.data!.id]?.disks ?? 0 },
+      { colId: 'caiOther', headerName: t('Otros'), width: 95, type: 'rightAligned', headerTooltip: t('Snapshots, imágenes, templates, reservas y commitments'), valueGetter: p => footprint[p.data!.id]?.other ?? 0 },
     ] as ColDef<Project>[] : []),
     { colId: 'labels', headerName: 'Labels', flex: 2, minWidth: 160, valueGetter: p => Object.entries(p.data?.labels ?? {}).map(([k, v]) => `${k}=${v}`).join('; ') },
   ], [footprint])
@@ -188,70 +190,70 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     <div className="page fill">
       <div className="page-head">
         <div className="grow">
-          <h1 className="headline-s">Proyectos</h1>
+          <h1 className="headline-s">{t('Proyectos')}</h1>
           <p className="body-m muted" style={{ margin: '4px 0 0' }}>
-            {loading ? 'Buscando proyectos…' : `${projects.length} proyectos visibles · ${selected.length} seleccionados`}
+            {loading ? t('Buscando proyectos…') : t('{0} proyectos visibles · {1} seleccionados', projects.length, selected.length)}
           </p>
         </div>
         <div className="field with-icon" style={{ width: 340 }}>
           <span className="lead"><Icon name="filter_alt" /></span>
           <input id="q" value={query} placeholder=" " spellCheck={false} onChange={e => setQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') load(query) }} />
-          <label htmlFor="q">Filtro Resource Manager (parent:folders/123)</label>
+          <label htmlFor="q">{t('Filtro Resource Manager (parent:folders/123)')}</label>
         </div>
-        <button className="btn outlined" onClick={() => load(query)} disabled={loading}><Icon name="refresh" />Buscar</button>
+        <button className="btn outlined" onClick={() => load(query)} disabled={loading}><Icon name="refresh" />{t('Buscar')}</button>
       </div>
 
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <span className="label-l muted" style={{ marginRight: 4 }}>Perfil</span>
-        <select value={profileName} onChange={e => applyProfile(e.target.value)} aria-label="Perfil de escaneo" style={selectStyle}>
-          <option value="">Sin perfil</option>
+        <span className="label-l muted" style={{ marginRight: 4 }}>{t('Perfil')}</span>
+        <select value={profileName} onChange={e => applyProfile(e.target.value)} aria-label={t('Perfil de escaneo')} style={selectStyle}>
+          <option value="">{t('Sin perfil')}</option>
           {profiles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
         </select>
         {saving === null ? <>
-          <button className="btn text" onClick={() => setSaving(profileName)} title="Guarda proyectos, filtro, módulos y descubrimiento para repetir el escaneo"><Icon name="bookmark_add" />Guardar perfil</button>
+          <button className="btn text" onClick={() => setSaving(profileName)} title={t('Guarda proyectos, filtro, módulos y descubrimiento para repetir el escaneo')}><Icon name="bookmark_add" />{t('Guardar perfil')}</button>
           {profileName && (confirmDelete
-            ? <><span className="body-m">¿Eliminar "{profileName}"?</span>
-                <button className="btn text" onClick={deleteProfile}>Eliminar</button>
-                <button className="btn text" onClick={() => setConfirmDelete(false)}>Cancelar</button></>
-            : <button className="icon-btn" onClick={() => setConfirmDelete(true)} aria-label="Eliminar perfil" title="Eliminar perfil"><Icon name="delete" /></button>)}
+            ? <><span className="body-m">{t('¿Eliminar "{0}"?', profileName)}</span>
+                <button className="btn text" onClick={deleteProfile}>{t('Eliminar')}</button>
+                <button className="btn text" onClick={() => setConfirmDelete(false)}>{t('Cancelar')}</button></>
+            : <button className="icon-btn" onClick={() => setConfirmDelete(true)} aria-label={t('Eliminar perfil')} title={t('Eliminar perfil')}><Icon name="delete" /></button>)}
         </> : <>
           <div className="search" style={{ minWidth: 220 }}>
             <Icon name="bookmark" />
-            <input autoFocus value={saving} onChange={e => setSaving(e.target.value)} placeholder="Nombre del perfil" aria-label="Nombre del perfil" maxLength={60}
+            <input autoFocus value={saving} onChange={e => setSaving(e.target.value)} placeholder={t('Nombre del perfil')} aria-label={t('Nombre del perfil')} maxLength={60}
               onKeyDown={e => { if (e.key === 'Enter' && saving.trim()) saveProfile(saving); if (e.key === 'Escape') setSaving(null) }} />
           </div>
-          <button className="btn filled" disabled={!saving.trim()} onClick={() => saveProfile(saving)}>Guardar</button>
-          <button className="btn text" onClick={() => setSaving(null)}>Cancelar</button>
+          <button className="btn filled" disabled={!saving.trim()} onClick={() => saveProfile(saving)}>{t('Guardar')}</button>
+          <button className="btn text" onClick={() => setSaving(null)}>{t('Cancelar')}</button>
         </>}
         <span className="spacer" />
-        <div className="search" style={{ minWidth: 300 }} title="Cloud Asset Inventory: una sola consulta para saber qué proyectos tienen VMs, discos, snapshots o imágenes. Requiere roles/cloudasset.viewer en ese ámbito.">
+        <div className="search" style={{ minWidth: 300 }} title={t('Cloud Asset Inventory: una sola consulta para saber qué proyectos tienen VMs, discos, snapshots o imágenes. Requiere roles/cloudasset.viewer en ese ámbito.')}>
           <Icon name="travel_explore" />
-          <input value={scope} onChange={e => setScope(e.target.value)} placeholder="organizations/123 o folders/456" aria-label="Ámbito de Cloud Asset Inventory"
+          <input value={scope} onChange={e => setScope(e.target.value)} placeholder={t('organizations/123 o folders/456')} aria-label={t('Ámbito de Cloud Asset Inventory')}
             onKeyDown={e => { if (e.key === 'Enter' && scope.trim()) runDiscover(scope) }} spellCheck={false} />
         </div>
         <button className="btn outlined" disabled={!scope.trim() || discovering} onClick={() => runDiscover(scope)}>
-          <Icon name="travel_explore" />{discovering ? 'Detectando…' : 'Detectar proyectos con Compute'}
+          <Icon name="travel_explore" />{discovering ? t('Detectando…') : t('Detectar proyectos con Compute')}
         </button>
       </div>
 
       {error && <div className="banner error"><Icon name="error" /><div className="selectable">{error}<br />
-        <span className="body-s">Si no tienes permiso para listar proyectos, añádelos manualmente por ID.</span></div></div>}
+        <span className="body-s">{t('Si no tienes permiso para listar proyectos, añádelos manualmente por ID.')}</span></div></div>}
 
       {(scan.running || scan.log.length > 0) && (
         <div className="card elevated col">
           <div className="row">
             <Icon name={scan.running ? 'radar' : 'task_alt'} />
-            <span className="title-m">{scan.running ? 'Escaneando…' : 'Último escaneo'}</span>
+            <span className="title-m">{scan.running ? t('Escaneando…') : t('Último escaneo')}</span>
             <span className="spacer" />
             {scan.progress && <span className="body-m muted">
-              {scan.progress.done}/{scan.progress.total} proyectos · {scan.progress.vms} VMs · {scan.progress.errors} errores
+              {t('{0}/{1} proyectos · {2} VMs · {3} errores', scan.progress.done, scan.progress.total, scan.progress.vms, scan.progress.errors)}
             </span>}
-            {scan.running && <button className="btn text" onClick={() => api.cancelScan()}><Icon name="stop_circle" />Cancelar</button>}
+            {scan.running && <button className="btn text" onClick={() => api.cancelScan()}><Icon name="stop_circle" />{t('Cancelar')}</button>}
           </div>
           <div className={`progress ${scan.running && !scan.progress ? 'indeterminate' : ''}`}><div style={{ width: `${pct}%` }} /></div>
           {scan.running && scan.progress && scan.progress.step !== 'done' && (
-            <span className="body-s muted">Leyendo {stepLabel[scan.progress.step] ?? scan.progress.step} en <span className="mono">{scan.progress.project}</span></span>
+            <span className="body-s muted">{t('Leyendo {0} en', stepLabel()[scan.progress.step] ?? scan.progress.step)} <span className="mono">{scan.progress.project}</span></span>
           )}
           {scan.log.length > 0 && (
             <div className="log">
@@ -268,12 +270,12 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
       )}
 
       <div className="row" style={{ gap: 8 }}>
-        <span className="label-l muted" style={{ marginRight: 4 }}>Módulos opcionales</span>
+        <span className="label-l muted" style={{ marginRight: 4 }}>{t('Módulos opcionales')}</span>
         {([
-          ['osconfig', 'memory', 'SO y agentes (OS Config)'],
-          ['monitoring', 'monitoring', 'Métricas CPU/RAM'],
-          ['recommender', 'lightbulb', 'Recomendaciones'],
-          ['pricing', 'payments', 'Coste estimado'],
+          ['osconfig', 'memory', t('SO y agentes (OS Config)')],
+          ['monitoring', 'monitoring', t('Métricas CPU/RAM')],
+          ['recommender', 'lightbulb', t('Recomendaciones')],
+          ['pricing', 'payments', t('Coste estimado')],
         ] as const).map(([k, icon, label]) => (
           <button key={k} className={`chip ${modules[k] ? 'selected' : ''}`} onClick={() => toggle(k)} aria-pressed={modules[k]}>
             <Icon name={modules[k] ? 'check' : icon} size="sm" />{label}
@@ -281,31 +283,31 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
         ))}
         {modules.monitoring && (
           <select value={modules.metricsDays} onChange={e => setModules(m => ({ ...m, metricsDays: Number(e.target.value) }))}
-            aria-label="Días de métricas"
+            aria-label={t('Días de métricas')}
             style={{ height: 32, borderRadius: 8, border: '1px solid var(--md-outline-variant)', background: 'transparent', color: 'inherit', padding: '0 8px' }}>
-            {[7, 14, 30, 42].map(n => <option key={n} value={n}>{n} días</option>)}
+            {[7, 14, 30, 42].map(n => <option key={n} value={n}>{t('{0} días', n)}</option>)}
           </select>
         )}
         {modules.pricing && (
           <select value={modules.currency} onChange={e => setModules(m => ({ ...m, currency: e.target.value }))}
-            aria-label="Moneda"
+            aria-label={t('Moneda')}
             style={{ height: 32, borderRadius: 8, border: '1px solid var(--md-outline-variant)', background: 'transparent', color: 'inherit', padding: '0 8px' }}>
             {['USD', 'EUR', 'CLP', 'MXN', 'COP', 'BRL', 'GBP'].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
-        <span className="body-s muted">Si la API no está habilitada en un proyecto, el módulo se omite sin marcarlo como error.</span>
+        <span className="body-s muted">{t('Si la API no está habilitada en un proyecto, el módulo se omite sin marcarlo como error.')}</span>
         <span className="spacer" />
         <button className={`chip ${modules.fast ? 'selected' : ''}`} onClick={() => setModules(m => ({ ...m, fast: !m.fast }))} aria-pressed={!!modules.fast}
-          title="Lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory: una consulta por proyecto, o una sola para toda la organización o carpeta indicada en el ámbito de detección. Puede reflejar cambios con unos minutos de retraso. Necesita roles/cloudasset.viewer.">
-          <Icon name={modules.fast ? 'check' : 'bolt'} size="sm" />Modo rápido (Cloud Asset Inventory)
+          title={t('Lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory: una consulta por proyecto, o una sola para toda la organización o carpeta indicada en el ámbito de detección. Puede reflejar cambios con unos minutos de retraso. Necesita roles/cloudasset.viewer.')}>
+          <Icon name={modules.fast ? 'check' : 'bolt'} size="sm" />{t('Modo rápido (Cloud Asset Inventory)')}
         </button>
         <button className={`chip ${modules.billingTable ? 'selected' : ''}`} onClick={() => setShowBilling(v => !v)} aria-expanded={showBilling}
-          title="Coste neto real del mes (con CUD, SUD y descuentos) desde la exportación de facturación a BigQuery">
-          <Icon name={modules.billingTable ? 'check' : 'receipt_long'} size="sm" />Coste real (BigQuery)
+          title={t('Coste neto real del mes (con CUD, SUD y descuentos) desde la exportación de facturación a BigQuery')}>
+          <Icon name={modules.billingTable ? 'check' : 'receipt_long'} size="sm" />{t('Coste real (BigQuery)')}
           <Icon name={showBilling ? 'expand_less' : 'expand_more'} size="sm" />
         </button>
         <button className={`chip ${showRules ? 'selected' : ''}`} onClick={() => setShowRules(v => !v)} aria-expanded={showRules}>
-          <Icon name="rule" size="sm" />Reglas de salud{health.disabled.length > 0 ? ` · ${health.disabled.length} desactivadas` : ''}
+          <Icon name="rule" size="sm" />{t('Reglas de salud')}{health.disabled.length > 0 ? ` · ${t('{0} desactivadas', health.disabled.length)}` : ''}
           <Icon name={showRules ? 'expand_less' : 'expand_more'} size="sm" />
         </button>
       </div>
@@ -315,27 +317,27 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
             <div className="search" style={{ minWidth: 460, flex: 1 }}>
               <Icon name="table" />
-              <input value={modules.billingTable ?? ''} spellCheck={false} aria-label="Tabla de exportación de facturación"
+              <input value={modules.billingTable ?? ''} spellCheck={false} aria-label={t('Tabla de exportación de facturación')}
                 onChange={e => setModules(m => ({ ...m, billingTable: e.target.value.trim() }))}
-                placeholder="proyecto.dataset.gcp_billing_export_resource_v1_XXXXXX_XXXXXX_XXXXXX" />
+                placeholder={t('proyecto.dataset.gcp_billing_export_resource_v1_XXXXXX_XXXXXX_XXXXXX')} />
             </div>
-            <label className="row body-m" style={{ gap: 8 }}>Mes
+            <label className="row body-m" style={{ gap: 8 }}>{t('Mes')}
               <select value={modules.billingMonth ?? ''} onChange={e => setModules(m => ({ ...m, billingMonth: e.target.value }))} style={selectStyle}>
-                <option value="">Mes anterior (al escanear)</option>
+                <option value="">{t('Mes anterior (al escanear)')}</option>
                 {months.map(m => <option key={m.v} value={m.v}>{m.label}</option>)}
               </select>
             </label>
-            <label className="row body-m" style={{ gap: 8 }}>Límite
+            <label className="row body-m" style={{ gap: 8 }}>{t('Límite')}
               <input type="number" min={1} max={10000} value={modules.billingMaxGB || 50}
                 onChange={e => setModules(m => ({ ...m, billingMaxGB: Math.max(1, Number(e.target.value) || 50) }))}
-                aria-label="Límite de GB leídos" style={{ ...selectStyle, width: 80 }} /> GB
+                aria-label={t('Límite de GB leídos')} style={{ ...selectStyle, width: 80 }} /> GB
             </label>
-            {modules.billingTable && <button className="btn text" onClick={() => setModules(m => ({ ...m, billingTable: '' }))}>Desactivar</button>}
+            {modules.billingTable && <button className="btn text" onClick={() => setModules(m => ({ ...m, billingTable: '' }))}>{t('Desactivar')}</button>}
           </div>
           <span className="body-s muted">
-            Añade la columna "Coste real mes" en gInfo y gDisks (con la exportación <b>detallada</b>) y la pestaña gCostReal con el neto frente al estimado.
-            Es el único módulo con coste: BigQuery cobra los datos leídos (1 TiB gratis al mes). gceTools hace antes una estimación gratuita y no ejecuta la consulta si supera el límite.
-            Permisos: <span className="mono">roles/bigquery.jobUser</span> en el proyecto de la tabla y <span className="mono">roles/bigquery.dataViewer</span> en el dataset.
+            {t('Añade la columna "Coste real mes" en gInfo y gDisks (con la exportación')} <b>{t('detallada')}</b>{t(') y la pestaña gCostReal con el neto frente al estimado.')}
+            {' '}{t('Es el único módulo con coste: BigQuery cobra los datos leídos (1 TiB gratis al mes). gceTools hace antes una estimación gratuita y no ejecuta la consulta si supera el límite.')}
+            {' '}{t('Permisos:')} <span className="mono">roles/bigquery.jobUser</span> {t('en el proyecto de la tabla y')} <span className="mono">roles/bigquery.dataViewer</span> {t('en el dataset.')}
           </span>
         </div>
       )}
@@ -343,12 +345,12 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
       {showRules && (
         <div className="card outlined col" style={{ gap: 12, maxHeight: 360, overflow: 'auto' }}>
           <div className="row" style={{ gap: 8 }}>
-            <span className="title-s">Reglas de gHealth</span>
+            <span className="title-s">{t('Reglas de gHealth')}</span>
             <span className="body-s muted">
-              Se guardan en el perfil. Para exceptuar un recurso concreto, ponle el label <span className="mono">gcetools-ignore=&lt;id&gt;</span> (o <span className="mono">gcetools-ignore=all</span>) en la VM, el disco, el template o el proyecto.
+              {t('Se guardan en el perfil. Para exceptuar un recurso concreto, ponle el label')} <span className="mono">gcetools-ignore=&lt;id&gt;</span> {t('(o')} <span className="mono">gcetools-ignore=all</span>{t(') en la VM, el disco, el template o el proyecto.')}
             </span>
             <span className="spacer" />
-            <button className="btn text" onClick={() => setHealth(defaultHealth)}><Icon name="restart_alt" />Valores por defecto</button>
+            <button className="btn text" onClick={() => setHealth(defaultHealth)}><Icon name="restart_alt" />{t('Valores por defecto')}</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '4px 24px' }}>
             {rulesByCategory.map(([cat, list]) => (
@@ -359,20 +361,20 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
                   const param = r.param as NumericHealth | undefined
                   return (
                     <div key={r.id} className="row" style={{ gap: 8, minHeight: 34 }}>
-                      <label className="row body-m" style={{ gap: 8, cursor: 'pointer', flex: 1, minWidth: 0 }} title={`ID: ${r.id} · excepción en: ${r.labels}`}>
+                      <label className="row body-m" style={{ gap: 8, cursor: 'pointer', flex: 1, minWidth: 0 }} title={t('ID: {0} · excepción en: {1}', r.id, r.labels)}>
                         <input type="checkbox" checked={on} onChange={() => toggleRule(r.id)}
                           style={{ width: 18, height: 18, accentColor: 'var(--md-primary)', flexShrink: 0 }} />
                         <span style={{ opacity: on ? 1 : 0.55 }}>{r.title}</span>
-                        <span className={`badge sev-${r.severity}`}>{r.severity}</span>
+                        <span className={`badge sev-${sevKey(r.severity)}`}>{r.severity}</span>
                         <span className="mono body-s muted">{r.id}</span>
                       </label>
                       {param && (
                         <label className="row body-s" style={{ gap: 4 }}>
                           <input type="number" min={1} max={param.endsWith('Pct') ? 100 : 3650} value={health[param]} disabled={!on}
                             onChange={e => { const v = Number(e.target.value); if (v > 0) setHealth(h => ({ ...h, [param]: v })) }}
-                            aria-label={`Umbral de ${r.title}`}
+                            aria-label={t('Umbral de {0}', r.title)}
                             style={{ width: 64, height: 28, borderRadius: 6, border: '1px solid var(--md-outline-variant)', background: 'transparent', color: 'inherit', padding: '0 6px' }} />
-                          {paramUnit[param]}
+                          {paramUnit(param)}
                         </label>
                       )}
                     </div>
@@ -387,22 +389,22 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
       <div className="toolbar">
         <div className="search">
           <Icon name="search" />
-          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filtrar la lista" aria-label="Filtrar proyectos" />
+          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t('Filtrar la lista')} aria-label={t('Filtrar proyectos')} />
         </div>
         <div className="search" style={{ minWidth: 320 }}>
           <Icon name="add" />
-          <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Añadir IDs manualmente (separados por comas)"
-            onKeyDown={e => { if (e.key === 'Enter' && manual.trim()) addManual() }} aria-label="Añadir proyectos por ID" />
+          <input value={manual} onChange={e => setManual(e.target.value)} placeholder={t('Añadir IDs manualmente (separados por comas)')}
+            onKeyDown={e => { if (e.key === 'Enter' && manual.trim()) addManual() }} aria-label={t('Añadir proyectos por ID')} />
         </div>
         <span className="spacer" />
         <label className="row body-m" style={{ gap: 8 }}>
-          Paralelismo
+          {t('Paralelismo')}
           <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} style={selectStyle}>
             {[2, 4, 8, 16, 32].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <button className="btn filled" disabled={selected.length === 0 || scan.running} onClick={start}>
-          <Icon name="play_arrow" />Escanear {selected.length > 0 ? `(${selected.length})` : ''}
+          <Icon name="play_arrow" />{t('Escanear')} {selected.length > 0 ? `(${selected.length})` : ''}
         </button>
       </div>
 
@@ -418,7 +420,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           rowSelection={{ mode: 'multiRow', checkboxes: true, headerCheckbox: true, selectAll: 'filtered' }}
           onGridReady={e => { gridApi.current = e.api }}
           onSelectionChanged={(e: SelectionChangedEvent<Project>) => setSelected(e.api.getSelectedRows().map(r => r.id))}
-          overlayNoRowsTemplate="No hay proyectos visibles con esta identidad"
+          overlayNoRowsTemplate={t('No hay proyectos visibles con esta identidad')}
         />
       </div>
     </div>

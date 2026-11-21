@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Informe gceTools · {{.Scanned}}</title>
+<title>{{t "Informe gceTools"}} · {{.Scanned}}</title>
 <style>
   :root {
     --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --bg: #ffffff; --panel: #f6f8fc;
@@ -50,10 +50,10 @@
 <main>
   <header>
     <div>
-      <h1>Informe de inventario de Compute Engine</h1>
-      <div class="muted">Escaneo del {{.Scanned}} · {{.ProjectsOK}} de {{.Projects}} proyectos leídos</div>
+      <h1>{{t "Informe de inventario de Compute Engine"}}</h1>
+      <div class="muted">{{tf "Escaneo del %s · %d de %d proyectos leídos" .Scanned .ProjectsOK .Projects}}</div>
     </div>
-    <div class="meta">{{if .Identity}}Identidad: {{.Identity}}<br>{{end}}Generado el {{.Generated}}</div>
+    <div class="meta">{{if .Identity}}{{t "Identidad:"}} {{.Identity}}<br>{{end}}{{tf "Generado el %s" .Generated}}</div>
   </header>
 
   <div class="kpis">
@@ -63,49 +63,49 @@
 
   {{if .HasDiff}}
   <section>
-    <h2>Cambios desde el escaneo del {{.DiffSince}}</h2>
-    <p>{{.Added}} recursos nuevos, {{.Removed}} eliminados y {{.Modified}} modificados{{if .CostDelta}}; diferencia de coste estimado: <b>{{.CostDelta}}</b>/mes{{end}}.</p>
+    <h2>{{tf "Cambios desde el escaneo del %s" .DiffSince}}</h2>
+    <p>{{tf "%d recursos nuevos, %d eliminados y %d modificados" .Added .Removed .Modified}}{{if .CostDelta}}{{t "; diferencia de coste estimado:"}} <b>{{.CostDelta}}</b>{{t "/mes"}}{{end}}.</p>
     {{if .Relevant}}
     <table>
-      <thead><tr><th>Cambio relevante</th><th>Proyecto</th><th>Recurso</th><th>Detalle</th></tr></thead>
+      <thead><tr><th>{{t "Cambio relevante"}}</th><th>{{t "Proyecto"}}</th><th>{{t "Recurso"}}</th><th>{{t "Detalle"}}</th></tr></thead>
       <tbody>{{range .Relevant}}<tr><td>{{.Reason}}</td><td>{{.Project}}</td><td>{{.Resource}}</td><td class="detail">{{.What}}</td></tr>{{end}}</tbody>
     </table>
-    {{else}}<p class="muted">Ningún cambio relevante (redimensionados, reglas abiertas a Internet, discos huérfanos nuevos…).</p>{{end}}
+    {{else}}<p class="muted">{{t "Ningún cambio relevante (redimensionados, reglas abiertas a Internet, discos huérfanos nuevos…)."}}</p>{{end}}
   </section>
   {{end}}
 
   <section>
-    <h2>Hallazgos principales</h2>
+    <h2>{{t "Hallazgos principales"}}</h2>
     {{if .Findings}}
     <table>
-      <thead><tr><th>Severidad</th><th>Hallazgo</th><th>Proyecto</th><th>Recurso</th></tr></thead>
-      <tbody>{{range .Findings}}<tr><td><span class="sev {{.Severity}}">{{.Severity}}</span></td><td>{{.Rule}}<div class="detail">{{.Detail}}</div></td><td>{{.Project}}</td><td>{{.Resource}}</td></tr>{{end}}</tbody>
+      <thead><tr><th>{{t "Severidad"}}</th><th>{{t "Hallazgo"}}</th><th>{{t "Proyecto"}}</th><th>{{t "Recurso"}}</th></tr></thead>
+      <tbody>{{range .Findings}}<tr><td><span class="sev {{.Level}}">{{.Severity}}</span></td><td>{{.Rule}}<div class="detail">{{.Detail}}</div></td><td>{{.Project}}</td><td>{{.Resource}}</td></tr>{{end}}</tbody>
     </table>
-    <p class="note">{{len .Findings}} de {{.FindingsTotal}} hallazgos ({{.High}} altos, {{.Medium}} medios, {{.Low}} bajos). La lista completa está en la pestaña gHealth del inventario.</p>
-    {{else}}<p class="muted">Sin hallazgos de severidad alta o media.</p>{{end}}
+    <p class="note">{{tf "%d de %d hallazgos (%d altos, %d medios, %d bajos). La lista completa está en la pestaña gHealth del inventario." (len .Findings) .FindingsTotal .High .Medium .Low}}</p>
+    {{else}}<p class="muted">{{t "Sin hallazgos de severidad alta o media."}}</p>{{end}}
   </section>
 
   {{if .Costs}}
   <section>
-    <h2>Coste mensual por proyecto</h2>
+    <h2>{{t "Coste mensual por proyecto"}}</h2>
     <table>
-      <thead><tr><th>Proyecto</th><th class="num">VMs encendidas</th>{{if .Currency}}<th class="num">Estimado lista ({{.Currency}})</th>{{end}}{{if .RealCurrency}}<th class="num">Real neto ({{.RealCurrency}})</th>{{end}}</tr></thead>
+      <thead><tr><th>{{t "Proyecto"}}</th><th class="num">{{t "VMs encendidas"}}</th>{{if .Currency}}<th class="num">{{tf "Estimado lista (%s)" .Currency}}</th>{{end}}{{if .RealCurrency}}<th class="num">{{tf "Real neto (%s)" .RealCurrency}}</th>{{end}}</tr></thead>
       <tbody>{{$cur := .Currency}}{{$real := .RealCurrency}}{{range .Costs}}<tr><td>{{.Project}}</td><td class="num">{{.VMs}}</td>{{if $cur}}<td class="num">{{n0 .List}}</td>{{end}}{{if $real}}<td class="num">{{if .HasReal}}{{n0 .Real}}{{end}}</td>{{end}}</tr>{{end}}</tbody>
     </table>
-    <p class="note">{{if .CostsMore}}Y {{.CostsMore}} proyectos más. {{end}}El estimado usa precios de lista on-demand (730 h/mes) sin descuentos; el real, si aparece, es el neto de la exportación de facturación.</p>
+    <p class="note">{{if .CostsMore}}{{tf "Y %d proyectos más." .CostsMore}} {{end}}{{t "El estimado usa precios de lista on-demand (730 h/mes) sin descuentos; el real, si aparece, es el neto de la exportación de facturación."}}</p>
   </section>
   {{end}}
 
   {{if .Failed}}
   <section>
-    <h2>Proyectos no leídos por completo</h2>
+    <h2>{{t "Proyectos no leídos por completo"}}</h2>
     <ul class="plain">{{range .Failed}}<li>{{.}}</li>{{end}}</ul>
-    <p class="note">Sus datos pueden faltar o estar incompletos. El detalle está en la pestaña gErrors.</p>
+    <p class="note">{{t "Sus datos pueden faltar o estar incompletos. El detalle está en la pestaña gErrors."}}</p>
   </section>
   {{end}}
 
   <footer>
-    <span>Generado con gceTools {{.Version}} · solo lectura (scope cloud-platform.read-only)</span>
+    <span>{{tf "Generado con gceTools %s · solo lectura (scope cloud-platform.read-only)" .Version}}</span>
     {{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{end}}
   </footer>
 </main>

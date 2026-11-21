@@ -37,7 +37,8 @@ func TestCoverage(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && (d.Name() == "node_modules" || d.Name() == "frontend" || d.Name() == "build" || strings.HasPrefix(d.Name(), ".")) {
+		// path != root: the root itself is "../..", which starts with a dot.
+		if d.IsDir() && path != root && (d.Name() == "node_modules" || d.Name() == "frontend" || d.Name() == "build" || strings.HasPrefix(d.Name(), ".")) {
 			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -83,6 +84,9 @@ func TestCoverage(t *testing.T) {
 	}
 	for s, pos := range missing {
 		t.Errorf("%s: sin traducción: %q", pos, s)
+	}
+	for _, c := range conflicts {
+		t.Errorf("traducción duplicada con valores distintos: %s", c)
 	}
 	for k, v := range en {
 		if verbs(k) != verbs(v) {

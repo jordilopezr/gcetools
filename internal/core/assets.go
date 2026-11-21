@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"gcetools/internal/collect"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	cloudasset "google.golang.org/api/cloudasset/v1"
@@ -126,9 +127,9 @@ func assetError(err error, parent string) error {
 	kind, msg := collect.Classify(err)
 	switch kind {
 	case model.ErrPermission:
-		msg += fmt.Sprintf(". Hace falta roles/cloudasset.viewer en %s", parent)
+		msg += i18n.Tf(". Hace falta roles/cloudasset.viewer en %s", parent)
 	case model.ErrAPIDisabled:
-		msg += ". Habilita la Cloud Asset API en el quota project (o en el proyecto de la service account)"
+		msg += i18n.T(". Habilita la Cloud Asset API en el quota project (o en el proyecto de la service account)")
 	}
 	return fmt.Errorf("Cloud Asset Inventory: %s", msg)
 }

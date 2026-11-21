@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { api, CURRENT, errorText, type ExportFormat, type Inventory, type SnapshotInfo } from '../lib/api'
 import { Icon, Menu } from '../components/ui'
 import SheetBrowser, { fmtDate } from '../components/SheetBrowser'
+import { num, t, tc } from '../lib/i18n'
 
 export interface CompareState {
   before: SnapshotInfo | null
@@ -29,16 +30,16 @@ function SnapshotCard({ label, hint, snap, onPick, onCurrent, canCurrent, busy }
           <div className="col" style={{ gap: 2, minWidth: 0 }}>
             <span className="title-m selectable" style={{ overflowWrap: 'anywhere' }}>{snap.name}</span>
             <span className="body-s muted">
-              {fmtDate(snap.startedAt)} · {snap.projects} proyectos · {snap.vms} VMs{snap.version ? ` · v${snap.version}` : ''}
+              {fmtDate(snap.startedAt)} · {t('{0} proyectos · {1} VMs', snap.projects, snap.vms)}{snap.version ? ` · v${snap.version}` : ''}
             </span>
             {snap.identity && <span className="body-s muted selectable">{snap.identity}</span>}
           </div>
         </div>
       ) : <span className="body-m muted">{hint}</span>}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn outlined" onClick={onPick} disabled={busy}><Icon name="folder_open" />{snap ? 'Cambiar' : 'Elegir snapshot JSON'}</button>
+        <button className="btn outlined" onClick={onPick} disabled={busy}><Icon name="folder_open" />{snap ? t('Cambiar') : t('Elegir snapshot JSON')}</button>
         {onCurrent && canCurrent && snap?.path !== CURRENT && (
-          <button className="btn text" onClick={onCurrent} disabled={busy}><Icon name="table_view" />Usar el inventario actual</button>
+          <button className="btn text" onClick={onCurrent} disabled={busy}><Icon name="table_view" />{t('Usar el inventario actual')}</button>
         )}
       </div>
     </div>
@@ -69,22 +70,26 @@ export default function ComparePage({ state, setState, hasInventory, notify }: P
   const doExport = async (f: ExportFormat, sep = ',') => {
     try {
       const path = await api.exportDiff(f, sep)
-      if (path) notify(`Exportado a ${path}`)
+      if (path) notify(t('Exportado a {0}', path))
     } catch (e) { notify(errorText(e)) }
   }
 
   const stats = useMemo(() => {
     if (!result) return []
-    const rows = result.sheets.find(s => s.name === 'Resumen')?.rows ?? []
+    // sheet names and the cost property follow the language of the backend,
+    // so find them by their columns and accept either language
+    const has = (key: string) => result.sheets.find(s => s.columns.some(c => c.key === key))
+    const rows = (result.sheets.find(s => s.name === 'Resumen') ?? has('modified'))?.rows ?? []
     const sum = (k: string) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0)
-    const meta = result.sheets.find(s => s.name === 'Metadatos')?.rows ?? []
-    const cost = meta.find(r => r.property === 'Diferencia de coste/mes')?.value as string | undefined
+    const meta = (result.sheets.find(s => s.name === 'Metadatos') ?? has('property'))?.rows ?? []
+    const costKeys = ['Diferencia de coste/mes', t('Diferencia de coste/mes')]
+    const cost = meta.find(r => costKeys.includes(String(r.property)))?.value as string | undefined
     return [
-      { k: 'Altas', v: sum('added').toLocaleString('es-ES') },
-      { k: 'Bajas', v: sum('removed').toLocaleString('es-ES') },
-      { k: 'Recursos modificados', v: sum('modified').toLocaleString('es-ES') },
-      { k: 'Cambios relevantes', v: sum('relevant').toLocaleString('es-ES'), alert: sum('relevant') > 0 },
-      ...(cost ? [{ k: 'Diferencia de coste/mes', v: cost }] : []),
+      { k: tc('diff', 'Altas'), v: num(sum('added')) },
+      { k: tc('diff', 'Bajas'), v: num(sum('removed')) },
+      { k: t('Recursos modificados'), v: num(sum('modified')) },
+      { k: t('Cambios relevantes'), v: num(sum('relevant')), alert: sum('relevant') > 0 },
+      ...(cost ? [{ k: t('Diferencia de coste/mes'), v: cost }] : []),
     ]
   }, [result])
 
@@ -94,31 +99,31 @@ export default function ComparePage({ state, setState, hasInventory, notify }: P
     <div className={`page ${result ? 'fill' : ''}`}>
       <div className="page-head">
         <div className="grow">
-          <h1 className="headline-s">Comparar inventarios</h1>
+          <h1 className="headline-s">{t('Comparar inventarios')}</h1>
           <p className="body-m muted" style={{ margin: '4px 0 0' }}>
-            Altas, bajas y cambios entre dos snapshots JSON (Inventario → Exportar → Snapshot JSON). No necesita conexión a Google Cloud.
+            {t('Altas, bajas y cambios entre dos snapshots JSON (Inventario → Exportar → Snapshot JSON). No necesita conexión a Google Cloud.')}
           </p>
         </div>
         {result && (
-          <Menu trigger={open => <button className="btn filled" onClick={open}><Icon name="download" />Exportar</button>}>
+          <Menu trigger={open => <button className="btn filled" onClick={open}><Icon name="download" />{t('Exportar')}</button>}>
             {close => <>
-              <button onClick={() => { close(); doExport('xlsx') }}><Icon name="table" /><div><div>Excel (.xlsx)</div><div className="sub">Resumen, Altas, Bajas, Cambios y Metadatos</div></div></button>
-              <button onClick={() => { close(); doExport('csv', ',') }}><Icon name="csv" /><div><div>CSV (coma)</div><div className="sub">ZIP con un CSV por pestaña</div></div></button>
-              <button onClick={() => { close(); doExport('csv', ';') }}><Icon name="csv" /><div><div>CSV (punto y coma)</div><div className="sub">Para Excel con configuración regional española</div></div></button>
+              <button onClick={() => { close(); doExport('xlsx') }}><Icon name="table" /><div><div>Excel (.xlsx)</div><div className="sub">{t('Resumen, Altas, Bajas, Cambios y Metadatos')}</div></div></button>
+              <button onClick={() => { close(); doExport('csv', ',') }}><Icon name="csv" /><div><div>{t('CSV (coma)')}</div><div className="sub">{t('ZIP con un CSV por pestaña')}</div></div></button>
+              <button onClick={() => { close(); doExport('csv', ';') }}><Icon name="csv" /><div><div>{t('CSV (punto y coma)')}</div><div className="sub">{t('Para Excel con configuración regional española')}</div></div></button>
             </>}
           </Menu>
         )}
       </div>
 
       <div className="row" style={{ gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
-        <SnapshotCard label="Anterior (A)" hint="El inventario de referencia, por ejemplo el del mes pasado." snap={before}
+        <SnapshotCard label={t('Anterior (A)')} hint={t('El inventario de referencia, por ejemplo el del mes pasado.')} snap={before}
           onPick={() => pick('before')} canCurrent={false} busy={busy} />
         <div className="row" style={{ alignSelf: 'center' }}><Icon name="arrow_forward" /></div>
-        <SnapshotCard label="Nuevo (B)" hint="El inventario más reciente: otro snapshot o el escaneo que tienes abierto." snap={after}
+        <SnapshotCard label={t('Nuevo (B)')} hint={t('El inventario más reciente: otro snapshot o el escaneo que tienes abierto.')} snap={after}
           onPick={() => pick('after')} onCurrent={useCurrent} canCurrent={hasInventory} busy={busy} />
         <div className="row" style={{ alignSelf: 'center' }}>
           <button className="btn filled" onClick={run} disabled={!before || !after || busy}>
-            <Icon name="compare_arrows" />{busy ? 'Comparando…' : 'Comparar'}
+            <Icon name="compare_arrows" />{busy ? t('Comparando…') : t('Comparar')}
           </button>
         </div>
       </div>
@@ -134,11 +139,11 @@ export default function ComparePage({ state, setState, hasInventory, notify }: P
         </div>
         {noChanges && (
           <div className="banner info"><Icon name="check_circle" />
-            <span className="body-m">No hay diferencias en los recursos comparados. Revisa la pestaña Metadatos para ver qué se pudo comparar.</span>
+            <span className="body-m">{t('No hay diferencias en los recursos comparados. Revisa la pestaña Metadatos para ver qué se pudo comparar.')}</span>
           </div>
         )}
         <SheetBrowser key={`${before?.path}|${after?.path}|${result.meta.finishedAt}`} sheets={result.sheets}
-          emptyText="Sin diferencias de este tipo." />
+          emptyText={t('Sin diferencias de este tipo.')} />
       </>}
     </div>
   )

@@ -42,6 +42,10 @@ Comandos:
   login     inicia sesión con Google sin gcloud (cliente OAuth de tu organización)
   logout    cierra la sesión de Google guardada en el llavero
   version   muestra la versión y si hay una más reciente
+
+Opción global:
+  --lang es|en  idioma de los mensajes y de los archivos generados
+                (también GCETOOLS_LANG; por defecto, el idioma del sistema)
 `
 
 // Dispatch runs a console subcommand. ok is false when args name none, so
@@ -70,7 +74,7 @@ func Dispatch(args []string) (code int, ok bool) {
 	case "version", "--version":
 		return Version(), true
 	case "help", "--help", "-h":
-		fmt.Print(help)
+		fmt.Print(i18n.T(help))
 		return 0, true
 	}
 	return 0, false
@@ -78,11 +82,11 @@ func Dispatch(args []string) (code int, ok bool) {
 
 func Diff(args []string) int {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprint(fs.Output(), diffUsage); fs.PrintDefaults() }
-	out := fs.String("out", "gcetools-diff-"+time.Now().Format("20060102-1504")+".xlsx", "archivo de salida (.xlsx, .zip/.csv, .json)")
-	format := fs.String("format", "", "xlsx | csv | json (por defecto según la extensión)")
-	sep := fs.String("csv-sep", ",", "separador CSV (usa ';' para Excel en español)")
-	failRelevant := fs.Bool("fail-on-relevant", false, "termina con código 3 si hay cambios relevantes")
+	fs.Usage = func() { fmt.Fprint(fs.Output(), i18n.T(diffUsage)); fs.PrintDefaults() }
+	out := fs.String("out", "gcetools-diff-"+time.Now().Format("20060102-1504")+".xlsx", i18n.T("archivo de salida (.xlsx, .zip/.csv, .json)"))
+	format := fs.String("format", "", i18n.T("xlsx | csv | json (por defecto según la extensión)"))
+	sep := fs.String("csv-sep", ",", i18n.T("separador CSV (usa ';' para Excel en español)"))
+	failRelevant := fs.Bool("fail-on-relevant", false, i18n.T("termina con código 3 si hay cambios relevantes"))
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -94,7 +98,7 @@ func Diff(args []string) int {
 	for i, p := range fs.Args() {
 		inv, err := export.ReadJSON(p)
 		if err != nil {
-			return fail("%v", err)
+			return fail(err.Error())
 		}
 		in[i] = diff.Input{Inv: inv, Label: filepath.Base(p)}
 	}
@@ -106,11 +110,11 @@ func Diff(args []string) int {
 	}
 	r := []rune(*sep)
 	if len(r) != 1 {
-		return fail("--csv-sep debe ser un único carácter")
+		return fail(i18n.T("--csv-sep debe ser un único carácter"))
 	}
-	path, err := export.Write(res, *out, f, r[0])
+	path, err := export.Write(diff.Display(res), *out, f, r[0])
 	if err != nil {
-		return fail("error al exportar: %v", err)
+		return fail(i18n.Tf("error al exportar: %v", err))
 	}
 	var added, removed, modified, relevant int64
 	for _, row := range res.Sheet(diff.SSummary).Rows {
@@ -119,8 +123,8 @@ func Diff(args []string) int {
 		modified += row["modified"].(int64)
 		relevant += row["relevant"].(int64)
 	}
-	fmt.Fprintf(os.Stderr, "%d altas, %d bajas, %d recursos modificados (%d cambios relevantes) → %s\n",
-		added, removed, modified, relevant, path)
+	fmt.Fprint(os.Stderr, i18n.Tf("%d altas, %d bajas, %d recursos modificados (%d cambios relevantes) → %s\n",
+		added, removed, modified, relevant, path))
 	printRelevant(res)
 	if *failRelevant && relevant > 0 {
 		return 3

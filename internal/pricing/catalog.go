@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/i18n"
+
 	billing "google.golang.org/api/cloudbilling/v1"
 	"google.golang.org/api/option"
 )
@@ -62,7 +64,7 @@ func Load(ctx context.Context, currency string, maxAge time.Duration, clients ..
 		_ = writeCache(path, c)
 		return c, nil
 	}
-	return nil, fmt.Errorf("no se pudo descargar el catálogo de precios: %w", lastErr)
+	return nil, fmt.Errorf(i18n.T("no se pudo descargar el catálogo de precios: %w"), lastErr)
 }
 
 func fetch(ctx context.Context, hc *http.Client, currency string) (*Catalog, error) {

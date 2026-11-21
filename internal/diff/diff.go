@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"gcetools/internal/collect"
+	"gcetools/internal/health"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
-// Output sheet names.
+// Output sheet names (machine values: titles are translated, names are not).
 const (
 	SSummary = "Resumen"
 	SAdded   = "Altas"
@@ -94,13 +96,15 @@ type Input struct {
 	Label string // file name or "Inventario actual"
 }
 
+// c builds a column; the Spanish title is translated into the current
+// language (TestSchemaTranslated checks every title has an English entry).
 func c(key, title string, t model.ColType, w float64) model.Column {
-	return model.Column{Key: key, Title: title, Type: t, Width: w}
+	return model.Column{Key: key, Title: i18n.T(title), Type: t, Width: w}
 }
 
 func newResult() *model.Inventory {
 	sheet := func(name, title, desc string, cols ...model.Column) *model.Sheet {
-		return &model.Sheet{Name: name, Title: title, Description: desc, Columns: cols, Rows: []model.Row{}}
+		return &model.Sheet{Name: name, Title: i18n.T(title), Description: i18n.T(desc), Columns: cols, Rows: []model.Row{}}
 	}
 	common := []model.Column{
 		c("relevant", "Relevante", model.TBool, 10), c("reason", "Motivo", model.TString, 30),
@@ -144,7 +148,8 @@ func newCoverage(inv *model.Inventory) coverage {
 			id := str(r, "projectId")
 			cv.listed[id] = true
 			st := str(r, "scanStatus")
-			if strings.HasPrefix(st, "OK") || strings.HasPrefix(st, "Parcial") {
+			// Statuses are written in the language of the scan.
+			if strings.HasPrefix(st, "OK") || strings.HasPrefix(st, "Parcial") || strings.HasPrefix(st, "Partial") {
 				cv.scanned[id] = true
 			}
 		}
@@ -373,13 +378,13 @@ func Compare(a, b Input) *model.Inventory {
 	side := func(label string, in Input) {
 		m := in.Inv.Meta
 		meta(label, in.Label)
-		meta(label+": fecha", fmtTime(m.StartedAt))
-		meta(label+": identidad", m.Identity)
-		meta(label+": proyectos", fmt.Sprintf("%d (%d OK)", m.Projects, m.ProjectsOK))
-		meta(label+": versión", m.Version)
+		meta(label+": "+i18n.T("fecha"), fmtTime(m.StartedAt))
+		meta(label+": "+i18n.T("identidad"), m.Identity)
+		meta(label+": "+i18n.T("proyectos"), fmt.Sprintf("%d (%d OK)", m.Projects, m.ProjectsOK))
+		meta(label+": "+i18n.T("versión"), m.Version)
 	}
-	side("Anterior", a)
-	side("Nuevo", b)
+	side(i18n.T("Anterior"), a)
+	side(i18n.T("Nuevo"), b)
 	if !cova.all && !covb.all {
 		var onlyA, onlyB []string
 		for p := range cova.listed {
@@ -395,10 +400,10 @@ func Compare(a, b Input) *model.Inventory {
 		slices.Sort(onlyA)
 		slices.Sort(onlyB)
 		if len(onlyA) > 0 {
-			meta("Proyectos solo en el anterior", strings.Join(onlyA, ", "))
+			meta(i18n.T("Proyectos solo en el anterior"), strings.Join(onlyA, ", "))
 		}
 		if len(onlyB) > 0 {
-			meta("Proyectos solo en el nuevo", strings.Join(onlyB, ", "))
+			meta(i18n.T("Proyectos solo en el nuevo"), strings.Join(onlyB, ", "))
 		}
 	}
 	for _, sp := range specs {
@@ -408,19 +413,19 @@ func Compare(a, b Input) *model.Inventory {
 				list = append(list, p)
 			}
 			slices.Sort(list)
-			meta("No comparado: "+sp.sheet, strings.Join(list, ", ")+" (el proyecto no se leyó completo en alguno de los dos escaneos)")
+			meta(i18n.Tf("No comparado: %s", sp.sheet), i18n.Tf("%s (el proyecto no se leyó completo en alguno de los dos escaneos)", strings.Join(list, ", ")))
 		}
 	}
 	if money {
 		ta, tb := totalCost(a.Inv), totalCost(b.Inv)
 		cur := b.Inv.Meta.Currency
-		meta("Coste/mes estimado anterior", fmt.Sprintf("%.2f %s", ta, cur))
-		meta("Coste/mes estimado nuevo", fmt.Sprintf("%.2f %s", tb, cur))
-		meta("Diferencia de coste/mes", fmt.Sprintf("%+.2f %s", tb-ta, cur))
+		meta(i18n.T("Coste/mes estimado anterior"), fmt.Sprintf("%.2f %s", ta, cur))
+		meta(i18n.T("Coste/mes estimado nuevo"), fmt.Sprintf("%.2f %s", tb, cur))
+		meta(i18n.T("Diferencia de coste/mes"), fmt.Sprintf("%+.2f %s", tb-ta, cur))
 	} else {
-		meta("Costes", "No comparados: algún inventario no tiene costes o usan monedas distintas")
+		meta(i18n.T("Costes"), i18n.T("No comparados: algún inventario no tiene costes o usan monedas distintas"))
 	}
-	meta("No se comparan", "gCPU y gMemory (repiten gInfo); gQuota, gPerf, gRecommend, gCost, gErrors y gMetaData (cambian en cada escaneo); snapshots creados por schedule (rotan a diario); fechas de último arranque/parada y antigüedades")
+	meta(i18n.T("No se comparan"), i18n.T("gCPU y gMemory (repiten gInfo); gQuota, gPerf, gRecommend, gCost, gErrors y gMetaData (cambian en cada escaneo); snapshots creados por schedule (rotan a diario); fechas de último arranque/parada y antigüedades"))
 
 	out.Meta = model.Meta{Tool: "gceTools", Version: b.Inv.Meta.Version, Identity: b.Inv.Meta.Identity,
 		StartedAt: a.Inv.Meta.StartedAt, FinishedAt: b.Inv.Meta.StartedAt, Projects: b.Inv.Meta.Projects,
@@ -435,67 +440,70 @@ func addedReason(sheet string, r model.Row) string {
 	switch sheet {
 	case collect.SInfo:
 		if str(r, "externalIP") != "" {
-			return "VM nueva con IP pública"
+			return i18n.T("VM nueva con IP pública")
 		}
 	case collect.SFirewall:
 		if truthy(r["openToInternet"]) && !strings.EqualFold(str(r, "action"), "deny") {
-			return "Regla nueva abierta a Internet"
+			return i18n.T("Regla nueva abierta a Internet")
 		}
 	case collect.SDisks:
 		if truthy(r["orphan"]) {
-			return "Disco huérfano nuevo"
+			return i18n.T("Disco huérfano nuevo")
 		}
 	case collect.SHealth:
-		if str(r, "severity") == "Alta" {
-			return "Hallazgo nuevo de severidad alta"
+		if health.Level(str(r, "severity")) == health.High {
+			return i18n.T("Hallazgo nuevo de severidad alta")
 		}
 	case collect.SCommit:
-		return "Commitment (CUD) nuevo"
+		return i18n.T("Commitment (CUD) nuevo")
 	}
 	return ""
 }
 
+// changedReason receives before/after rendered by norm, so booleans come in
+// the current language (yes).
 func changedReason(sheet, field, before, after string, r model.Row) string {
+	yes := i18n.T("Sí")
 	switch sheet {
 	case collect.SInfo:
 		switch field {
 		case "machineType":
-			return "Cambio de tamaño de la VM"
+			return i18n.T("Cambio de tamaño de la VM")
 		case "serviceAccount", "scopes":
-			return "Cambio de identidad (service account)"
+			return i18n.T("Cambio de identidad (service account)")
 		case "secureBoot", "vtpm", "confidential":
-			return "Cambio en Shielded/Confidential VM"
+			return i18n.T("Cambio en Shielded/Confidential VM")
 		case "externalIP":
 			if before == "" {
-				return "IP pública añadida"
+				return i18n.T("IP pública añadida")
 			}
 		case "deletionProtection":
-			if after == "No" {
-				return "Deletion protection desactivada"
+			if after != "" && after != yes {
+				return i18n.T("Deletion protection desactivada")
 			}
 		}
 	case collect.SNetwork:
 		if field == "externalIP" && before == "" {
-			return "IP pública añadida"
+			return i18n.T("IP pública añadida")
 		}
 	case collect.SFirewall:
-		if field == "openToInternet" && after == "Sí" {
-			return "Regla abierta a Internet"
+		if field == "openToInternet" && after == yes {
+			return i18n.T("Regla abierta a Internet")
 		}
 		if truthy(r["openToInternet"]) && slices.Contains([]string{"rules", "sourceRanges", "targets", "disabled", "action"}, field) {
-			return "Cambio en una regla abierta a Internet"
+			return i18n.T("Cambio en una regla abierta a Internet")
 		}
 	case collect.SDisks:
-		if field == "orphan" && after == "Sí" {
-			return "Disco que se quedó huérfano"
+		if field == "orphan" && after == yes {
+			return i18n.T("Disco que se quedó huérfano")
 		}
 	case collect.SHealth:
-		if field == "severity" && after == "Alta" {
-			return "Hallazgo que pasa a severidad alta"
+		if field == "severity" && health.Level(after) == health.High {
+			return i18n.T("Hallazgo que pasa a severidad alta")
 		}
 	case collect.SCommit:
 		if field == "status" {
-			return "Commitment cambia de estado"
+			return i18n.T("Commitment cambia de estado")
 		}
 	}
 	return ""
@@ -523,9 +531,9 @@ func norm(col model.Column, v any) string {
 		return ""
 	case bool:
 		if x {
-			return "Sí"
+			return i18n.T("Sí")
 		}
-		return "No"
+		return i18n.T("No")
 	case time.Time:
 		return fmtTime(x)
 	case string:
@@ -573,4 +581,35 @@ func number(v any) float64 {
 		return float64(x)
 	}
 	return 0
+}
+
+// Display returns res with its sheet names in the current language, for the
+// UI and exports. Compare keeps the Spanish names because the report and the
+// CLI look sheets up by them.
+func Display(res *model.Inventory) *model.Inventory {
+	if res == nil {
+		return nil
+	}
+	out := &model.Inventory{Meta: res.Meta, Errors: res.Errors}
+	for _, s := range res.Sheets {
+		out.Sheets = append(out.Sheets, &model.Sheet{Name: sheetName(s.Name), Title: s.Title,
+			Description: s.Description, Columns: s.Columns, Rows: s.Rows})
+	}
+	return out
+}
+
+func sheetName(name string) string {
+	switch name {
+	case SSummary:
+		return i18n.T("Resumen")
+	case SAdded:
+		return i18n.T("Altas")
+	case SRemoved:
+		return i18n.T("Bajas")
+	case SChanged:
+		return i18n.T("Cambios")
+	case SMeta:
+		return i18n.T("Metadatos")
+	}
+	return name
 }

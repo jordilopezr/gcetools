@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"gcetools/internal/i18n"
+
 	bigquery "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/option"
 )
@@ -61,7 +63,7 @@ var (
 func ParseTable(s string) (project, dataset, table string, err error) {
 	m := reTable.FindStringSubmatch(strings.TrimSpace(s))
 	if m == nil {
-		return "", "", "", fmt.Errorf("tabla no válida %q: usa proyecto.dataset.tabla (p. ej. finops-prj.billing.gcp_billing_export_resource_v1_0123AB_CDEF12_345678)", s)
+		return "", "", "", fmt.Errorf(i18n.T("tabla no válida %q: usa proyecto.dataset.tabla (p. ej. finops-prj.billing.gcp_billing_export_resource_v1_0123AB_CDEF12_345678)"), s)
 	}
 	return m[1], m[2], m[3], nil
 }
@@ -85,7 +87,7 @@ func Load(ctx context.Context, hc *http.Client, cfg Config, projects []string, n
 		month = PreviousMonth(now)
 	}
 	if !reMonth.MatchString(month) {
-		return nil, fmt.Errorf("mes no válido %q: usa AAAAMM", month)
+		return nil, fmt.Errorf(i18n.T("mes no válido %q: usa AAAAMM"), month)
 	}
 	maxGB := cfg.MaxGB
 	if maxGB <= 0 {
@@ -106,11 +108,11 @@ func Load(ctx context.Context, hc *http.Client, cfg Config, projects []string, n
 
 	meta, err := svc.Tables.Get(tp, ds, tb).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("no se pudo leer la tabla %s: %w", cfg.Table, err)
+		return nil, fmt.Errorf(i18n.T("no se pudo leer la tabla %s: %w"), cfg.Table, err)
 	}
 	detailed := hasField(meta.Schema, "resource")
 	if !hasField(meta.Schema, "invoice") || !hasField(meta.Schema, "credits") {
-		return nil, fmt.Errorf("%s no parece una exportación de facturación de Cloud Billing", cfg.Table)
+		return nil, fmt.Errorf(i18n.T("%s no parece una exportación de facturación de Cloud Billing"), cfg.Table)
 	}
 
 	from, _ := time.Parse("200601", month)
@@ -125,11 +127,11 @@ func Load(ctx context.Context, hc *http.Client, cfg Config, projects []string, n
 	dry.DryRun = true
 	est, err := svc.Jobs.Query(jobProject, &dry).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("BigQuery (estimación): %w", err)
+		return nil, fmt.Errorf(i18n.T("BigQuery (estimación): %w"), err)
 	}
 	limit := int64(maxGB) * 1e9
 	if est.TotalBytesProcessed > limit {
-		return nil, fmt.Errorf("la consulta leería %.1f GB, más que el límite de %d GB: súbelo o elige otra tabla", float64(est.TotalBytesProcessed)/1e9, maxGB)
+		return nil, fmt.Errorf(i18n.T("la consulta leería %.1f GB, más que el límite de %d GB: súbelo o elige otra tabla"), float64(est.TotalBytesProcessed)/1e9, maxGB)
 	}
 	req.MaximumBytesBilled = limit
 
@@ -155,7 +157,7 @@ func Load(ctx context.Context, hc *http.Client, cfg Config, projects []string, n
 			break
 		}
 		if ref == nil {
-			return nil, errors.New("BigQuery no devolvió la referencia del job")
+			return nil, errors.New(i18n.T("BigQuery no devolvió la referencia del job"))
 		}
 		call := svc.Jobs.GetQueryResults(ref.ProjectId, ref.JobId).Location(ref.Location).TimeoutMs(30000).Context(ctx)
 		if complete {
@@ -225,7 +227,7 @@ func strParam(name, v string) *bigquery.QueryParameter {
 
 func parseRow(r *bigquery.TableRow, detailed bool) (Line, string, error) {
 	if len(r.F) < 6 {
-		return Line{}, "", fmt.Errorf("fila de BigQuery inesperada (%d columnas)", len(r.F))
+		return Line{}, "", fmt.Errorf(i18n.T("fila de BigQuery inesperada (%d columnas)"), len(r.F))
 	}
 	s := func(i int) string { v, _ := r.F[i].V.(string); return v }
 	f := func(i int) float64 { v, _ := strconv.ParseFloat(s(i), 64); return v }

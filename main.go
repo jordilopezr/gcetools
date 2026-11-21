@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"gcetools/internal/cli"
+	"gcetools/internal/i18n"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -31,6 +32,12 @@ func main() {
 		os.Exit(code)
 	}
 
+	// Language of the native menus until the UI calls SetLanguage.
+	if l := os.Getenv("GCETOOLS_LANG"); l != "" {
+		i18n.SetLang(l)
+	} else {
+		i18n.SetLang(i18n.FromEnv())
+	}
 	app := NewApp()
 
 	// macOS: without an App and Edit menu, Cmd+C/V/X/A and Cmd+Q do not work.
@@ -55,7 +62,7 @@ func main() {
 		Bind:             []interface{}{app},
 		Menu:             appMenu,
 		Mac: &mac.Options{
-			About: &mac.AboutInfo{Title: "gceTools", Message: "Inventario de Compute Engine al estilo RVTools"},
+			About: &mac.AboutInfo{Title: "gceTools", Message: i18n.T("Inventario de Compute Engine al estilo RVTools")},
 		},
 		Linux: &linux.Options{Icon: linuxIcon, ProgramName: "gcetools"},
 		Windows: &windows.Options{

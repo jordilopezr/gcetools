@@ -11,12 +11,12 @@ package collect
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 
 	compute "google.golang.org/api/compute/v1"
@@ -133,7 +133,7 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 		if err != nil && ctx.Err() == nil {
 			kind, msg := Classify(err)
 			inv.AddError(model.ScanError{Project: projectID, Collector: "cloudasset", Kind: kind,
-				Message: msg + " (se usó la Compute API)"})
+				Message: i18n.Tf("%s (se usó la Compute API)", msg)})
 		}
 		c.assets = a
 	}
@@ -168,7 +168,7 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 	var skipped []string
 	for i, st := range steps {
 		if ctx.Err() != nil {
-			c.stats.Status = "Cancelado"
+			c.stats.Status = i18n.T("Cancelado")
 			return c.stats
 		}
 		report(st.name)
@@ -177,7 +177,7 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 			continue
 		}
 		if ctx.Err() != nil {
-			c.stats.Status = "Cancelado"
+			c.stats.Status = i18n.T("Cancelado")
 			return c.stats
 		}
 		kind, msg := Classify(err)
@@ -190,18 +190,19 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 		// If the very first call is refused, the rest will be too: stop early.
 		if i == 0 && kind != model.ErrOther {
 			c.stats.Status = map[model.ErrorKind]string{
-				model.ErrAPIDisabled: "Compute API deshabilitada",
-				model.ErrPermission:  "Sin permisos",
-				model.ErrNotFound:    "No encontrado",
+				model.ErrAPIDisabled: i18n.T("Compute API deshabilitada"),
+				model.ErrPermission:  i18n.T("Sin permisos"),
+				model.ErrNotFound:    i18n.T("No encontrado"),
 			}[kind]
 			return c.stats
 		}
 	}
 	switch {
 	case failed > 0:
-		c.stats.Status = fmt.Sprintf("Parcial (%d errores)", failed)
+		c.stats.Status = i18n.Tf("Parcial (%d errores)", failed)
 	case len(skipped) > 0:
-		c.stats.Status = "OK (sin " + strings.Join(skipped, ", ") + ")"
+		// English keeps the "OK" prefix: core counts projects OK with it.
+		c.stats.Status = i18n.Tf("OK (sin %s)", strings.Join(skipped, ", "))
 	default:
 		c.stats.Status = "OK"
 	}
@@ -330,6 +331,8 @@ func boolPtr(b *bool, def bool) bool {
 }
 
 // licenseCategory groups a license name into a billing-relevant family.
+// The result is an internal (Spanish) value used for OS detection; rows get
+// i18n.T of it ("Herramienta" and "Otra" have English entries).
 func licenseCategory(name string) string {
 	n := strings.ToLower(name)
 	switch {

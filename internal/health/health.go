@@ -70,11 +70,28 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
+// Severities are internal values (the Spanish source texts): logic and
+// sorting use them, and gHealth rows get i18n.T of them.
 const (
 	High   = "Alta"
 	Medium = "Media"
 	Low    = "Baja"
 )
+
+// Level maps a severity as written in a gHealth row, in Spanish or English
+// (inventories keep the language of their scan), to High, Medium or Low.
+// It returns "" for anything else.
+func Level(s string) string {
+	switch s {
+	case High, "High":
+		return High
+	case Medium, "Medium":
+		return Medium
+	case Low, "Low":
+		return Low
+	}
+	return ""
+}
 
 // Rule describes one check for the UI and the docs.
 type Rule struct {
@@ -204,11 +221,11 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		p, n, z, lb := str(r, "project"), str(r, "name"), str(r, "zone"), []string{str(r, "labels")}
 		if str(r, "status") == "TERMINATED" {
 			if t, ok := r["lastStop"].(time.Time); ok && now.Sub(t) > time.Duration(opt.StoppedDays)*24*time.Hour {
-				detail := fmt.Sprintf("Parada desde %s; sus discos siguen facturando", t.Format("2006-01-02"))
+				detail := i18n.Tf("Parada desde %s; sus discos siguen facturando", t.Format("2006-01-02"))
 				if c, ok := r["costDisks"].(float64); ok && c > 0 {
-					detail += fmt.Sprintf(" (~%.2f %s/mes)", c, inv.Meta.Currency)
+					detail += i18n.Tf(" (~%.2f %s/mes)", c, inv.Meta.Currency)
 				}
-				add(finding{"stopped-vm", Medium, "Coste", fmt.Sprintf("VM parada más de %d días", opt.StoppedDays), p, n, z, detail, lb})
+				add(finding{"stopped-vm", Medium, "Coste", i18n.Tf("VM parada más de %d días", opt.StoppedDays), p, n, z, detail, lb})
 			}
 		}
 		if sa := str(r, "serviceAccount"); strings.HasSuffix(sa, "-compute@developer.gserviceaccount.com") {
@@ -216,46 +233,46 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 			if strings.Contains(str(r, "scopes"), "cloud-platform") {
 				sev = High
 			}
-			add(finding{"default-sa", sev, "Seguridad", "Usa la service account por defecto de Compute", p, n, z,
+			add(finding{"default-sa", sev, "Seguridad", i18n.T("Usa la service account por defecto de Compute"), p, n, z,
 				"SA: " + sa + "; scopes: " + str(r, "scopes"), lb})
 		}
 		if str(r, "externalIP") != "" {
-			add(finding{"public-ip", Medium, "Seguridad", "VM con IP pública", p, n, z, str(r, "externalIP"), lb})
+			add(finding{"public-ip", Medium, "Seguridad", i18n.T("VM con IP pública"), p, n, z, str(r, "externalIP"), lb})
 		}
 		if !boolean(r, "secureBoot") {
-			add(finding{"no-secure-boot", Low, "Seguridad", "Shielded VM Secure Boot deshabilitado", p, n, z, "", lb})
+			add(finding{"no-secure-boot", Low, "Seguridad", i18n.T("Shielded VM Secure Boot deshabilitado"), p, n, z, "", lb})
 		}
 		if str(r, "labels") == "" {
-			add(finding{"no-labels", Low, "Gobierno", "VM sin labels", p, n, z, "Dificulta el reparto de costes", lb})
+			add(finding{"no-labels", Low, "Gobierno", i18n.T("VM sin labels"), p, n, z, i18n.T("Dificulta el reparto de costes"), lb})
 		}
 		if !boolean(r, "deletionProtection") {
-			add(finding{"no-deletion-protection", Low, "Operación", "Deletion protection deshabilitada", p, n, z, "", lb})
+			add(finding{"no-deletion-protection", Low, "Operación", i18n.T("Deletion protection deshabilitada"), p, n, z, "", lb})
 		}
 		if f := str(r, "family"); f == "n1" || f == "custom" {
-			add(finding{"old-family", Low, "Coste", "Familia de máquina de generación antigua (N1)", p, n, z,
-				"Valorar N2/N2D/N4/C3 (mejor precio/rendimiento)", lb})
+			add(finding{"old-family", Low, "Coste", i18n.T("Familia de máquina de generación antigua (N1)"), p, n, z,
+				i18n.T("Valorar N2/N2D/N4/C3 (mejor precio/rendimiento)"), lb})
 		}
 	}
 
 	for _, r := range rows(collect.SDisk) {
 		if boolean(r, "boot") && str(r, "type") == "pd-standard" {
 			p := str(r, "project")
-			add(finding{"boot-pd-standard", Low, "Rendimiento", "Disco de arranque pd-standard", p, str(r, "disk"),
-				str(r, "zone"), "VM " + str(r, "vm") + "; valorar pd-balanced",
+			add(finding{"boot-pd-standard", Low, "Rendimiento", i18n.T("Disco de arranque pd-standard"), p, str(r, "disk"),
+				str(r, "zone"), i18n.Tf("VM %s; valorar pd-balanced", str(r, "vm")),
 				[]string{vmLabels[p+"/"+str(r, "vm")], diskLabels[p+"/"+str(r, "disk")]}})
 		}
 	}
 
 	for _, r := range rows(collect.SDisks) {
 		if boolean(r, "orphan") {
-			detail := fmt.Sprintf("%.0f GB %s sin VM", num(r, "sizeGB"), str(r, "type"))
+			detail := i18n.Tf("%.0f GB %s sin VM", num(r, "sizeGB"), str(r, "type"))
 			if t, ok := r["lastDetach"].(time.Time); ok {
-				detail += "; último detach " + t.Format("2006-01-02")
+				detail += i18n.Tf("; último detach %s", t.Format("2006-01-02"))
 			}
 			if c, ok := r["costMonthly"].(float64); ok {
-				detail += fmt.Sprintf("; ~%.2f %s/mes", c, inv.Meta.Currency)
+				detail += i18n.Tf("; ~%.2f %s/mes", c, inv.Meta.Currency)
 			}
-			add(finding{"orphan-disk", High, "Coste", "Disco huérfano", str(r, "project"), str(r, "name"), str(r, "location"),
+			add(finding{"orphan-disk", High, "Coste", i18n.T("Disco huérfano"), str(r, "project"), str(r, "name"), str(r, "location"),
 				detail, []string{str(r, "labels")}})
 		}
 	}
@@ -289,9 +306,9 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 	}
 	for _, k := range unprotectedOrder {
 		v := unprotected[k]
-		add(finding{"snapshot-schedule", Low, "Protección de datos", "VM con discos sin snapshot schedule", v.project, v.vm, v.zone,
-			"Discos: " + strings.Join(v.disks, ", ") + ". Si se protege con otra herramienta (Backup and DR, Veeam…), " +
-				"desactiva la regla o usa el label gcetools-ignore=snapshot-schedule",
+		add(finding{"snapshot-schedule", Low, "Protección de datos", i18n.T("VM con discos sin snapshot schedule"), v.project, v.vm, v.zone,
+			i18n.Tf("Discos: %s. Si se protege con otra herramienta (Backup and DR, Veeam…), desactiva la regla o usa el label gcetools-ignore=snapshot-schedule",
+				strings.Join(v.disks, ", ")),
 			[]string{vmLabels[k]}})
 	}
 
@@ -318,27 +335,27 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 			continue // public image, image family or image outside the scan
 		}
 		p, t, lb := str(r, "project"), str(r, "name"), []string{str(r, "labels")}
-		detail := "Imagen " + str(r, "imageProject") + "/" + str(r, "image")
+		detail := i18n.Tf("Imagen %s/%s", str(r, "imageProject"), str(r, "image"))
 		if migs := templateMIGs[p+"/"+t]; len(migs) > 0 {
-			detail += "; usado por el MIG " + strings.Join(migs, ", ")
+			detail += i18n.Tf("; usado por el MIG %s", strings.Join(migs, ", "))
 		}
 		switch img.deprecated {
 		case "OBSOLETE", "DELETED":
-			add(finding{"template-image", High, "Operación", "Template con imagen obsoleta o eliminada", p, t, "",
-				detail + " (" + img.deprecated + "): no se podrán crear VMs nuevas", lb})
+			add(finding{"template-image", High, "Operación", i18n.T("Template con imagen obsoleta o eliminada"), p, t, "",
+				i18n.Tf("%s (%s): no se podrán crear VMs nuevas", detail, img.deprecated), lb})
 		case "DEPRECATED":
-			add(finding{"template-image", Medium, "Operación", "Template con imagen deprecada", p, t, "", detail, lb})
+			add(finding{"template-image", Medium, "Operación", i18n.T("Template con imagen deprecada"), p, t, "", detail, lb})
 		default:
 			if img.age > int64(opt.ImageDays) {
-				add(finding{"template-image", Low, "Seguridad", fmt.Sprintf("Template con imagen custom de más de %d días", opt.ImageDays), p, t, "",
-					fmt.Sprintf("%s, creada hace %d días: probablemente sin parches recientes", detail, img.age), lb})
+				add(finding{"template-image", Low, "Seguridad", i18n.Tf("Template con imagen custom de más de %d días", opt.ImageDays), p, t, "",
+					i18n.Tf("%s, creada hace %d días: probablemente sin parches recientes", detail, img.age), lb})
 			}
 		}
 	}
 
 	for _, r := range rows(collect.SAddress) {
 		if str(r, "status") == "RESERVED" && str(r, "type") == "EXTERNAL" {
-			add(finding{"unused-ip", Medium, "Coste", "IP externa reservada sin uso", str(r, "project"), str(r, "name"),
+			add(finding{"unused-ip", Medium, "Coste", i18n.T("IP externa reservada sin uso"), str(r, "project"), str(r, "name"),
 				str(r, "location"), str(r, "address"), nil})
 		}
 	}
@@ -370,16 +387,16 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 	}
 	for _, p := range snapOrder {
 		a := snaps[p]
-		add(finding{"old-snapshots", Low, "Coste", fmt.Sprintf("Snapshots manuales de más de %d días", opt.SnapshotDays), p,
+		add(finding{"old-snapshots", Low, "Coste", i18n.Tf("Snapshots manuales de más de %d días", opt.SnapshotDays), p,
 			fmt.Sprintf("%d snapshots", a.count), "",
-			fmt.Sprintf("%.0f GB almacenados; el más antiguo tiene %d días (detalle en gSnapshot)", a.gb, a.oldest), nil})
+			i18n.Tf("%.0f GB almacenados; el más antiguo tiene %d días (detalle en gSnapshot)", a.gb, a.oldest), nil})
 	}
 
 	// VMs stopped with no disk attached are usually leftovers of migrations.
 	for _, r := range rows(collect.SInfo) {
 		if str(r, "status") == "TERMINATED" && num(r, "disks") == 0 {
-			add(finding{"stopped-no-disks", Low, "Gobierno", "VM parada sin discos", str(r, "project"), str(r, "name"), str(r, "zone"),
-				"Posible resto de una migración; revisar si sus discos aparecen como huérfanos", []string{str(r, "labels")}})
+			add(finding{"stopped-no-disks", Low, "Gobierno", i18n.T("VM parada sin discos"), str(r, "project"), str(r, "name"), str(r, "zone"),
+				i18n.T("Posible resto de una migración; revisar si sus discos aparecen como huérfanos"), []string{str(r, "labels")}})
 		}
 	}
 
@@ -389,15 +406,15 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 			if pct >= 95 {
 				sev = High
 			}
-			add(finding{"quota", sev, "Capacidad", "Cuota regional casi agotada", str(r, "project"), str(r, "metric"),
-				str(r, "region"), fmt.Sprintf("%.0f de %.0f (%.0f%%)", num(r, "usage"), num(r, "limit"), pct), nil})
+			add(finding{"quota", sev, "Capacidad", i18n.T("Cuota regional casi agotada"), str(r, "project"), str(r, "metric"),
+				str(r, "region"), i18n.Tf("%.0f de %.0f (%.0f%%)", num(r, "usage"), num(r, "limit"), pct), nil})
 		}
 	}
 
 	for _, r := range rows(collect.SReserv) {
 		if num(r, "unusedPct") > 0 && str(r, "status") == "READY" {
-			add(finding{"unused-reservation", Medium, "Coste", "Reserva con capacidad sin usar", str(r, "project"), str(r, "name"), str(r, "zone"),
-				fmt.Sprintf("%.0f de %.0f %s sin usar: se facturan igualmente", num(r, "count")-num(r, "inUse"),
+			add(finding{"unused-reservation", Medium, "Coste", i18n.T("Reserva con capacidad sin usar"), str(r, "project"), str(r, "name"), str(r, "zone"),
+				i18n.Tf("%.0f de %.0f %s sin usar: se facturan igualmente", num(r, "count")-num(r, "inUse"),
 					num(r, "count"), str(r, "machineType")), nil})
 		}
 	}
@@ -405,9 +422,9 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 	for _, r := range rows(collect.SCommit) {
 		left, ok := r["daysLeft"].(int64)
 		if ok && str(r, "status") == "ACTIVE" && left >= 0 && left <= int64(opt.CUDDays) && !boolean(r, "autoRenew") {
-			add(finding{"cud-expiring", Medium, "Coste", fmt.Sprintf("Commitment (CUD) vence en menos de %d días", opt.CUDDays),
+			add(finding{"cud-expiring", Medium, "Coste", i18n.Tf("Commitment (CUD) vence en menos de %d días", opt.CUDDays),
 				str(r, "project"), str(r, "name"), str(r, "region"),
-				fmt.Sprintf("Vence en %d días y no se renueva automáticamente", left), nil})
+				i18n.Tf("Vence en %d días y no se renueva automáticamente", left), nil})
 		}
 	}
 
@@ -418,18 +435,18 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		p, n, z := str(r, "project"), str(r, "vm"), str(r, "zone")
 		lb := []string{vmLabels[p+"/"+n]}
 		if cpu := num(r, "cpuP95"); cpu < opt.CPULowPct {
-			add(finding{"cpu-low", Medium, "Coste", fmt.Sprintf("VM infrautilizada (CPU p95 < %g%%)", opt.CPULowPct), p, n, z,
-				fmt.Sprintf("CPU p95 %.1f%% en %d días con %d vCPU (%s)", cpu, int(num(r, "days")), int(num(r, "vcpu")), str(r, "machineType")), lb})
+			add(finding{"cpu-low", Medium, "Coste", i18n.Tf("VM infrautilizada (CPU p95 < %g%%)", opt.CPULowPct), p, n, z,
+				i18n.Tf("CPU p95 %.1f%% en %d días con %d vCPU (%s)", cpu, int(num(r, "days")), int(num(r, "vcpu")), str(r, "machineType")), lb})
 		} else if cpu > opt.CPUHighPct {
-			add(finding{"cpu-high", Medium, "Rendimiento", fmt.Sprintf("CPU saturada (p95 > %g%%)", opt.CPUHighPct), p, n, z,
+			add(finding{"cpu-high", Medium, "Rendimiento", i18n.Tf("CPU saturada (p95 > %g%%)", opt.CPUHighPct), p, n, z,
 				fmt.Sprintf("CPU p95 %.1f%%", cpu), lb})
 		}
 		if mem, ok := r["memP95"].(float64); ok && mem > opt.MemHighPct {
-			add(finding{"mem-high", Medium, "Rendimiento", fmt.Sprintf("Memoria saturada (p95 > %g%%)", opt.MemHighPct), p, n, z,
+			add(finding{"mem-high", Medium, "Rendimiento", i18n.Tf("Memoria saturada (p95 > %g%%)", opt.MemHighPct), p, n, z,
 				fmt.Sprintf("RAM p95 %.1f%%", mem), lb})
 		}
 		if !boolean(r, "opsAgent") {
-			add(finding{"no-ops-agent", Low, "Operación", "Sin Ops Agent: no hay métricas de memoria ni disco", p, n, z, "", lb})
+			add(finding{"no-ops-agent", Low, "Operación", i18n.T("Sin Ops Agent: no hay métricas de memoria ni disco"), p, n, z, "", lb})
 		}
 	}
 
@@ -438,20 +455,22 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 			continue
 		}
 		rules := str(r, "rules")
-		sev, rule := Medium, "Regla de firewall abierta a Internet"
+		sev, rule := Medium, i18n.T("Regla de firewall abierta a Internet")
 		if rules == "all" || strings.Contains(rules, ":22") || strings.Contains(rules, "3389") ||
 			rules == "tcp" || strings.Contains(rules, "tcp:0-65535") {
-			sev, rule = High, "SSH/RDP o todos los puertos abiertos a Internet"
+			sev, rule = High, i18n.T("SSH/RDP o todos los puertos abiertos a Internet")
 		}
 		add(finding{"firewall-open", sev, "Seguridad", rule, str(r, "project"), str(r, "name"), str(r, "network"),
-			rules + " desde " + str(r, "sourceRanges") + " hacia " + str(r, "targets"), nil})
+			i18n.Tf("%s desde %s hacia %s", rules, str(r, "sourceRanges"), str(r, "targets")), nil})
 	}
 
 	order := map[string]int{High: 0, Medium: 1, Low: 2}
 	sortFindings(fs, order)
 	for _, f := range fs {
 		out.Add(model.Row{
-			"severity": f.severity, "category": f.category, "rule": f.rule, "ruleId": f.id, "project": f.project,
+			// Severity and category stay internal (Spanish) for sorting and are
+			// translated only when written.
+			"severity": i18n.T(f.severity), "category": i18n.T(f.category), "rule": f.rule, "ruleId": f.id, "project": f.project,
 			"resource": f.resource, "location": f.location, "detail": f.detail,
 		})
 	}

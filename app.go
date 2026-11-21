@@ -78,8 +78,8 @@ func (a *App) DetectADC() ADCStatus {
 // in memory. Only the public identity is returned to the UI.
 func (a *App) PickServiceAccountKey() (*auth.KeyInfo, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:   "Selecciona la clave JSON de la service account",
-		Filters: []runtime.FileFilter{{DisplayName: "Clave JSON (*.json)", Pattern: "*.json"}},
+		Title:   i18n.T("Selecciona la clave JSON de la service account"),
+		Filters: []runtime.FileFilter{{DisplayName: i18n.T("Clave JSON (*.json)"), Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return nil, err
@@ -111,7 +111,7 @@ func (a *App) Connect(method string, impersonateSA string) (*SessionInfo, error)
 	cfg := auth.Config{Method: auth.Method(method), TargetSA: impersonateSA, KeyJSON: a.keyJSON}
 	a.mu.Unlock()
 	if cfg.Method == auth.KeyFile && len(cfg.KeyJSON) == 0 {
-		return nil, errors.New("selecciona primero un archivo de clave JSON")
+		return nil, errors.New(i18n.T("selecciona primero un archivo de clave JSON"))
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
 	defer cancel()
@@ -163,12 +163,12 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 		return err
 	}
 	if len(projectIDs) == 0 {
-		return errors.New("selecciona al menos un proyecto")
+		return errors.New(i18n.T("selecciona al menos un proyecto"))
 	}
 	a.mu.Lock()
 	if a.cancel != nil {
 		a.mu.Unlock()
-		return errors.New("ya hay un escaneo en curso")
+		return errors.New(i18n.T("ya hay un escaneo en curso"))
 	}
 	list := make([]core.Project, len(projectIDs))
 	for i, id := range projectIDs {
@@ -207,7 +207,7 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 		a.mu.Unlock()
 		if opt.SaveHistory {
 			if _, err := history.Save(inv, opt.Profile); err != nil {
-				runtime.EventsEmit(a.ctx, "scan:warning", "No se pudo guardar en el historial: "+err.Error())
+				runtime.EventsEmit(a.ctx, "scan:warning", i18n.Tf("No se pudo guardar en el historial: %v", err))
 			}
 		}
 		runtime.EventsEmit(a.ctx, "scan:done", inv.Meta)
@@ -237,10 +237,10 @@ func (a *App) Export(format string, csvSep string) (string, error) {
 	inv := a.inv
 	a.mu.Unlock()
 	if inv == nil {
-		return "", errors.New("no hay inventario que exportar")
+		return "", errors.New(i18n.T("no hay inventario que exportar"))
 	}
 	collect.Relabel(inv)
-	return a.save(inv, "Exportar inventario", "gcetools-"+inv.Meta.StartedAt.Format("20060102-1504"), format, csvSep)
+	return a.save(inv, i18n.T("Exportar inventario"), "gcetools-"+inv.Meta.StartedAt.Format("20060102-1504"), format, csvSep)
 }
 
 // ExportDiff writes the last comparison.
@@ -249,16 +249,16 @@ func (a *App) ExportDiff(format string, csvSep string) (string, error) {
 	res := a.diff
 	a.mu.Unlock()
 	if res == nil {
-		return "", errors.New("no hay comparación que exportar")
+		return "", errors.New(i18n.T("no hay comparación que exportar"))
 	}
-	return a.save(res, "Exportar comparación", "gcetools-diff-"+time.Now().Format("20060102-1504"), format, csvSep)
+	return a.save(diff.Display(res), i18n.T("Exportar comparación"), "gcetools-diff-"+time.Now().Format("20060102-1504"), format, csvSep)
 }
 
 func (a *App) save(inv *model.Inventory, title, name, format, csvSep string) (string, error) {
 	f := export.Format(format)
 	ext := map[export.Format]string{export.XLSX: "xlsx", export.CSV: "zip", export.JSON: "json"}[f]
 	if ext == "" {
-		return "", errors.New("formato no soportado")
+		return "", errors.New(i18n.T("formato no soportado"))
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           title,
@@ -279,7 +279,7 @@ func (a *App) eng() (*core.Engine, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.engine == nil {
-		return nil, errors.New("no hay sesión: conéctate primero")
+		return nil, errors.New(i18n.T("no hay sesión: conéctate primero"))
 	}
 	return a.engine, nil
 }
@@ -323,8 +323,8 @@ const CurrentInventory = "current"
 // PickSnapshot opens a file dialog and loads a JSON snapshot.
 func (a *App) PickSnapshot() (*SnapshotInfo, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:   "Elegir snapshot JSON de gceTools",
-		Filters: []runtime.FileFilter{{DisplayName: "Snapshot JSON (*.json)", Pattern: "*.json"}},
+		Title:   i18n.T("Elegir snapshot JSON de gceTools"),
+		Filters: []runtime.FileFilter{{DisplayName: i18n.T("Snapshot JSON (*.json)"), Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
 		return nil, err
@@ -356,7 +356,7 @@ func (a *App) CurrentSnapshot() *SnapshotInfo {
 	if a.inv == nil {
 		return nil
 	}
-	return snapshotInfo(CurrentInventory, "Inventario actual", a.inv)
+	return snapshotInfo(CurrentInventory, i18n.T("Inventario actual"), a.inv)
 }
 
 // Compare diffs two snapshots picked before (or "current") and keeps the
@@ -367,20 +367,20 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 	get := func(path string) (diff.Input, error) {
 		if path == CurrentInventory {
 			if a.inv == nil {
-				return diff.Input{}, errors.New("no hay inventario actual: escanea primero")
+				return diff.Input{}, errors.New(i18n.T("no hay inventario actual: escanea primero"))
 			}
-			return diff.Input{Inv: a.inv, Label: "Inventario actual"}, nil
+			return diff.Input{Inv: a.inv, Label: i18n.T("Inventario actual")}, nil
 		}
 		if id, ok := strings.CutPrefix(path, HistoryPrefix); ok {
 			inv, err := history.Load(id)
 			if err != nil {
-				return diff.Input{}, fmt.Errorf("no se pudo leer el escaneo %s del historial: %w", id, err)
+				return diff.Input{}, fmt.Errorf(i18n.T("no se pudo leer el escaneo %s del historial: %w"), id, err)
 			}
-			return diff.Input{Inv: inv, Label: "Historial " + id}, nil
+			return diff.Input{Inv: inv, Label: i18n.Tf("Historial %s", id)}, nil
 		}
 		inv, ok := a.snaps[path]
 		if !ok {
-			return diff.Input{}, errors.New("snapshot no cargado: vuelve a elegirlo")
+			return diff.Input{}, errors.New(i18n.T("snapshot no cargado: vuelve a elegirlo"))
 		}
 		return diff.Input{Inv: inv, Label: filepath.Base(path)}, nil
 	}
@@ -393,7 +393,7 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 		return nil, err
 	}
 	a.diff = diff.Compare(x, y)
-	return a.diff, nil
+	return diff.Display(a.diff), nil
 }
 
 // ---------- profiles & discovery ----------
@@ -454,7 +454,7 @@ func (a *App) HistorySnapshot(id string) (*SnapshotInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return snapshotInfo(HistoryPrefix+id, "Historial "+id, inv), nil
+	return snapshotInfo(HistoryPrefix+id, i18n.Tf("Historial %s", id), inv), nil
 }
 
 // HistoryDir is shown in the UI so users know where scans are kept.
@@ -473,15 +473,15 @@ func (a *App) ExportReport() (string, error) {
 	inv := a.inv
 	a.mu.Unlock()
 	if inv == nil {
-		return "", errors.New("no hay inventario: escanea o abre uno del historial")
+		return "", errors.New(i18n.T("no hay inventario: escanea o abre uno del historial"))
 	}
 	data, err := report.Render(inv, reportOptions(inv))
 	if err != nil {
 		return "", err
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Guardar informe ejecutivo",
-		DefaultFilename: "gcetools-informe-" + inv.Meta.StartedAt.Format("20060102-1504") + ".html",
+		Title:           i18n.T("Guardar informe ejecutivo"),
+		DefaultFilename: i18n.Tf("gcetools-informe-%s.html", inv.Meta.StartedAt.Format("20060102-1504")),
 		Filters:         []runtime.FileFilter{{DisplayName: "HTML", Pattern: "*.html"}},
 	})
 	if err != nil || path == "" {
@@ -499,7 +499,7 @@ func reportOptions(inv *model.Inventory) report.Options {
 	opt := report.Options{Website: update.Website}
 	if prev, ok := history.Previous(inv.Meta.StartedAt); ok {
 		if old, err := history.Load(prev.ID); err == nil {
-			opt.Diff = diff.Compare(diff.Input{Inv: old, Label: "Historial " + prev.ID}, diff.Input{Inv: inv, Label: "Actual"})
+			opt.Diff = diff.Compare(diff.Input{Inv: old, Label: i18n.Tf("Historial %s", prev.ID)}, diff.Input{Inv: inv, Label: i18n.T("Actual")})
 			opt.DiffSince = prev.StartedAt
 		}
 	}
@@ -514,7 +514,7 @@ func (a *App) OAuthStatus() auth.OAuthStatus { return auth.GetOAuthStatus() }
 // the OS keyring.
 func (a *App) OAuthPickClient() (auth.OAuthStatus, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:   "Cliente OAuth de tu organización (client_secret_….json)",
+		Title:   i18n.T("Cliente OAuth de tu organización (client_secret_….json)"),
 		Filters: []runtime.FileFilter{{DisplayName: "JSON (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {

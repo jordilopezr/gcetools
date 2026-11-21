@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gcetools/internal/collect"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
@@ -67,7 +68,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 		cost, ok := x.Disk(regionOf(loc), str(r, "type"), str(r, "replicaZones") != "", num(r, "sizeGB"),
 			int64(num(r, "iops")), int64(num(r, "throughput")))
 		if !ok {
-			miss("disco " + str(r, "type"))
+			miss(i18n.Tf("disco %s", str(r, "type")))
 			continue
 		}
 		r["costMonthly"] = money(cost)
@@ -117,7 +118,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 
 		compute, ok := x.Machine(region, str(r, "machineType"), vcpu, num(r, "memoryGB"), spot)
 		if !ok {
-			notes = append(notes, "machine type sin tarifa")
+			notes = append(notes, i18n.T("machine type sin tarifa"))
 			miss("machine type " + str(r, "machineType"))
 		}
 		for _, g := range strings.Split(str(r, "gpus"), "; ") {
@@ -129,7 +130,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 			if c, ok := x.GPU(region, parts[0], n, spot); ok {
 				compute += c
 			} else {
-				notes = append(notes, "GPU sin tarifa")
+				notes = append(notes, i18n.T("GPU sin tarifa"))
 				miss("GPU " + parts[0])
 			}
 		}
@@ -142,8 +143,8 @@ func Apply(inv *model.Inventory, x *Index) Result {
 			seen[l] = true
 			c, ok := x.License(l, vcpu, num(r, "memoryGB"))
 			if !ok {
-				notes = append(notes, "licencia "+l+" sin tarifa")
-				miss("licencia " + l)
+				notes = append(notes, i18n.Tf("licencia %s sin tarifa", l))
+				miss(i18n.Tf("licencia %s", l))
 			}
 			lic += c
 		}
@@ -168,7 +169,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 			r["costMonthly"] = money(c)
 			proj(str(r, "project")).snaps += c
 		} else if loc != "" {
-			miss("snapshots en " + loc)
+			miss(i18n.Tf("snapshots en %s", loc))
 		}
 	}
 	for _, r := range sheet(collect.SImage) {
@@ -177,7 +178,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 			r["costMonthly"] = money(c)
 			proj(str(r, "project")).images += c
 		} else if loc != "" {
-			miss("imágenes en " + loc)
+			miss(i18n.Tf("imágenes en %s", loc))
 		}
 	}
 	for _, r := range sheet(collect.SAddress) {

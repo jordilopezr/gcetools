@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gcetools/internal/i18n"
 )
 
 const (
@@ -50,17 +52,17 @@ func Check(ctx context.Context, current string) (Info, error) {
 	req.Header.Set("User-Agent", "gcetools/"+current)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return info, fmt.Errorf("no se pudo consultar GitHub: %w", err)
+		return info, fmt.Errorf(i18n.T("no se pudo consultar GitHub: %w"), err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return info, errors.New("no hay releases publicadas todavía (o el repositorio no es público)")
+		return info, errors.New(i18n.T("no hay releases publicadas todavía (o el repositorio no es público)"))
 	case http.StatusForbidden, http.StatusTooManyRequests:
-		return info, errors.New("GitHub limitó las consultas; inténtalo más tarde")
+		return info, errors.New(i18n.T("GitHub limitó las consultas; inténtalo más tarde"))
 	default:
-		return info, fmt.Errorf("GitHub respondió %s", resp.Status)
+		return info, fmt.Errorf(i18n.T("GitHub respondió %s"), resp.Status)
 	}
 	var rel struct {
 		TagName     string `json:"tag_name"`

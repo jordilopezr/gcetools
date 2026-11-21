@@ -1,6 +1,6 @@
 # Política de privacidad de gceTools
 
-*Última actualización: 20 de noviembre de 2026*
+*Última actualización: 20 de noviembre de 2026* · [English](PRIVACY.en.md)
 
 gceTools es una aplicación de escritorio de código abierto (licencia GPL-3.0) que genera un inventario de los recursos de Google Compute Engine a los que tiene acceso la cuenta del usuario. Esta política explica qué datos maneja y qué hace con ellos.
 

@@ -36,6 +36,16 @@ export function t(s: string, ...args: (string | number)[]): string {
   return args.length ? text.replace(/\{(\d+)\}/g, (m, i) => (i < args.length ? String(args[Number(i)]) : m)) : text
 }
 
+/**
+ * Translates a Spanish text whose English depends on context (e.g. "Altas"
+ * is "Added" in a comparison but "High" as a severity count). The dictionary
+ * key is "ctx|s"; Spanish shows s unchanged.
+ */
+export function tc(ctx: string, s: string, ...args: (string | number)[]): string {
+  const key = `${ctx}|${s}`
+  return t(current === 'en' && key in en ? key : s, ...args)
+}
+
 /** Locale for numbers and dates in the current language. */
 export function locale(): string { return current === 'en' ? 'en-US' : 'es-ES' }
 

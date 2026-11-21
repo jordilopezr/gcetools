@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"gcetools/internal/i18n"
 )
 
 // AssetTypes are the Compute Engine resource types the fast mode reads from
@@ -37,7 +39,7 @@ func each[T any](c *collector, assetType string, fn func(*T)) (bool, error) {
 	for _, raw := range raws {
 		v := new(T)
 		if err := json.Unmarshal(raw, v); err != nil {
-			return true, fmt.Errorf("Cloud Asset Inventory: %s no válido: %w", assetType, err)
+			return true, fmt.Errorf(i18n.T("Cloud Asset Inventory: %s no válido: %w"), assetType, err)
 		}
 		fn(v)
 	}

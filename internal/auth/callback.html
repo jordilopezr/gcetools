@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gceTools · {{if .OK}}Sesión iniciada{{else}}Inicio de sesión no completado{{end}}</title>
+<title>gceTools · {{.Title}}</title>
 <link rel="icon" href="{{.Icon}}">
 <style>
   :root {
@@ -57,15 +57,10 @@
     {{if .OK}}<svg viewBox="0 0 24 24"><path d="M9.55 18 3.85 12.3l1.43-1.42 4.27 4.27 9.17-9.17 1.43 1.42Z"/></svg>
     {{else}}<svg viewBox="0 0 24 24"><path d="M11 15h2v2h-2Zm0-8h2v6h-2Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>{{end}}
   </div>
-  {{if .OK}}
-  <h1>Sesión iniciada</h1>
-  <p>Ya puedes cerrar esta pestaña y volver a gceTools.</p>
-  {{else}}
-  <h1>No se completó el inicio de sesión</h1>
-  <p>Vuelve a gceTools e inténtalo de nuevo.</p>
-  {{if .Detail}}<div class="detail">{{.Detail}}</div>{{end}}
-  {{end}}
-  <div class="foot">gceTools solo tiene acceso de lectura a Google Cloud. Puedes revocarlo en cualquier momento desde «Cerrar sesión».</div>
+  <h1>{{.Heading}}</h1>
+  <p>{{.Message}}</p>
+  {{if and (not .OK) .Detail}}<div class="detail">{{.Detail}}</div>{{end}}
+  <div class="foot">{{.Foot}}</div>
 </main>
 </body>
 </html>
