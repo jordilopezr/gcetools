@@ -10,6 +10,8 @@ import (
 
 	"fmt"
 
+	"gcetools/internal/model"
+
 	compute "google.golang.org/api/compute/v1"
 	monitoring "google.golang.org/api/monitoring/v3"
 	"google.golang.org/api/option"
@@ -300,5 +302,16 @@ func TestFastModeBadAsset(t *testing.T) {
 	st := Project(context.Background(), svcs, "p1", inv, func(string) {})
 	if !strings.HasPrefix(st.Status, "Parcial") || len(inv.Errors) != 1 || inv.Errors[0].Collector != "snapshots" {
 		t.Errorf("status %q, errors %v", st.Status, inv.Errors)
+	}
+}
+
+func TestRelabel(t *testing.T) {
+	inv := NewInventory()
+	s := inv.Sheet(SInfo)
+	s.Title, s.Columns[0].Title = "Instances", "Project"
+	s.Columns = append(s.Columns, model.Column{Key: "legacy", Title: "Old column"})
+	Relabel(inv)
+	if s.Title != "Instancias" || s.Columns[0].Title != "Proyecto" || s.Columns[len(s.Columns)-1].Title != "Old column" {
+		t.Errorf("relabel: %q %q %q", s.Title, s.Columns[0].Title, s.Columns[len(s.Columns)-1].Title)
 	}
 }

@@ -255,3 +255,34 @@ func NewInventory() *model.Inventory {
 		),
 	}}
 }
+
+// Relabel rewrites the sheet titles, descriptions and column titles of inv
+// in the current language, matching sheets by name and columns by key.
+// Inventories loaded from history or JSON keep the language of the scan
+// that produced them; this keeps headers consistent with the UI. Row values
+// are left as they are.
+func Relabel(inv *model.Inventory) {
+	if inv == nil {
+		return
+	}
+	ref := map[string]*model.Sheet{}
+	for _, s := range NewInventory().Sheets {
+		ref[s.Name] = s
+	}
+	for _, s := range inv.Sheets {
+		r := ref[s.Name]
+		if r == nil {
+			continue
+		}
+		s.Title, s.Description = r.Title, r.Description
+		titles := make(map[string]string, len(r.Columns))
+		for _, c := range r.Columns {
+			titles[c.Key] = c.Title
+		}
+		for i, c := range s.Columns {
+			if t, ok := titles[c.Key]; ok {
+				s.Columns[i].Title = t
+			}
+		}
+	}
+}

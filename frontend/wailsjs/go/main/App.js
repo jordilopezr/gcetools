@@ -126,6 +126,10 @@ export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
 }
 
+export function SetLanguage(arg1) {
+  return window['go']['main']['App']['SetLanguage'](arg1);
+}
+
 export function StartScan(arg1, arg2) {
   return window['go']['main']['App']['StartScan'](arg1, arg2);
 }

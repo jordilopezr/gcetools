@@ -8,6 +8,7 @@ import InventoryPage from './pages/InventoryPage'
 import AboutPage, { type UpdateState } from './pages/AboutPage'
 import ComparePage, { type CompareState } from './pages/ComparePage'
 import HistoryPage from './pages/HistoryPage'
+import { getLang, setLang as storeLang, type Lang } from './lib/i18n'
 
 type Page = 'connect' | 'projects' | 'inventory' | 'compare' | 'history' | 'about'
 type Theme = 'system' | 'light' | 'dark'
@@ -37,6 +38,17 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
   const [autoCheck, setAutoCheckState] = useState(loadAutoCheck)
   const [compare, setCompare] = useState<CompareState>({ before: null, after: null, result: null })
+  const [lang, setLangState] = useState<Lang>(getLang)
+
+  // Pages are keyed by language: switching remounts them so every t() runs
+  // again; App keeps the session, inventory and comparison.
+  const setLang = async (l: Lang) => {
+    storeLang(l)
+    try { await api.setLanguage(l) } catch { /* older backend: UI only */ }
+    if (inventory) { try { setInventory(await api.getInventory() ?? inventory) } catch { /* keep */ } }
+    setLangState(l)
+  }
+  useEffect(() => { api.setLanguage(getLang()).catch(() => { /* older backend */ }) }, [])
 
   const setAutoCheck = (v: boolean) => {
     setAutoCheckState(v)
@@ -147,6 +159,17 @@ export default function App() {
             </button>
           ))}
         </Menu>
+        <Menu trigger={open => (
+          <button className="icon-btn" onClick={open} aria-label="Idioma / Language" title="Idioma / Language"><Icon name="translate" /></button>
+        )}>
+          {close => (['es', 'en'] as Lang[]).map(l => (
+            <button key={l} onClick={() => { close(); if (l !== lang) setLang(l) }}>
+              <span style={{ width: 24, fontWeight: 600 }}>{l.toUpperCase()}</span>
+              <span>{l === 'es' ? 'Español' : 'English'}</span>
+              {lang === l && <><span className="spacer" /><Icon name="check" size="sm" /></>}
+            </button>
+          ))}
+        </Menu>
         {session && (
           <Menu trigger={open => (
             <button className="assist" style={{ border: 0, cursor: 'pointer' }} onClick={open}>
@@ -186,7 +209,7 @@ export default function App() {
         </button>
       </nav>
 
-      <main className="main">
+      <main className="main" key={lang}>
         {page === 'connect' && <ConnectPage session={session} notify={notify}
           onConnected={s => { setSession(s); setInventory(null); setPage('projects') }} />}
         {page === 'projects' && session && <ProjectsPage session={session} scan={scan} notify={notify}

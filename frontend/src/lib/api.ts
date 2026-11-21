@@ -58,6 +58,7 @@ export type ExportFormat = 'xlsx' | 'csv' | 'json'
 export interface Api {
   mock: boolean
   version(): Promise<string>
+  setLanguage(lang: string): Promise<void>
   detectADC(): Promise<ADCStatus>
   pickKey(): Promise<KeyInfo | null>
   connect(method: AuthMethod, impersonate: string): Promise<SessionInfo>
@@ -113,6 +114,7 @@ export const CURRENT = 'current'
 const wailsApi: Api = {
   mock: false,
   version: () => App.Version(),
+  setLanguage: (l) => App.SetLanguage(l),
   detectADC: () => App.DetectADC(),
   pickKey: async () => (await App.PickServiceAccountKey()) ?? null,
   connect: (m, sa) => App.Connect(m, sa),

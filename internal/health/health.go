@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"gcetools/internal/collect"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
@@ -123,6 +124,17 @@ var Rules = []Rule{
 var skipManaged = map[string]bool{
 	"stopped-vm": true, "stopped-no-disks": true, "no-deletion-protection": true,
 	"snapshot-schedule": true, "no-ops-agent": true,
+}
+
+// LocalizedRules returns Rules with their texts in the current language
+// (Rules itself keeps the Spanish source texts).
+func LocalizedRules() []Rule {
+	out := make([]Rule, len(Rules))
+	for i, r := range Rules {
+		r.Title, r.Category, r.Severity, r.Labels = i18n.T(r.Title), i18n.T(r.Category), i18n.T(r.Severity), i18n.T(r.Labels)
+		out[i] = r
+	}
+	return out
 }
 
 // Result summarizes what was left out, for gMetaData.

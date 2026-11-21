@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
 
@@ -45,6 +47,10 @@ Comandos:
 // Dispatch runs a console subcommand. ok is false when args name none, so
 // the GUI binary can open its window instead.
 func Dispatch(args []string) (code int, ok bool) {
+	if len(args) == 0 {
+		return 0, false
+	}
+	args = setLanguage(args)
 	if len(args) == 0 {
 		return 0, false
 	}
@@ -141,4 +147,30 @@ func printRelevant(res *model.Inventory) {
 			fmt.Fprintln(os.Stderr, line)
 		}
 	}
+}
+
+// setLanguage applies --lang es|en (anywhere in args, removed from them),
+// else GCETOOLS_LANG, else the system locale; and returns the other args.
+func setLanguage(args []string) []string {
+	lang := os.Getenv("GCETOOLS_LANG")
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--lang" || a == "-lang":
+			if i+1 < len(args) {
+				lang = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(a, "--lang=") || strings.HasPrefix(a, "-lang="):
+			lang = a[strings.Index(a, "=")+1:]
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if lang == "" {
+		lang = i18n.FromEnv()
+	}
+	i18n.SetLang(lang)
+	return rest
 }

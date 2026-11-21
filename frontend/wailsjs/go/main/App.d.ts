@@ -71,6 +71,8 @@ export function PickSnapshot():Promise<main.SnapshotInfo>;
 
 export function SaveProfile(arg1:profile.Profile):Promise<void>;
 
+export function SetLanguage(arg1:string):Promise<void>;
+
 export function StartScan(arg1:Array<string>,arg2:core.ScanOptions):Promise<void>;
 
 export function Version():Promise<string>;

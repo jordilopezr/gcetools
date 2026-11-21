@@ -178,6 +178,7 @@ const on = <T,>(set: Set<Cb<T>>, cb: Cb<T>) => { set.add(cb); return () => { set
 export const mockApi: Api = {
   mock: true,
   version: async () => '0.1.0-mock',
+  setLanguage: async () => { /* mock: nothing to tell */ },
   detectADC: async () => ({ found: true, identity: 'demo@example.com' }),
   pickKey: async () => ({ clientEmail: 'inventory@acme-tools.iam.gserviceaccount.com', projectId: 'acme-tools', keyId: 'f3a1…' }),
   connect: async (method, sa) => {

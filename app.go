@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"gcetools/internal/auth"
+	"gcetools/internal/collect"
 	"gcetools/internal/core"
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
 	"gcetools/internal/health"
 	"gcetools/internal/history"
+	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 	"gcetools/internal/profile"
 	"gcetools/internal/report"
@@ -62,6 +64,10 @@ type ADCStatus struct {
 }
 
 func (a *App) Version() string { return core.Version }
+
+// SetLanguage switches the language of backend messages, new scans and
+// exports ("es" or "en"). The UI calls it at startup and on every change.
+func (a *App) SetLanguage(lang string) { i18n.SetLang(lang) }
 
 func (a *App) DetectADC() ADCStatus {
 	found, id := auth.DetectADC(a.ctx)
@@ -220,6 +226,7 @@ func (a *App) CancelScan() {
 func (a *App) GetInventory() *model.Inventory {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	collect.Relabel(a.inv)
 	return a.inv
 }
 
@@ -232,6 +239,7 @@ func (a *App) Export(format string, csvSep string) (string, error) {
 	if inv == nil {
 		return "", errors.New("no hay inventario que exportar")
 	}
+	collect.Relabel(inv)
 	return a.save(inv, "Exportar inventario", "gcetools-"+inv.Meta.StartedAt.Format("20060102-1504"), format, csvSep)
 }
 
@@ -393,7 +401,7 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 func (a *App) ListProfiles() ([]profile.Profile, error) { return profile.List() }
 
 // HealthRules is the gHealth rule catalog for the settings panel.
-func (a *App) HealthRules() []health.Rule { return health.Rules }
+func (a *App) HealthRules() []health.Rule { return health.LocalizedRules() }
 
 // SaveProfile stores p. For service account keys only the file path is kept,
 // so the CLI can reuse the profile; the key itself is never written.
@@ -431,6 +439,7 @@ func (a *App) OpenHistory(id string) (*model.Inventory, error) {
 	if err != nil {
 		return nil, err
 	}
+	collect.Relabel(inv)
 	a.mu.Lock()
 	a.inv = inv
 	a.mu.Unlock()

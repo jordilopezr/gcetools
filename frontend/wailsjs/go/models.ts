@@ -77,6 +77,8 @@ export namespace core {
 	    billingTable: string;
 	    billingMonth: string;
 	    billingMaxGB: number;
+	    fast: boolean;
+	    fastScope: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Modules(source);
@@ -93,6 +95,8 @@ export namespace core {
 	        this.billingTable = source["billingTable"];
 	        this.billingMonth = source["billingMonth"];
 	        this.billingMaxGB = source["billingMaxGB"];
+	        this.fast = source["fast"];
+	        this.fastScope = source["fastScope"];
 	    }
 	}
 	export class Project {
