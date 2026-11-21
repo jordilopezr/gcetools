@@ -33,6 +33,7 @@ const (
 	SCostReal = "gCostReal"
 	SProject  = "gProject"
 	SHealth   = "gHealth"
+	SSecurity = "gSecurity"
 	SErrors   = "gErrors"
 	SMeta     = "gMetaData"
 )
@@ -246,11 +247,26 @@ func NewInventory() *model.Inventory {
 			c("memoryGB", "RAM (GB)", G, 10), c("disks", "Discos", I, 7), c("diskGB", "Discos (GB)", G, 11),
 			c("labels", "Labels", S, 30),
 			c("costMonthly", "Coste/mes", M, 12),
+			c("osLogin", "OS Login (proyecto)", B, 11), c("sshKeys", "Claves SSH de proyecto", I, 11),
+			c("serialPort", "Puerto serie (proyecto)", B, 11), c("exposedVMs", "VMs expuestas a Internet", I, 11),
 		),
 		sheet(SHealth, "Salud", "Hallazgos de buenas prácticas (vHealth)",
 			c("severity", "Severidad", S, 9), c("category", "Categoría", S, 14), c("rule", "Regla", S, 34),
 			c("ruleId", "ID de regla", S, 18), c("project", "Proyecto", S, 24), c("resource", "Recurso", S, 30), c("location", "Ubicación", S, 16),
 			c("detail", "Detalle", S, 50),
+		),
+		sheet(SSecurity, "Seguridad", "Postura de seguridad por VM: exposición a Internet, acceso e identidad",
+			c("project", "Proyecto", S, 24), c("vm", "VM", S, 28), c("zone", "Zona", S, 16), c("status", "Estado", S, 12),
+			c("managedBy", "Gestionada por", S, 12), c("issues", "Problemas", I, 9),
+			c("externalIP", "IP externa", S, 15), c("internetExposed", "Expuesta a Internet", B, 11),
+			c("exposedPorts", "Puertos sensibles abiertos", S, 28), c("exposingRules", "Reglas que los abren", S, 30),
+			c("serviceAccount", "Service account", S, 34), c("defaultSA", "SA por defecto", B, 10),
+			c("fullScope", "Scope cloud-platform", B, 11), c("osLogin", "OS Login", B, 9),
+			c("projectSSHKeys", "Acepta claves SSH de proyecto", B, 12), c("instanceSSHKeys", "Claves SSH en la VM", B, 11),
+			c("serialPort", "Puerto serie", B, 9), c("ipForward", "IP forwarding", B, 10),
+			c("secureBoot", "Secure Boot", B, 10), c("vtpm", "vTPM", B, 8), c("integrityMonitoring", "Integrity monitoring", B, 11),
+			c("confidential", "Confidential", B, 10), c("diskEncryption", "Cifrado de discos", S, 14),
+			c("notes", "Notas", S, 40),
 		),
 		sheet(SErrors, "Errores", "Proyectos o APIs que no se pudieron leer",
 			c("project", "Proyecto", S, 26), c("collector", "Colector", S, 16), c("kind", "Tipo", S, 18),

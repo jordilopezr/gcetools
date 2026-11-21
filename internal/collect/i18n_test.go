@@ -24,7 +24,7 @@ var neutralTitles = map[string]bool{
 	"CPU overcommit": true, "Kernel": true, "Ops Agent": true, "Compute+GPU": true, "Snapshots": true,
 	"CPU": true, "CPU p95 (%)": true, "RAM p95 (%)": true, "NICs": true, "MIGs": true, "Templates": true,
 	"Instance templates": true, "VPCs": true, "Firewall": true, "IPs": true, "Commitments": true,
-	"Sole-tenant": true,
+	"Sole-tenant": true, "OS Login": true, "Integrity monitoring": true,
 }
 
 func TestSchemaTranslated(t *testing.T) {

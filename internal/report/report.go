@@ -167,6 +167,16 @@ func build(inv *model.Inventory, opt Options) Data {
 		{Label: i18n.T("Discos"), Value: group(diskGB/1024, 1) + " TB", Sub: i18n.Tf("%s discos", group(float64(disks), 0))},
 		{Label: i18n.T("Discos huérfanos"), Value: group(float64(orphans), 0), Sub: i18n.Tf("%s GB sin VM", group(orphanGB, 0)), Alert: orphans > 0},
 	}
+	if sec := rows("gSecurity"); len(sec) > 0 { // absent in scans made before 0.8
+		exposed := 0
+		for _, r := range sec {
+			if r["internetExposed"] == true {
+				exposed++
+			}
+		}
+		d.KPIs = append(d.KPIs, KPI{Label: i18n.T("VMs expuestas a Internet"), Value: group(float64(exposed), 0),
+			Sub: i18n.T("puertos sensibles abiertos"), Alert: exposed > 0})
+	}
 	if m.Currency != "" {
 		d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Coste estimado/mes"), Value: group(listTotal, 0) + " " + m.Currency, Sub: i18n.T("precio de lista on-demand")})
 	}

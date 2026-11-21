@@ -241,7 +241,7 @@ When to use it: in scans of hundreds of projects, or when the Compute API is thr
 
 What you need to know:
 
-- **Still read per project:** reservations, commitments, sole-tenant nodes, quotas and the optional modules, because CAI doesn't include them or doesn't have that data.
+- **Still read per project:** reservations, commitments, sole-tenant nodes, quotas, project metadata (OS Login, SSH keys) and the optional modules, because CAI doesn't include them or doesn't have that data.
 - **Delay:** CAI can take a few minutes to reflect recent changes. gMetaData shows that the scan used fast mode.
 - **Fallback:** if CAI fails in a project (permissions, API disabled), that project is read with the Compute API and the reason is recorded in gErrors.
 - **Permissions:** `roles/cloudasset.viewer` on the scope and the Cloud Asset API enabled in the quota project, in the service account's project or in the OAuth client's project.
@@ -302,7 +302,7 @@ The figure cards:
 
 - **VMs** and **Running**.
 - **vCPU**, **RAM (GB)** and **Total disk (GB)**.
-- **Orphaned disks** and **High findings**: highlighted when greater than zero.
+- **Orphaned disks**, **High findings** and **Internet exposed** (VMs with sensitive ports open, see gSecurity): highlighted when greater than zero.
 - **List cost/month**, if estimated cost was turned on.
 - **Actual cost/month**, if BigQuery was turned on.
 - **Estimated savings/month**, if recommendations were turned on.
@@ -311,7 +311,7 @@ The figure cards:
 
 If the inventory has VMs created by GKE, Dataproc, Dataflow or Batch, the **Hide the N VMs managed by GKE, Dataproc, Dataflow or Batch** checkbox appears.
 
-- **What it hides:** those VMs in the per-VM tabs (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense and gHealth).
+- **What it hides:** those VMs in the per-VM tabs (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense, gHealth and gSecurity).
 - **What it doesn't hide:** members of your own MIGs, which remain visible.
 - The preference is remembered between sessions.
 - **Export** always includes all VMs.
@@ -515,7 +515,7 @@ Project · Month · Gross cost · Credits (CUD, SUD, discounts) · Net cost · A
 
 Scanned projects (vSource).
 
-Project · Number · Name · Parent · Status · Scan result · VMs · Running VMs · vCPU · RAM (GB) · Disks · Disks (GB) · Labels · Cost/month
+Project · Number · Name · Parent · Status · Scan result · VMs · Running VMs · vCPU · RAM (GB) · Disks · Disks (GB) · Labels · Cost/month · OS Login (project) · Project SSH keys · Serial port (project) · Internet-exposed VMs
 
 #### gHealth — Health
 
@@ -524,6 +524,21 @@ Best-practice findings (vHealth). See [Health rules](#9-health-rules-ghealth).
 Severity · Category · Rule · Rule ID · Project · Resource · Location · Detail
 
 Findings are sorted by severity: High, Medium and Low.
+
+#### gSecurity — Security
+
+Security posture per VM: Internet exposure, access and identity. One row per VM.
+
+Project · VM · Zone · Status · Managed by · Issues · External IP · Internet exposed · Sensitive ports open · Rules opening them · Service account · Default SA · cloud-platform scope · OS Login · Accepts project SSH keys · SSH keys on the VM · Serial port · IP forwarding · Secure Boot · vTPM · Integrity monitoring · Confidential · Disk encryption · Notes
+
+- **Internet exposed:** the VM has an external IP and a VPC firewall rule lets traffic in from `0.0.0.0/0` (or `::/0`) to a sensitive port: SSH (22), RDP (3389), Telnet, FTP, VNC, SMB, RPC, NetBIOS, Docker (2375), SQL Server, Oracle, MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch or Memcached.
+- **How it's evaluated:** the rules of each NIC's VPC (including those in a Shared VPC host project) that apply to the VM by network tag, service account or to all instances are matched. For each port the rule with the highest priority (lowest number) wins and, on a tie, DENY beats ALLOW, as in GCP. **Rules opening them** shows the deciding ALLOW rules; rules from another project appear as `project/rule`.
+- **Limits:** hierarchical firewall policies and network firewall policies aren't read, and access through load balancers isn't considered. If the VPC host project wasn't scanned, exposure is left empty and **Notes** says so.
+- **OS Login, SSH keys and serial port:** VM metadata is combined with project metadata (the VM's wins). **Accepts project SSH keys** is Yes when the project has keys, the VM doesn't set `block-project-ssh-keys` and OS Login is off. An organization policy that enforces OS Login isn't visible to gceTools.
+- **Disk encryption:** Google, CMEK or CSEK; if the VM's disks use several, all are listed.
+- **Issues:** counts how many of these checks fail: Internet exposed, default SA, OS Login off, accepts project SSH keys, serial port, IP forwarding, Secure Boot off and vTPM or integrity monitoring off. On managed VMs OS Login and IP forwarding aren't counted, because those services set them on purpose.
+
+gProject adds, per project, **OS Login (project)**, **Project SSH keys**, **Serial port (project)** and **Internet-exposed VMs**.
 
 #### gErrors — Errors
 
@@ -556,6 +571,12 @@ Each rule has a **stable ID** that doesn't change between versions or languages.
 | `default-sa` | Compute Engine default service account | Security | Medium / High | — | VM or project |
 | `public-ip` | VM with a public IP | Security | Medium | — | VM or project |
 | `no-secure-boot` | Secure Boot disabled | Security | Low | — | VM or project |
+| `internet-exposed` | VM exposed to the Internet on sensitive ports | Security | High | — | VM or project |
+| `project-ssh-keys` | VM accepts project-wide SSH keys | Security | Medium | — | VM or project |
+| `serial-port` | Serial port access enabled | Security | Medium | — | VM or project |
+| `no-os-login` | OS Login disabled | Security | Low | — | VM or project |
+| `ip-forward` | IP forwarding enabled | Security | Low | — | VM or project |
+| `no-shielded-vm` | vTPM or integrity monitoring disabled | Security | Low | — | VM or project |
 | `template-image` | Template with an obsolete, deprecated or old image | Security / Operations | High, Medium or Low | imageDays (180) | template or project |
 | `snapshot-schedule` | VM with disks without a snapshot schedule | Data protection | Low | — | VM or project |
 | `cpu-high` | Saturated CPU | Performance | Medium | cpuHighPct (90%) | VM or project |
@@ -581,6 +602,12 @@ Each rule has a **stable ID** that doesn't change between versions or languages.
 - **default-sa:** VMs with the Compute Engine default service account (`…-compute@developer.gserviceaccount.com`). It's **High** if the VM also has the `cloud-platform` scope (full API access).
 - **public-ip:** VMs with an external IP.
 - **no-secure-boot:** VMs without Shielded VM Secure Boot.
+- **internet-exposed:** VMs with an external IP and a sensitive port (SSH, RDP, databases…) open to the Internet by the VPC firewall, according to the gSecurity analysis. The detail lists the ports, the IP and the rules.
+- **project-ssh-keys:** VMs anyone with an SSH key in the project metadata can log in to: OS Login off and no `block-project-ssh-keys`.
+- **serial-port:** VMs with `serial-port-enable=TRUE` (on the VM or the project), which allows logging in through the serial console.
+- **no-os-login:** VMs without OS Login: SSH access is managed with metadata keys instead of IAM. If an organization policy already enforces OS Login, disable the rule.
+- **ip-forward:** VMs with IP forwarding, which only network appliances, NAT or VPN need.
+- **no-shielded-vm:** VMs with Shielded VM vTPM or integrity monitoring off.
 - **template-image:** templates that create VMs from a custom image in the scan that is **obsolete or deleted** (High: VMs can no longer be created), **deprecated** (Medium) or older than N days (Low: probably unpatched). Public images and image families aren't evaluated.
 - **snapshot-schedule:** VMs with disks without a snapshot schedule. One finding per VM, with the list of disks. If backups are made with another tool (Backup and DR, Veeam…), disable the rule or use the label exception.
 - **cpu-high / mem-high:** CPU or RAM p95 above the threshold. RAM requires the Ops Agent.
@@ -593,13 +620,15 @@ Each rule has a **stable ID** that doesn't change between versions or languages.
 
 ### 9.2 Managed VMs
 
-For VMs from GKE, Dataproc, Dataflow, Batch and MIGs, five rules that make no sense on disposable machines aren't evaluated:
+For VMs from GKE, Dataproc, Dataflow, Batch and MIGs, seven rules that make no sense on disposable machines, or that those services set on purpose, aren't evaluated:
 
 - `stopped-vm`
 - `stopped-no-disks`
 - `no-deletion-protection`
 - `snapshot-schedule`
 - `no-ops-agent`
+- `no-os-login`
+- `ip-forward` (GKE nodes need it)
 
 The rest (public IP, default service account, Secure Boot…) are evaluated.
 
@@ -1060,5 +1089,6 @@ The code is open source: the README explains how to add a tab. Rule proposals ar
 | vTools | gTools |
 | vSource | gProject |
 | vHealth | gHealth |
+| — | gSecurity (security posture per VM) |
 | vMetaData | gMetaData |
 | — | gReservation, gCommitment, gQuota, gPerf, gRecommend, gCost, gCostReal, gErrors |

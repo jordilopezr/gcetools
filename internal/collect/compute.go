@@ -158,6 +158,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 	// Disks and licenses
 	var bootGB, totalGB float64
 	var image, osName string
+	var encs []string
 	for _, ad := range in.Disks {
 		d := c.disks[ad.Source]
 		diskName, dtype := last(ad.Source), ""
@@ -176,6 +177,9 @@ func (c *collector) addInstance(in *compute.Instance) {
 			enc, srcImage = encryption(d.DiskEncryptionKey), last(d.SourceImage)
 		}
 		totalGB += size
+		if ad.Type != "SCRATCH" {
+			encs = append(encs, enc)
+		}
 		if ad.Boot {
 			bootGB, image = size, srcImage
 			for _, l := range ad.Licenses {
@@ -215,14 +219,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 	if in.Tags != nil {
 		tags = strings.Join(in.Tags.Items, "; ")
 	}
-	meta := map[string]string{}
-	if in.Metadata != nil {
-		for _, it := range in.Metadata.Items {
-			if it.Value != nil {
-				meta[it.Key] = *it.Value
-			}
-		}
-	}
+	meta := metadataMap(in.Metadata)
 	mig := ""
 	if v := meta["created-by"]; strings.Contains(v, "instanceGroupManagers/") {
 		mig = last(v)
@@ -258,6 +255,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		"threadsPerCore": threads, "visibleCores": visible, "cpuPlatform": in.CpuPlatform,
 		"minCpuPlatform": in.MinCpuPlatform, "custom": custom, "sharedCore": sharedCore, "nestedVirt": nested,
 	})
+	c.addSecurity(in, zone, meta, mgd, encs)
 	perVCPU := 0.0
 	if vcpu > 0 {
 		perVCPU = round2(memGB / float64(vcpu))

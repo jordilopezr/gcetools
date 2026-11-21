@@ -207,6 +207,7 @@ export const en: Record<string, string> = {
   // --- Inventory page ---
   'Disco total (GB)': 'Total disk (GB)',
   'Hallazgos altos': 'High findings',
+  'Expuestas a Internet': 'Internet exposed',
   'Coste/mes lista ({0})': 'List cost/month ({0})',
   'Coste real/mes {0} ({1})': 'Actual cost/month {0} ({1})',
   'Ahorro estimado/mes ({0})': 'Estimated savings/month ({0})',

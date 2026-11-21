@@ -34,6 +34,7 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 | gRecommend * | — | Recomendaciones activas: rightsizing, recursos idle y CUDs, con ahorro mensual |
 | gCost * | — | Coste mensual estimado por proyecto: compute y GPU, licencias, discos, snapshots, imágenes, IPs sin uso |
 | gProject | vSource | Resumen por proyecto y resultado del escaneo |
+| gSecurity | — | Postura de seguridad por VM: expuesta a Internet en puertos sensibles (IP externa + firewall, Shared VPC incluida), SA por defecto, OS Login, claves SSH de proyecto, puerto serie, IP forwarding, Shielded VM, cifrado de discos |
 | gHealth | vHealth | Hallazgos: discos huérfanos, firewall abierto, SA por defecto, VMs paradas, discos sin snapshot schedule, templates con imágenes deprecadas o antiguas… |
 | gErrors / gMetaData | vMetaData | Errores por proyecto e información del escaneo |
 
@@ -67,8 +68,8 @@ La interfaz está en español e inglés: el selector está en la barra superior 
 
 gInfo indica en **Gestionada por** qué servicio creó cada VM (GKE, Dataproc, Dataflow, Batch o MIG) y, para GKE y Dataproc, el **clúster** y el **node pool**. Se detecta por los labels y metadatos que ponen esos servicios.
 
-- Las reglas de salud que no tienen sentido en VMs desechables se omiten para ellas: VM parada, VM parada sin discos, deletion protection, snapshot schedule y Ops Agent. El resto (IP pública, service account por defecto, Secure Boot…) se sigue evaluando.
-- En **Inventario**, la casilla **Ocultar las VMs gestionadas** quita los nodos de GKE, Dataproc, Dataflow y Batch de las pestañas por VM (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense y gHealth). Los miembros de MIGs propios siguen visibles.
+- Las reglas de salud que no tienen sentido en VMs desechables se omiten para ellas: VM parada, VM parada sin discos, deletion protection, snapshot schedule, Ops Agent, OS Login e IP forwarding. El resto (IP pública, service account por defecto, Secure Boot…) se sigue evaluando.
+- En **Inventario**, la casilla **Ocultar las VMs gestionadas** quita los nodos de GKE, Dataproc, Dataflow y Batch de las pestañas por VM (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense, gHealth y gSecurity). Los miembros de MIGs propios siguen visibles.
 
 ### Modo rápido con Cloud Asset Inventory
 
@@ -76,7 +77,7 @@ En organizaciones con muchos proyectos, el **modo rápido** (Proyectos → **Mod
 
 - **Sin ámbito:** una lectura por proyecto en lugar de una docena de llamadas.
 - **Con una organización o carpeta** en el ámbito de detección (o `--discover`): una sola lectura paginada para todos los proyectos.
-- Reservas, commitments, sole-tenant, cuotas y los módulos opcionales (OS Config, Monitoring, Recommender) se siguen leyendo por proyecto, porque CAI no los incluye o no tiene esos datos.
+- Reservas, commitments, sole-tenant, cuotas, metadatos del proyecto y los módulos opcionales (OS Config, Monitoring, Recommender) se siguen leyendo por proyecto, porque CAI no los incluye o no tiene esos datos.
 - **Retraso:** CAI puede tardar unos minutos en reflejar cambios recientes; gMetaData indica que el escaneo usó el modo rápido.
 - Si CAI falla en un proyecto (permisos, API deshabilitada), ese proyecto se lee con la Compute API y el motivo queda en gErrors.
 - Necesita `roles/cloudasset.viewer` en el ámbito y la Cloud Asset API habilitada en el quota project (o en el proyecto de la service account o del cliente OAuth).
@@ -84,6 +85,15 @@ En organizaciones con muchos proyectos, el **modo rápido** (Proyectos → **Mod
 ```bash
 gcetools-cli scan --discover organizations/123456 --fast --out inventario.xlsx
 ```
+
+### Postura de seguridad (gSecurity)
+
+Una fila por VM con lo primero que pregunta una auditoría:
+
+- **Expuesta a Internet:** IP externa más una regla de firewall VPC abierta a `0.0.0.0/0` en un puerto sensible (SSH, RDP, Telnet, FTP, VNC, SMB, Docker, SQL Server, Oracle, MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch…). Las reglas se aplican por prioridad, con DENY antes que ALLOW, por network tag o service account, e incluyen las del proyecto host de una Shared VPC. No se leen las políticas de firewall jerárquicas ni las network firewall policies.
+- **Acceso e identidad:** service account por defecto y scope `cloud-platform`, OS Login, si acepta claves SSH de proyecto, puerto serie e IP forwarding.
+- **Bastionado:** Secure Boot, vTPM, integrity monitoring, Confidential VM y cifrado de discos (Google, CMEK, CSEK).
+- **Problemas** cuenta las comprobaciones que fallan en cada VM. gHealth suma seis reglas (`internet-exposed`, `project-ssh-keys`, `serial-port`, `no-os-login`, `ip-forward`, `no-shielded-vm`), gProject el OS Login, las claves SSH y las VMs expuestas de cada proyecto, y el informe ejecutivo una cifra de VMs expuestas.
 
 ### Historial y tendencias
 
@@ -318,6 +328,7 @@ internal/core             Descubrimiento de proyectos, escaneo concurrente, HTTP
 internal/collect          Un colector por tipo de recurso (aggregatedList o Cloud Asset Inventory) + esquema de pestañas
 internal/i18n             Traducciones (el texto en español es la clave; inglés en en_*.go)
 internal/health           Reglas de gHealth
+internal/security         Exposición a Internet de gSecurity
 internal/diff             Comparación de dos inventarios (altas, bajas y cambios)
 internal/pricing          Catálogo de Cloud Billing y cálculo de coste estimado
 internal/export           XLSX (excelize streaming), CSV en ZIP, JSON
@@ -337,7 +348,6 @@ Para traducir: envuelve el texto con `i18n.T("…")` o `i18n.Tf("…", args)` en
 ## Pendiente
 
 - Firma de los ejecutables de Windows
-- Pestaña de postura de seguridad (gSecurity)
 
 ## Actualizaciones
 

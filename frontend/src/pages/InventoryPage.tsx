@@ -6,12 +6,12 @@ import { num, sevKey, t } from '../lib/i18n'
 
 interface Props { inventory: Inventory; notify: (m: string) => void }
 
-const primarySheets = ['gInfo', 'gHealth', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
+const primarySheets = ['gInfo', 'gHealth', 'gSecurity', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
 
 // VMs created by a Google service; MIG members are the user's own and stay visible.
 const serviceManaged = new Set(['GKE', 'Dataproc', 'Dataflow', 'Batch'])
 // Column holding the VM name in each per-VM sheet.
-const vmColumn: Record<string, string> = { gInfo: 'name', gCPU: 'name', gMemory: 'name', gDisk: 'vm', gNetwork: 'vm', gPerf: 'vm', gTools: 'vm', gLicense: 'vm', gHealth: 'resource' }
+const vmColumn: Record<string, string> = { gInfo: 'name', gCPU: 'name', gMemory: 'name', gDisk: 'vm', gNetwork: 'vm', gPerf: 'vm', gTools: 'vm', gLicense: 'vm', gHealth: 'resource', gSecurity: 'vm' }
 const HIDE_KEY = 'gcetools.hideManaged'
 
 export default function InventoryPage({ inventory, notify }: Props) {
@@ -44,6 +44,9 @@ export default function InventoryPage({ inventory, notify }: Props) {
       { k: t('Disco total (GB)'), v: Math.round(rows('gDisks').reduce((a, r) => a + (Number(r.sizeGB) || 0), 0)) },
       { k: t('Discos huérfanos'), v: rows('gDisks').filter(r => r.orphan === true).length, alert: true },
       { k: t('Hallazgos altos'), v: rows('gHealth').filter(r => sevKey(r.severity) === 'Alta').length, alert: true },
+      ...(inventory.sheets.some(s => s.name === 'gSecurity') ? [{
+        k: t('Expuestas a Internet'), v: rows('gSecurity').filter(r => r.internetExposed === true).length, alert: true,
+      }] : []),
       ...(inventory.meta.currency ? [{
         k: t('Coste/mes lista ({0})', inventory.meta.currency),
         v: Math.round(rows('gCost').filter(r => r.project !== 'TOTAL').reduce((a, r) => a + (Number(r.total) || 0), 0)),

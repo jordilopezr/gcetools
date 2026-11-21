@@ -123,6 +123,12 @@ var Rules = []Rule{
 	{"default-sa", "Service account por defecto de Compute", "Seguridad", Medium, "", onVM},
 	{"public-ip", "VM con IP pública", "Seguridad", Medium, "", onVM},
 	{"no-secure-boot", "Secure Boot deshabilitado", "Seguridad", Low, "", onVM},
+	{"internet-exposed", "VM expuesta a Internet en puertos sensibles", "Seguridad", High, "", onVM},
+	{"project-ssh-keys", "VM que acepta claves SSH de proyecto", "Seguridad", Medium, "", onVM},
+	{"serial-port", "Acceso por puerto serie habilitado", "Seguridad", Medium, "", onVM},
+	{"no-os-login", "OS Login deshabilitado", "Seguridad", Low, "", onVM},
+	{"ip-forward", "IP forwarding habilitado", "Seguridad", Low, "", onVM},
+	{"no-shielded-vm", "vTPM o integrity monitoring deshabilitado", "Seguridad", Low, "", onVM},
 	{"template-image", "Template con imagen obsoleta, deprecada o antigua", "Seguridad", Medium, "imageDays", onTemplate},
 	{"snapshot-schedule", "VM con discos sin snapshot schedule", "Protección de datos", Low, "", onVM},
 	{"cpu-high", "CPU saturada", "Rendimiento", Medium, "cpuHighPct", onVM},
@@ -140,7 +146,7 @@ var Rules = []Rule{
 // disposable, so protecting or monitoring each one is the service's job.
 var skipManaged = map[string]bool{
 	"stopped-vm": true, "stopped-no-disks": true, "no-deletion-protection": true,
-	"snapshot-schedule": true, "no-ops-agent": true,
+	"snapshot-schedule": true, "no-ops-agent": true, "no-os-login": true, "ip-forward": true,
 }
 
 // LocalizedRules returns Rules with their texts in the current language
@@ -462,6 +468,43 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		}
 		add(finding{"firewall-open", sev, "Seguridad", rule, str(r, "project"), str(r, "name"), str(r, "network"),
 			i18n.Tf("%s desde %s hacia %s", rules, str(r, "sourceRanges"), str(r, "targets")), nil})
+	}
+
+	// Per-VM security posture (gSecurity, filled by the security package).
+	for _, r := range rows(collect.SSecurity) {
+		p, n, z := str(r, "project"), str(r, "vm"), str(r, "zone")
+		lb := []string{vmLabels[p+"/"+n]}
+		if boolean(r, "internetExposed") {
+			add(finding{"internet-exposed", High, "Seguridad", i18n.T("VM expuesta a Internet en puertos sensibles"), p, n, z,
+				i18n.Tf("%s abiertos en %s por %s", str(r, "exposedPorts"), str(r, "externalIP"), str(r, "exposingRules")), lb})
+		}
+		if boolean(r, "projectSSHKeys") {
+			add(finding{"project-ssh-keys", Medium, "Seguridad", i18n.T("VM que acepta claves SSH de proyecto"), p, n, z,
+				i18n.T("Quien tenga una clave en los metadatos del proyecto entra en esta VM; activa OS Login o block-project-ssh-keys"), lb})
+		}
+		if boolean(r, "serialPort") {
+			add(finding{"serial-port", Medium, "Seguridad", i18n.T("Acceso por puerto serie habilitado"), p, n, z,
+				i18n.T("serial-port-enable=TRUE en la VM o en el proyecto"), lb})
+		}
+		if !boolean(r, "osLogin") {
+			add(finding{"no-os-login", Low, "Seguridad", i18n.T("OS Login deshabilitado"), p, n, z,
+				i18n.T("El acceso SSH se gestiona con claves en metadatos en lugar de IAM. Si una política de organización exige OS Login, desactiva la regla"), lb})
+		}
+		if boolean(r, "ipForward") {
+			add(finding{"ip-forward", Low, "Seguridad", i18n.T("IP forwarding habilitado"), p, n, z,
+				i18n.T("Solo necesario en appliances de red, NAT o VPN"), lb})
+		}
+		if !boolean(r, "vtpm") || !boolean(r, "integrityMonitoring") {
+			var off []string
+			if !boolean(r, "vtpm") {
+				off = append(off, "vTPM")
+			}
+			if !boolean(r, "integrityMonitoring") {
+				off = append(off, "integrity monitoring")
+			}
+			add(finding{"no-shielded-vm", Low, "Seguridad", i18n.T("vTPM o integrity monitoring deshabilitado"), p, n, z,
+				i18n.Tf("Deshabilitado: %s", strings.Join(off, ", ")), lb})
+		}
 	}
 
 	order := map[string]int{High: 0, Medium: 1, Low: 2}

@@ -34,6 +34,7 @@ It reads every project the identity can reach and exports to XLSX (one sheet per
 | gRecommend * | — | Active recommendations: rightsizing, idle resources and CUDs, with monthly savings |
 | gCost * | — | Estimated monthly cost per project: compute and GPU, licenses, disks, snapshots, images, unused IPs |
 | gProject | vSource | Per-project summary and scan result |
+| gSecurity | — | Security posture per VM: exposed to the Internet on sensitive ports (external IP + firewall, Shared VPC included), default SA, OS Login, project SSH keys, serial port, IP forwarding, Shielded VM, disk encryption |
 | gHealth | vHealth | Findings: orphaned disks, firewall open to the Internet, default service account, stopped VMs, disks without a snapshot schedule, templates with deprecated or old images… |
 | gErrors / gMetaData | vMetaData | Errors per project and scan information |
 
@@ -67,8 +68,8 @@ The UI is available in English and Spanish: the selector is in the top bar (tran
 
 gInfo shows in **Managed by** which service created each VM (GKE, Dataproc, Dataflow, Batch or MIG) and, for GKE and Dataproc, the **cluster** and **node pool**. It is detected from the labels and metadata those services set.
 
-- Health rules that make no sense for disposable VMs are skipped for them: stopped VM, stopped VM without disks, deletion protection, snapshot schedule and Ops Agent. The rest (public IP, default service account, Secure Boot…) still apply.
-- In **Inventory**, the **Hide the N VMs managed by GKE, Dataproc, Dataflow or Batch** checkbox removes GKE, Dataproc, Dataflow and Batch nodes from the per-VM tabs (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense and gHealth). Members of your own MIGs stay visible.
+- Health rules that make no sense for disposable VMs are skipped for them: stopped VM, stopped VM without disks, deletion protection, snapshot schedule, Ops Agent, OS Login and IP forwarding. The rest (public IP, default service account, Secure Boot…) still apply.
+- In **Inventory**, the **Hide the N VMs managed by GKE, Dataproc, Dataflow or Batch** checkbox removes GKE, Dataproc, Dataflow and Batch nodes from the per-VM tabs (gInfo, gCPU, gMemory, gDisk, gNetwork, gPerf, gTools, gLicense, gHealth and gSecurity). Members of your own MIGs stay visible.
 
 ### Fast mode with Cloud Asset Inventory
 
@@ -76,7 +77,7 @@ In organizations with many projects, **fast mode** (Projects → **Fast mode (Cl
 
 - **Without a scope:** one listing per project instead of a dozen calls.
 - **With an organization or folder** in the discovery scope (or `--discover`): a single paged listing for every project.
-- Reservations, commitments, sole-tenant nodes, quotas and the optional modules (OS Config, Monitoring, Recommender) are still read per project, because CAI does not include them or lacks that data.
+- Reservations, commitments, sole-tenant nodes, quotas, project metadata and the optional modules (OS Config, Monitoring, Recommender) are still read per project, because CAI does not include them or lacks that data.
 - **Delay:** CAI can take a few minutes to reflect recent changes; gMetaData records that the scan used fast mode.
 - If CAI fails for a project (permissions, disabled API), that project is read through the Compute API and the reason is logged in gErrors.
 - It needs `roles/cloudasset.viewer` on the scope and the Cloud Asset API enabled in the quota project (or in the project of the service account or OAuth client).
@@ -84,6 +85,15 @@ In organizations with many projects, **fast mode** (Projects → **Fast mode (Cl
 ```bash
 gcetools-cli scan --discover organizations/123456 --fast --out inventory.xlsx
 ```
+
+### Security posture (gSecurity)
+
+One row per VM with what an audit asks first:
+
+- **Internet exposed:** external IP plus a VPC firewall rule open to `0.0.0.0/0` on a sensitive port (SSH, RDP, Telnet, FTP, VNC, SMB, Docker, SQL Server, Oracle, MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch…). Rules are applied by priority, DENY before ALLOW, by network tag or service account, and Shared VPC host project rules are included. Hierarchical and network firewall policies aren't read.
+- **Access and identity:** default service account and `cloud-platform` scope, OS Login, project-wide SSH keys accepted, serial port, IP forwarding.
+- **Hardening:** Secure Boot, vTPM, integrity monitoring, Confidential VM and disk encryption (Google, CMEK, CSEK).
+- **Issues** counts the failed checks per VM. gHealth gets six new rules (`internet-exposed`, `project-ssh-keys`, `serial-port`, `no-os-login`, `ip-forward`, `no-shielded-vm`), gProject the project's OS Login, SSH keys and exposed VM count, and the executive report an exposed VMs figure.
 
 ### History and trends
 
@@ -317,6 +327,7 @@ internal/auth             ADC / JSON key / impersonation / Sign in with Google
 internal/core             Project discovery, concurrent scan, rate-limited HTTP with retries
 internal/collect          One collector per resource type (aggregatedList or Cloud Asset Inventory) + tab schema
 internal/health           gHealth rules
+internal/security         gSecurity Internet exposure
 internal/diff             Comparison of two inventories (additions, removals and changes)
 internal/pricing          Cloud Billing catalog and estimated cost
 internal/export           XLSX (excelize streaming), CSV in ZIP, JSON
@@ -337,7 +348,6 @@ To translate: wrap the text with `i18n.T("…")` or `i18n.Tf("…", args)` in Go
 ## Roadmap
 
 - Windows executable signing
-- Security posture tab (gSecurity)
 
 ## Updates
 

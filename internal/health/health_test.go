@@ -236,3 +236,35 @@ func TestManagedVMsSkipPerVMRules(t *testing.T) {
 		}
 	}
 }
+
+func TestSecurityRules(t *testing.T) {
+	inv := collect.NewInventory()
+	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
+	add(collect.SInfo, model.Row{"project": "p", "name": "web", "zone": "z"})
+	add(collect.SInfo, model.Row{"project": "p", "name": "node", "zone": "z", "managedBy": "GKE"})
+	add(collect.SSecurity, model.Row{"project": "p", "vm": "web", "zone": "z", "internetExposed": true,
+		"exposedPorts": "22 (SSH)", "externalIP": "34.0.0.1", "exposingRules": "allow-ssh", "projectSSHKeys": true,
+		"serialPort": true, "osLogin": false, "ipForward": true, "vtpm": true, "integrityMonitoring": false})
+	add(collect.SSecurity, model.Row{"project": "p", "vm": "node", "zone": "z", "managedBy": "GKE",
+		"osLogin": false, "ipForward": true, "vtpm": true, "integrityMonitoring": true})
+	Evaluate(inv, DefaultOptions(), time.Now())
+	rows := findings(inv)
+	for _, id := range []string{"internet-exposed", "project-ssh-keys", "serial-port", "no-os-login", "ip-forward", "no-shielded-vm"} {
+		found := false
+		for _, r := range rows {
+			if r["ruleId"] == id && r["resource"] == "web" {
+				found = true
+			}
+			if r["ruleId"] == id && r["resource"] == "node" {
+				t.Errorf("%s should not apply to the GKE node", id)
+			}
+		}
+		if !found {
+			t.Errorf("missing %s for web", id)
+		}
+	}
+	if r, _ := has(rows, "VM expuesta a Internet", "web"); r == nil || r["severity"] != High ||
+		!strings.Contains(r["detail"].(string), "22 (SSH)") {
+		t.Errorf("internet-exposed finding = %v", r)
+	}
+}

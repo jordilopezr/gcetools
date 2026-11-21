@@ -63,6 +63,8 @@ func fakeServices(t *testing.T) Services {
 			 "recommenderSubtype":"CHANGE_MACHINE_TYPE","priority":"P2","stateInfo":{"state":"ACTIVE"},
 			 "primaryImpact":{"category":"COST","costProjection":{"cost":{"currencyCode":"USD","units":"-48","nanos":-500000000},"duration":"2592000s"}},
 			 "content":{"operationGroups":[{"operations":[{"action":"replace","resource":"//compute.googleapis.com/projects/p1/zones/europe-west1-b/instances/vm-1"}]}]}}]}`,
+		"/compute/v1/projects/p1": `{"name":"p1","commonInstanceMetadata":{"items":[
+			{"key":"ssh-keys","value":"alice:ssh-ed25519 AAA alice\nbob:ssh-rsa BBB bob"},{"key":"serial-port-enable","value":"TRUE"}]}}`,
 		"/projects/p1/global/firewalls": `{"items":[{"name":"ssh","network":"https://x/networks/default","direction":"INGRESS","priority":1000,
 			"allowed":[{"IPProtocol":"tcp","ports":["22"]}],"sourceRanges":["0.0.0.0/0"]}]}`,
 	}
@@ -140,6 +142,18 @@ func TestProjectCollect(t *testing.T) {
 	}
 	if fw := inv.Sheet(SFirewall).Rows[0]; fw["openToInternet"] != true || fw["rules"] != "tcp:22" {
 		t.Errorf("firewall row = %v", fw)
+	}
+	if st.SSHKeys != 2 || !st.SerialPort || st.OSLogin {
+		t.Errorf("project metadata stats = %+v", st)
+	}
+	sec := inv.Sheet(SSecurity).Rows[0]
+	for k, want := range map[string]any{
+		"externalIP": "34.1.1.1", "defaultSA": true, "fullScope": true, "osLogin": false, "projectSSHKeys": true,
+		"instanceSSHKeys": false, "serialPort": true, "secureBoot": false, "diskEncryption": "Google", "managedBy": "MIG",
+	} {
+		if sec[k] != want {
+			t.Errorf("gSecurity[%s] = %#v, want %#v", k, sec[k], want)
+		}
 	}
 	lics := inv.Sheet(SLicense).Rows
 	if len(lics) != 2 || lics[0]["category"] != "Herramienta" || lics[1]["category"] != "Debian" || lics[1]["licenseProject"] != "debian-cloud" {
@@ -272,7 +286,7 @@ func TestFastModeMatchesComputeAPI(t *testing.T) {
 	if st.Status != "OK" || st.VMs != 1 || st.Disks != 2 {
 		t.Fatalf("fast stats = %+v, errors = %v", st, fast.Errors)
 	}
-	for _, name := range []string{SInfo, SDisks, SDisk, SNetwork, SLicense, SFirewall, SCPU, SMemory} {
+	for _, name := range []string{SInfo, SDisks, SDisk, SNetwork, SLicense, SFirewall, SCPU, SMemory, SSecurity} {
 		n, f := normal.Sheet(name).Rows, fast.Sheet(name).Rows
 		if len(n) != len(f) {
 			t.Errorf("%s: %d rows with the Compute API, %d in fast mode", name, len(n), len(f))
@@ -313,5 +327,21 @@ func TestRelabel(t *testing.T) {
 	Relabel(inv)
 	if s.Title != "Instancias" || s.Columns[0].Title != "Proyecto" || s.Columns[len(s.Columns)-1].Title != "Old column" {
 		t.Errorf("relabel: %q %q %q", s.Title, s.Columns[0].Title, s.Columns[len(s.Columns)-1].Title)
+	}
+}
+
+func TestInstanceMetadataOverrides(t *testing.T) {
+	c := &collector{meta: map[string]string{"enable-oslogin": "TRUE", "serial-port-enable": "true", "ssh-keys": "a:ssh-rsa AAA a"}}
+	if !c.metaOverride(map[string]string{}, "enable-oslogin") {
+		t.Error("project OS Login should apply when the VM does not set it")
+	}
+	if c.metaOverride(map[string]string{"enable-oslogin": "FALSE"}, "enable-oslogin") {
+		t.Error("instance metadata should override the project")
+	}
+	if !metaTrue("1") || metaTrue("false") || metaTrue("") {
+		t.Error("metaTrue")
+	}
+	if countKeys(map[string]string{"ssh-keys": "a:x\n\nb:y\n", "sshKeys": "c:z"}) != 3 {
+		t.Error("countKeys")
 	}
 }

@@ -79,6 +79,11 @@ type Stats struct {
 	MemoryGB   float64
 	Disks      int64
 	DiskGB     float64
+	// Project-wide metadata (gProject): OS Login and SSH keys every VM of
+	// the project inherits unless it overrides or blocks them.
+	OSLogin    bool
+	SSHKeys    int64
+	SerialPort bool
 }
 
 type vmRef struct {
@@ -102,6 +107,7 @@ type collector struct {
 	zones   map[string]bool                 // zones holding VMs or disks
 	regions map[string]bool                 // regions holding VMs, disks or addresses
 	assets  Assets                          // fast mode: prefetched resources (nil = Compute API)
+	meta    map[string]string               // project-wide metadata (commonInstanceMetadata)
 	stats   Stats
 }
 
@@ -139,7 +145,8 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 	}
 
 	steps := []step{
-		{name: "disks", fn: c.collectDisks}, // first: instances need the disk map
+		{name: "disks", fn: c.collectDisks},             // first: instances need the disk map
+		{name: "project", fn: c.collectProjectMetadata}, // before instances: they inherit it
 		{name: "instances", fn: c.collectInstances},
 		{name: "snapshots", fn: c.collectSnapshots},
 		{name: "images", fn: c.collectImages},

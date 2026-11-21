@@ -86,6 +86,8 @@ var specs = []spec{
 		summary: []string{"os", "version"}, ignore: []string{"updated"}, collector: "osconfig"},
 	{sheet: collect.SProject, keys: []string{"projectId"}, project: "projectId",
 		summary: []string{"name", "parent", "vms"}, ignore: []string{"scanStatus"}},
+	{sheet: collect.SSecurity, keys: []string{"project", "zone", "vm"}, project: "project", loc: "zone",
+		summary: []string{"internetExposed", "exposedPorts", "issues"}, ignore: []string{"status", "notes"}, collector: "*"},
 	{sheet: collect.SHealth, keys: []string{"rule", "project", "resource", "location"}, project: "project", loc: "location",
 		summary: []string{"severity", "detail"}, ignore: []string{"detail"}, collector: "*"},
 }
@@ -446,6 +448,10 @@ func addedReason(sheet string, r model.Row) string {
 		if truthy(r["openToInternet"]) && !strings.EqualFold(str(r, "action"), "deny") {
 			return i18n.T("Regla nueva abierta a Internet")
 		}
+	case collect.SSecurity:
+		if truthy(r["internetExposed"]) {
+			return i18n.T("VM nueva expuesta a Internet")
+		}
 	case collect.SDisks:
 		if truthy(r["orphan"]) {
 			return i18n.T("Disco huérfano nuevo")
@@ -492,6 +498,21 @@ func changedReason(sheet, field, before, after string, r model.Row) string {
 		}
 		if truthy(r["openToInternet"]) && slices.Contains([]string{"rules", "sourceRanges", "targets", "disabled", "action"}, field) {
 			return i18n.T("Cambio en una regla abierta a Internet")
+		}
+	case collect.SSecurity:
+		switch field {
+		case "internetExposed":
+			if after == yes {
+				return i18n.T("VM que pasa a estar expuesta a Internet")
+			}
+		case "exposedPorts":
+			if after != "" {
+				return i18n.T("Cambio en los puertos abiertos a Internet")
+			}
+		case "projectSSHKeys", "serialPort":
+			if after == yes {
+				return i18n.T("Acceso a la VM ampliado")
+			}
 		}
 	case collect.SDisks:
 		if field == "orphan" && after == yes {
