@@ -263,9 +263,23 @@ jobs:
               app="$(find build/bin -maxdepth 1 -name '*.app' | head -1)"
               cp -R "$app" dist/ && cp README.md LICENSE dist/
               ditto -c -k --keepParent dist "$n.zip"
-              # DMG: drag gceTools.app onto the Applications shortcut
-              mkdir -p dmg && cp -R "$app" dmg/ && ln -s /Applications dmg/Applications
-              hdiutil create -volname "gceTools ${v%%-*}" -srcfolder dmg -ov -format UDZO -fs HFS+ "$n.dmg" ;;
+              # DMG: drag gceTools.app onto the Applications shortcut, on a
+              # branded background (build/darwin/dmg-background.py) with the
+              # app icon as volume icon. create-dmg lays the window out with
+              # Finder; if that fails, fall back to a plain DMG.
+              vol="gceTools ${v%%-*}" a="$(basename "$app")"
+              mkdir -p dmg && cp -R "$app" dmg/
+              tiffutil -cathidpicheck build/darwin/dmg-background.png build/darwin/dmg-background@2x.png -out dmg-background.tiff
+              brew install --quiet create-dmg
+              if ! create-dmg --volname "$vol" --volicon assets/brand/macos/gcetools.icns \
+                  --background dmg-background.tiff --window-pos 200 120 --window-size 660 420 \
+                  --icon-size 128 --text-size 13 --icon "$a" 170 215 --hide-extension "$a" \
+                  --app-drop-link 490 215 --filesystem HFS+ "$n.dmg" dmg; then
+                echo "::warning::create-dmg failed; building a plain DMG"
+                rm -f "$n.dmg" rw.*.dmg
+                ln -s /Applications dmg/Applications
+                hdiutil create -volname "$vol" -srcfolder dmg -ov -format UDZO -fs HFS+ "$n.dmg"
+              fi ;;
           esac
           ls -la
 
