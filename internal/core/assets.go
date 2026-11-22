@@ -28,7 +28,8 @@ type assetSource struct {
 	scope   string         // organizations/N or folders/N; "" = per project
 
 	once      sync.Once
-	byProject map[string]collect.Assets
+	mu        sync.Mutex
+	byProject map[string]collect.Assets // emptied as projects take their part
 	bulkErr   error
 }
 
@@ -47,7 +48,13 @@ func (a *assetSource) Project(ctx context.Context, projectID string) (collect.As
 	if a.scope != "" {
 		a.once.Do(func() { a.byProject, a.bulkErr = a.list(ctx, a.scope) })
 		if a.bulkErr == nil {
-			if as, ok := a.byProject[projectID]; ok {
+			// Hand each project its raw JSON once and drop it: for a whole
+			// organization this map holds every instance, disk and snapshot.
+			a.mu.Lock()
+			as, ok := a.byProject[projectID]
+			delete(a.byProject, projectID)
+			a.mu.Unlock()
+			if ok {
 				return as, nil
 			}
 		}

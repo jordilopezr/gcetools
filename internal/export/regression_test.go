@@ -133,3 +133,41 @@ func readZipFile(t *testing.T, path, name string) string {
 	t.Fatalf("%s not in zip", name)
 	return ""
 }
+
+// Every sheet keeps its header filter (now a table written on the stream)
+// and repeated column titles do not break the table.
+func TestXLSXFiltersAndUniqueHeaders(t *testing.T) {
+	inv := sample()
+	s := inv.Sheet(collect.SInfo)
+	s.Columns = append(s.Columns, model.Column{Key: "dup", Title: s.Columns[0].Title, Type: model.TString})
+	path := filepath.Join(t.TempDir(), "inv.xlsx")
+	if _, err := Write(inv, path, XLSX, ','); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, sh := range inv.Sheets {
+		tables, err := f.GetTables(sh.Name)
+		if err != nil || len(tables) != 1 {
+			t.Errorf("%s: tables = %v, %v", sh.Name, tables, err)
+		}
+	}
+	hdr, _ := f.GetRows(collect.SInfo)
+	last := hdr[0][len(hdr[0])-1]
+	if last != s.Columns[0].Title+" (2)" {
+		t.Errorf("duplicate title = %q", last)
+	}
+}
+
+func TestUniqueTitles(t *testing.T) {
+	got := uniqueTitles([]model.Column{{Title: "VPC"}, {Title: "vpc"}, {Key: "k"}, {Title: "VPC"}})
+	want := []string{"VPC", "vpc (2)", "k", "VPC (3)"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}

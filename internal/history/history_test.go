@@ -139,3 +139,19 @@ func TestDamagedIndex(t *testing.T) {
 		t.Errorf("pruning followed an ID from the index: %v", err)
 	}
 }
+
+func TestGet(t *testing.T) {
+	store(t)
+	at := time.Date(2026, 11, 1, 9, 0, 0, 0, time.Local)
+	saved, err := Save(inventory(at, 3), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Get(saved.ID)
+	if err != nil || s.VMs != 3 || !s.StartedAt.Equal(at) {
+		t.Fatalf("Get = %+v, %v", s, err)
+	}
+	if _, err := Get("20000101-000000"); err == nil {
+		t.Error("missing scan must fail")
+	}
+}

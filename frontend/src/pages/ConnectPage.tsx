@@ -199,8 +199,9 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
         <button className="btn filled" disabled={!canConnect || busy} onClick={connect}>
           <Icon name={busy ? 'progress_activity' : 'login'} />{busy ? t('Conectando…') : t('Conectar')}
         </button>
-        <span className="body-s muted row" style={{ gap: 6 }}>
-          <Icon name="lock" size="sm" /> {t('Solo lectura: se solicita únicamente el scope')} <code className="inline">cloud-platform.read-only</code>
+        <span className="body-s muted row" style={{ gap: 6 }}
+          title="cloud-platform.read-only, compute.readonly, monitoring.read, cloud-billing.readonly">
+          <Icon name="lock" size="sm" /> {t('Solo lectura: gceTools solo pide permisos de lectura y nunca modifica nada')}
         </span>
       </div>
 

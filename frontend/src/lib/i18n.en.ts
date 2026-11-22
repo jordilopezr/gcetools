@@ -111,7 +111,7 @@ export const en: Record<string, string> = {
   'La impersonación requiere credenciales ADC (gcloud auth application-default login).': 'Impersonation requires ADC credentials (gcloud auth application-default login).',
   'Conectando…': 'Connecting…',
   'Conectar': 'Connect',
-  'Solo lectura: se solicita únicamente el scope': 'Read-only: the only scope requested is',
+  'Solo lectura: gceTools solo pide permisos de lectura y nunca modifica nada': 'Read-only: gceTools only requests read permissions and never changes anything',
   'Permisos IAM recomendados': 'Recommended IAM permissions',
   'en organización, carpeta o proyecto: inventario de Compute.': 'on the organization, folder or project: Compute inventory.',
   'descubrir proyectos y su jerarquía.': 'discover projects and their hierarchy.',

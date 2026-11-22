@@ -1,6 +1,6 @@
 // Tabs + search + AG Grid for any list of sheets. Used by the inventory and
 // by the comparison page (whose result is also a list of sheets).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, ICellRendererParams } from 'ag-grid-community'
 import type { Column, Row, Sheet } from '../lib/api'
@@ -48,6 +48,8 @@ function toColDef(c: Column): ColDef<Row> {
   return base
 }
 
+const defaultColDef: ColDef<Row> = { sortable: true, filter: true, resizable: true }
+
 interface Props {
   sheets: Sheet[]
   emptyText?: string
@@ -56,6 +58,12 @@ interface Props {
 export default function SheetBrowser({ sheets, emptyText = t('No se encontraron recursos de este tipo en los proyectos escaneados.') }: Props) {
   const [active, setActive] = useState(sheets[0]?.name ?? '')
   const [filter, setFilter] = useState('')
+  // The grid searches every value of every row: wait until typing pauses.
+  const [query, setQuery] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(filter), filter ? 250 : 0)
+    return () => clearTimeout(id)
+  }, [filter])
   const sheet = sheets.find(s => s.name === active) ?? sheets[0]
   const columnDefs = useMemo(() => sheet?.columns.map(toColDef) ?? [], [sheet])
 
@@ -93,8 +101,9 @@ export default function SheetBrowser({ sheets, emptyText = t('No se encontraron 
           theme={gridTheme}
           rowData={sheet?.rows ?? []}
           columnDefs={columnDefs}
-          defaultColDef={{ sortable: true, filter: true, resizable: true }}
-          quickFilterText={filter}
+          defaultColDef={defaultColDef}
+          quickFilterText={query}
+          cacheQuickFilter
           enableCellTextSelection
           ensureDomOrder
           tooltipShowDelay={400}

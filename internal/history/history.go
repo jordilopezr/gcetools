@@ -213,6 +213,20 @@ func List() ([]Summary, error) {
 	return rebuild(dir)
 }
 
+// Get returns the index entry of one stored scan.
+func Get(id string) (Summary, error) {
+	all, err := List()
+	if err != nil {
+		return Summary{}, err
+	}
+	for _, s := range all {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return Summary{}, fmt.Errorf(i18n.T("no existe el escaneo %s en el historial"), id)
+}
+
 // Load reads one stored inventory.
 func Load(id string) (*model.Inventory, error) {
 	if !reID.MatchString(id) {

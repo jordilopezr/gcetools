@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +44,12 @@ type App struct {
 	scanGen     uint64                      // bumped by every scan start, Connect and Disconnect
 	diff        *model.Inventory            // last comparison
 	snaps       map[string]*model.Inventory // snapshots loaded for comparison, by path
+	snapOrder   []string                    // paths in a.snaps, oldest first
 }
+
+// maxSnaps bounds the JSON snapshots kept for comparison: the page only
+// compares two at a time, and each one can take hundreds of MB.
+const maxSnaps = 2
 
 func NewApp() *App {
 	return &App{projects: map[string]core.Project{}, snaps: map[string]*model.Inventory{}}
@@ -366,7 +372,12 @@ func (a *App) PickSnapshot() (*SnapshotInfo, error) {
 		return nil, err
 	}
 	a.mu.Lock()
+	a.snapOrder = append(slices.DeleteFunc(a.snapOrder, func(p string) bool { return p == path }), path)
 	a.snaps[path] = inv
+	for len(a.snapOrder) > maxSnaps {
+		delete(a.snaps, a.snapOrder[0])
+		a.snapOrder = a.snapOrder[1:]
+	}
 	a.mu.Unlock()
 	return snapshotInfo(path, filepath.Base(path), inv), nil
 }
@@ -502,13 +513,15 @@ func (a *App) OpenHistory(id string) (*model.Inventory, error) {
 
 func (a *App) DeleteHistory(id string) error { return history.Delete(id) }
 
-// HistorySnapshot describes a history entry for the comparison page.
+// HistorySnapshot describes a history entry for the comparison page, from
+// the index: loading the scan itself takes seconds for large inventories.
 func (a *App) HistorySnapshot(id string) (*SnapshotInfo, error) {
-	inv, err := history.Load(id)
+	s, err := history.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	return snapshotInfo(HistoryPrefix+id, i18n.Tf("Historial %s", id), inv), nil
+	return &SnapshotInfo{Path: HistoryPrefix + id, Name: i18n.Tf("Historial %s", id), StartedAt: s.StartedAt,
+		Identity: s.Identity, Version: s.Version, Projects: s.Projects, VMs: s.VMs}, nil
 }
 
 // HistoryDir is shown in the UI so users know where scans are kept.

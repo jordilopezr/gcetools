@@ -96,6 +96,7 @@ func writeXLSX(inv *model.Inventory, path string) error {
 	dateFmt := "yyyy-mm-dd hh:mm"
 	dateStyle, _ := f.NewStyle(&excelize.Style{CustomNumFmt: &dateFmt})
 	gbStyle, _ := f.NewStyle(&excelize.Style{NumFmt: 2}) // 0.00
+	yes, no := i18n.T("Sí"), i18n.T("No")
 
 	for i, sh := range inv.Sheets {
 		if i == 0 {
@@ -122,10 +123,21 @@ func writeXLSX(inv *model.Inventory, path string) error {
 			return err
 		}
 		hdr := make([]any, len(sh.Columns))
-		for ci, col := range sh.Columns {
-			hdr[ci] = excelize.Cell{StyleID: header, Value: col.Title}
+		for ci, title := range uniqueTitles(sh.Columns) {
+			hdr[ci] = excelize.Cell{StyleID: header, Value: title}
 		}
 		if err := sw.SetRow("A1", hdr, excelize.RowOpts{Height: 20}); err != nil {
+			return err
+		}
+		// The filter goes in as a table (no style) declared on the stream:
+		// f.AutoFilter after Flush re-reads the whole sheet into memory,
+		// which took 5 GB and 8 s for 20,000 VMs.
+		lastCol, _ := excelize.ColumnNumberToName(len(sh.Columns))
+		noStripes := false
+		if err := sw.AddTable(&excelize.Table{
+			Range: fmt.Sprintf("A1:%s%d", lastCol, max(len(sh.Rows)+1, 2)),
+			Name:  fmt.Sprintf("t%d", i+1), ShowRowStripes: &noStripes,
+		}); err != nil {
 			return err
 		}
 		for ri, row := range sh.Rows {
@@ -143,7 +155,10 @@ func writeXLSX(inv *model.Inventory, path string) error {
 					}
 				case model.TBool:
 					if b, ok := v.(bool); ok {
-						vals[ci] = map[bool]string{true: i18n.T("Sí"), false: i18n.T("No")}[b]
+						vals[ci] = no
+						if b {
+							vals[ci] = yes
+						}
 					}
 				default:
 					vals[ci] = v
@@ -155,11 +170,6 @@ func writeXLSX(inv *model.Inventory, path string) error {
 			}
 		}
 		if err := sw.Flush(); err != nil {
-			return err
-		}
-		lastCol, _ := excelize.ColumnNumberToName(len(sh.Columns))
-		rng := fmt.Sprintf("A1:%s%d", lastCol, len(sh.Rows)+1)
-		if err := f.AutoFilter(sh.Name, rng, nil); err != nil {
 			return err
 		}
 	}
@@ -174,6 +184,25 @@ func writeXLSX(inv *model.Inventory, path string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// uniqueTitles returns the column titles, numbering repeats: Excel tables
+// (used for the filters) reject duplicate header names.
+func uniqueTitles(cols []model.Column) []string {
+	out := make([]string, len(cols))
+	seen := map[string]int{}
+	for i, c := range cols {
+		t := c.Title
+		if t == "" {
+			t = c.Key
+		}
+		seen[strings.ToLower(t)]++
+		if n := seen[strings.ToLower(t)]; n > 1 {
+			t = fmt.Sprintf("%s (%d)", t, n)
+		}
+		out[i] = t
+	}
+	return out
 }
 
 // ---------- CSV (zip) ----------

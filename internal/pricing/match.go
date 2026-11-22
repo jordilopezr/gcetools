@@ -1,24 +1,43 @@
 package pricing
 
 import (
+	"fmt"
 	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Index answers price lookups against a catalog. SKU descriptions are the
 // only stable join key the catalog offers, so matching is by description
 // prefix ("N2 Instance Core running in …") plus the SKU's service regions.
+//
+// A scan asks the same few questions thousands of times (one per VM, disk
+// and snapshot), so descriptions are lowercased once and answers are
+// memoized: without that, pricing 20,000 VMs took 12-15 s and 3.9 GB.
 type Index struct {
 	Currency string
 	skus     []SKU
+	lower    []string // lowercase descriptions, same order as skus
 	byRegion map[string][]int
+
+	mu    sync.Mutex
+	finds map[string]found
+	other map[string]found // License and GPU answers
+}
+
+type found struct {
+	sku   SKU
+	price float64
+	ok    bool
 }
 
 func NewIndex(c *Catalog) *Index {
-	x := &Index{Currency: c.Currency, skus: c.SKUs, byRegion: map[string][]int{}}
+	x := &Index{Currency: c.Currency, skus: c.SKUs, lower: make([]string, len(c.SKUs)), byRegion: map[string][]int{},
+		finds: map[string]found{}, other: map[string]found{}}
 	for i, s := range c.SKUs {
+		x.lower[i] = strings.ToLower(s.Desc)
 		for _, r := range s.Regions {
 			x.byRegion[r] = append(x.byRegion[r], i)
 		}
@@ -26,10 +45,34 @@ func NewIndex(c *Catalog) *Index {
 	return x
 }
 
+// memo returns the cached answer for key or computes and stores it.
+func (x *Index) memo(cache map[string]found, key string, compute func() found) found {
+	x.mu.Lock()
+	f, ok := cache[key]
+	x.mu.Unlock()
+	if ok {
+		return f
+	}
+	f = compute()
+	x.mu.Lock()
+	cache[key] = f
+	x.mu.Unlock()
+	return f
+}
+
 // find returns the first SKU in region whose usage type matches and whose
 // description starts with one of the prefixes (case-insensitive), trying
 // prefixes in order of preference.
 func (x *Index) find(region, usage string, prefixes ...string) (SKU, bool) {
+	key := region + "\x00" + usage + "\x00" + strings.Join(prefixes, "\x00")
+	f := x.memo(x.finds, key, func() found {
+		s, ok := x.findUncached(region, usage, prefixes...)
+		return found{sku: s, ok: ok}
+	})
+	return f.sku, f.ok
+}
+
+func (x *Index) findUncached(region, usage string, prefixes ...string) (SKU, bool) {
 	cands := x.byRegion[region]
 	for _, p := range prefixes {
 		p = strings.ToLower(p)
@@ -37,8 +80,7 @@ func (x *Index) find(region, usage string, prefixes ...string) (SKU, bool) {
 		// suffix: "Balanced PD Capacity" instead of "… Capacity in Iowa".
 		bare := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(p, " "), " in"), " running")
 		for _, i := range cands {
-			s := x.skus[i]
-			d := strings.ToLower(s.Desc)
+			s, d := x.skus[i], x.lower[i]
 			if (usage == "" || s.UsageType == usage) && (strings.HasPrefix(d, p) || d == bare) {
 				return s, true
 			}
@@ -56,12 +98,17 @@ func (x *Index) findMulti(multi, usage, desc string) (SKU, bool) {
 	default:
 		return SKU{}, false
 	}
-	for _, s := range x.skus {
-		if len(s.Regions) > 1 && (usage == "" || s.UsageType == usage) && strings.EqualFold(s.Desc, desc) {
-			return s, true
+	key := "multi\x00" + usage + "\x00" + strings.ToLower(desc) // same SKU for us, eu and asia
+	f := x.memo(x.finds, key, func() found {
+		d := strings.ToLower(desc)
+		for i, s := range x.skus {
+			if len(s.Regions) > 1 && (usage == "" || s.UsageType == usage) && x.lower[i] == d {
+				return found{sku: s, ok: true}
+			}
 		}
-	}
-	return SKU{}, false
+		return found{}
+	})
+	return f.sku, f.ok
 }
 
 // ---------- machines ----------
@@ -163,14 +210,21 @@ func (x *Index) Machine(region, machineType string, vcpu int64, memGB float64, s
 // GPU returns the monthly price of count accelerators of the given type
 // (e.g. "nvidia-tesla-t4", "nvidia-l4").
 func (x *Index) GPU(region, accelType string, count int64, spot bool) (float64, bool) {
+	f := x.memo(x.other, fmt.Sprintf("gpu\x00%s\x00%s\x00%v", region, accelType, spot), func() found {
+		p, ok := x.gpuHourly(region, accelType, spot)
+		return found{price: p, ok: ok}
+	})
+	return f.price * float64(count) * HoursPerMonth, f.ok
+}
+
+func (x *Index) gpuHourly(region, accelType string, spot bool) (float64, bool) {
 	tokens := strings.Split(strings.ToLower(accelType), "-")
 	usage := "OnDemand"
 	if spot {
 		usage = "Preemptible"
 	}
 	for _, i := range x.byRegion[region] {
-		s := x.skus[i]
-		d := strings.ToLower(s.Desc)
+		s, d := x.skus[i], x.lower[i]
 		if s.UsageType != usage || !strings.Contains(d, "gpu running in") ||
 			strings.Contains(d, "commit") || strings.Contains(d, "dws") || strings.Contains(d, "sole tenancy") ||
 			strings.Contains(d, "workstation") || strings.Contains(d, "reserved") || (!spot && strings.Contains(d, "spot")) {
@@ -184,7 +238,7 @@ func (x *Index) GPU(region, accelType string, count int64, spot bool) (float64, 
 			}
 		}
 		if all {
-			return s.Price * float64(count) * HoursPerMonth, true
+			return s.Price, true
 		}
 	}
 	return 0, false
@@ -328,6 +382,14 @@ var reUbuntuVer = regexp.MustCompile(`(\d{2})(\d{2})`)
 // License returns the monthly fee of a premium license for a VM with vcpu and
 // memGB. matched is false when the license is premium but no SKU could be found.
 func (x *Index) License(name string, vcpu int64, memGB float64) (fee float64, matched bool) {
+	f := x.memo(x.other, fmt.Sprintf("lic\x00%s\x00%d\x00%g", name, vcpu, memGB), func() found {
+		p, ok := x.license(name, vcpu, memGB)
+		return found{price: p, ok: ok}
+	})
+	return f.price, f.ok
+}
+
+func (x *Index) license(name string, vcpu int64, memGB float64) (fee float64, matched bool) {
 	if FreeLicense(name) {
 		return 0, true
 	}
@@ -381,11 +443,11 @@ func (x *Index) License(name string, vcpu int64, memGB float64) (fee float64, ma
 		return 0, false
 	}
 
-	for _, s := range x.skus {
+	for i, s := range x.skus {
 		if s.Family != "License" || s.Unit != "h" {
 			continue
 		}
-		d := strings.ToLower(s.Desc)
+		d := x.lower[i]
 		ok := true
 		for _, k := range need {
 			if !strings.Contains(d, k) {
@@ -446,11 +508,11 @@ func (x *Index) ubuntuPro(n string, vcpu int64, memGB float64) (float64, bool) {
 		prefix = "ubuntu pro fips " + ver + " "
 	}
 	cpu, ram := -1.0, -1.0
-	for _, s := range x.skus {
+	for i, s := range x.skus {
 		if s.Family != "License" {
 			continue
 		}
-		d := strings.ToLower(s.Desc)
+		d := x.lower[i]
 		if !strings.Contains(d, prefix) {
 			continue
 		}
