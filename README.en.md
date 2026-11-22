@@ -129,7 +129,7 @@ Export each scan as a **JSON snapshot** and compare them on the **Compare** page
 | Changes | One field per row: old value and new value |
 | Metadata | Compared inventories, monthly cost difference and what could not be compared |
 
-- **Relevant first:** resized VMs, service account or Shielded VM changes, new public IPs, firewall rules open to the Internet, disks that become orphaned, new high-severity findings and commitment changes.
+- **Relevant first:** resized VMs, service account or Shielded VM changes, new public IPs, firewall rules open to the Internet, VMs that become exposed to the Internet or accept wider access (project SSH keys, serial port), disks that become orphaned, new high-severity findings and commitment changes.
 - **No false positives from permissions:** a resource is only compared if its collector worked in both scans; if a project failed in one of them it shows in Metadata as "Not compared" instead of hundreds of removals.
 - **No noise:** last start and stop times, ages, quota usage, metrics and snapshots created by a schedule (they rotate daily) are ignored. Costs are only compared when both inventories use the same currency.
 
@@ -200,15 +200,15 @@ Every package also includes `gcetools-cli`, the console version for scheduled ta
 On Linux:
 
 ```bash
-sudo apt install ./gcetools-0.7.0-linux-amd64.deb
+sudo apt install ./gcetools-0.8.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.7.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.7.0-linux-x86_64.AppImage && ./gcetools-0.7.0-linux-x86_64.AppImage
+chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
 ```
 
 The `.deb` and `.rpm` install `gcetools` and `gcetools-cli` in `/usr/bin` and add gceTools to the applications menu. The AppImage does not bundle GTK or WebKitGTK: it uses the system ones.

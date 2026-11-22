@@ -129,7 +129,7 @@ Exporta cada escaneo como **Snapshot JSON** y compáralos en la página **Compar
 | Cambios | Un campo por fila: valor anterior y valor nuevo |
 | Metadatos | Inventarios comparados, diferencia de coste/mes y lo que no se pudo comparar |
 
-- **Relevantes primero:** VMs redimensionadas, cambios de service account o de Shielded VM, IPs públicas nuevas, reglas de firewall abiertas a Internet, discos que quedan huérfanos, hallazgos nuevos de severidad alta y cambios en commitments.
+- **Relevantes primero:** VMs redimensionadas, cambios de service account o de Shielded VM, IPs públicas nuevas, reglas de firewall abiertas a Internet, VMs que pasan a estar expuestas a Internet o aceptan más accesos (claves SSH de proyecto, puerto serie), discos que quedan huérfanos, hallazgos nuevos de severidad alta y cambios en commitments.
 - **Sin falsos positivos por permisos:** un recurso solo se compara si su colector funcionó en los dos escaneos; si un proyecto falló en uno de ellos, aparece en Metadatos como "No comparado" en lugar de como cientos de bajas.
 - **Sin ruido:** se ignoran fechas de último arranque y parada, antigüedades, uso de cuotas, métricas y los snapshots creados por schedule (rotan a diario). Los costes solo se comparan si los dos inventarios usan la misma moneda.
 
@@ -200,15 +200,15 @@ Cada paquete incluye también `gcetools-cli`, la versión de consola para tareas
 En Linux:
 
 ```bash
-sudo apt install ./gcetools-0.7.0-linux-amd64.deb
+sudo apt install ./gcetools-0.8.0-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.7.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.7.0-linux-x86_64.AppImage && ./gcetools-0.7.0-linux-x86_64.AppImage
+chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones. El AppImage no incluye GTK ni WebKitGTK: usa los del sistema.

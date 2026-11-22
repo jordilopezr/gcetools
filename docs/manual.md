@@ -69,19 +69,19 @@ xattr -dr com.apple.quarantine /Applications/gceTools.app
 **Debian / Ubuntu:**
 
 ```bash
-sudo apt install ./gcetools-0.7.0-linux-amd64.deb
+sudo apt install ./gcetools-0.8.0-linux-amd64.deb
 ```
 
 **Fedora / RHEL / openSUSE:**
 
 ```bash
-sudo dnf install ./gcetools-0.7.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
 ```
 
 **AppImage:**
 
 ```bash
-chmod +x gcetools-0.7.0-linux-x86_64.AppImage && ./gcetools-0.7.0-linux-x86_64.AppImage
+chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones.
@@ -257,7 +257,7 @@ El botón **Coste real (BigQuery)** despliega la configuración del coste real. 
 
 ### 6.7 Reglas de salud
 
-El botón **Reglas de salud** despliega la lista de las 22 reglas, con su severidad, categoría, ID y dónde se lee la excepción por label.
+El botón **Reglas de salud** despliega la lista de las 28 reglas, con su severidad, categoría, ID y dónde se lee la excepción por label.
 
 - Desmarca una regla para **desactivarla** en este escaneo y en el perfil.
 - Las reglas con umbral tienen un campo para ajustarlo: días de parada, antigüedad de snapshots e imágenes, % de CPU baja o saturada, % de RAM, % de cuota y días hasta el vencimiento de un CUD.
@@ -704,6 +704,8 @@ También se puede comparar desde **Historial** sin exportar nada.
 - cambios de service account o de Shielded VM;
 - IPs públicas nuevas;
 - reglas de firewall abiertas a Internet;
+- VMs nuevas o existentes que pasan a estar expuestas a Internet, y cambios en sus puertos abiertos (gSecurity);
+- VMs que empiezan a aceptar claves SSH de proyecto o el puerto serie;
 - discos que quedan huérfanos;
 - hallazgos nuevos de severidad alta;
 - cambios en commitments.
@@ -734,6 +736,7 @@ Al abrir un escaneo antiguo, las cabeceras se muestran en el idioma activo.
 **Inventario → Exportar → Informe ejecutivo (HTML)** genera una página autocontenida (sin scripts ni recursos externos). Se abre en cualquier navegador y se imprime a PDF. Está pensada para dirección o para clientes:
 
 - totales del inventario;
+- VMs expuestas a Internet en puertos sensibles (escaneos de la 0.8 en adelante);
 - coste estimado o real del mes;
 - ahorro potencial según Recommender;
 - los 10 hallazgos principales de severidad alta o media;
@@ -904,7 +907,7 @@ La sesión es la misma que usa la app: si ya iniciaste sesión en la app, `--aut
 
 ```bash
 gcetools-cli profiles   # perfiles guardados en la app y ruta de profiles.json
-gcetools-cli rules      # las 22 reglas con su ID, severidad, categoría y umbral
+gcetools-cli rules      # las 28 reglas con su ID, severidad, categoría y umbral
 gcetools-cli version    # versión instalada y si hay una más reciente
 ```
 
@@ -944,6 +947,8 @@ En tareas programadas usa una service account (`--auth sa` o `--auth impersonate
 | Detectar proyectos y modo rápido | `roles/cloudasset.viewer` | Organización, carpeta o proyecto |
 | Coste real | `roles/bigquery.jobUser` y `roles/bigquery.dataViewer` | Proyecto de la tabla y dataset |
 | Impersonación | `roles/iam.serviceAccountTokenCreator` | Sobre la service account |
+
+**gSecurity y Shared VPC:** para saber si una VM de un proyecto de servicio está expuesta, gceTools necesita las reglas de firewall del proyecto host, así que el proyecto host debe estar en el escaneo y la identidad necesita `roles/compute.viewer` en él. Los metadatos del proyecto (OS Login, claves SSH, puerto serie) también se leen con `roles/compute.viewer`.
 
 Para una visión global, asigna los roles a nivel de organización o carpeta. Sin `resourcemanager.projects.list` puedes añadir proyectos a mano por ID.
 
@@ -1041,6 +1046,8 @@ Política completa: [PRIVACY.md](../PRIVACY.md).
 | Windows: "editor desconocido" | Los ejecutables aún no están firmados | **Más información → Ejecutar de todas formas** |
 | macOS: "no se puede abrir porque es de un desarrollador no identificado" | Gatekeeper bloquea apps sin firmar | Clic derecho → Abrir, o `xattr -dr com.apple.quarantine /Applications/gceTools.app` |
 | Linux: el AppImage no arranca | Faltan GTK 3 o WebKitGTK 4.1 | Instálalos (`libwebkit2gtk-4.1-0`) o usa el `.deb`/`.rpm` |
+| gSecurity: **Expuesta a Internet** vacía y "Sin datos del firewall de la VPC …" en Notas | La VPC de la VM está en otro proyecto (Shared VPC) que no se escaneó o no se pudo leer | Añade el proyecto host al escaneo con `roles/compute.viewer` |
+| gSecurity marca OS Login desactivado aunque la organización lo exige | La política de organización no es visible para gceTools | Desactiva la regla `no-os-login` en **Proyectos → Reglas de salud** (o `--disable-rules no-os-login`) |
 | El CSV se abre en una sola columna en Excel | Excel en español espera `;` | Exporta como **CSV (punto y coma)** o usa `--csv-sep ";"` |
 
 Si el problema persiste, abre una incidencia en [GitHub](https://github.com/jordilopezr/gcetools/issues) con la versión (`gcetools-cli version`) y el contenido de gErrors, sin datos sensibles.
@@ -1067,6 +1074,9 @@ Para seguimiento, una vez por semana o por mes, con el historial activado. Para 
 
 **¿El modo rápido da los mismos datos?**
 Sí, para los tipos de recurso que cubre, con la salvedad de que Cloud Asset Inventory puede tardar unos minutos en reflejar los cambios más recientes. Para comprobarlo, escanea en los dos modos y compara los resultados.
+
+**¿gSecurity sustituye a Security Command Center?**
+No. Es una revisión rápida de la configuración de cada VM a partir del inventario: no lee políticas de firewall jerárquicas ni network firewall policies, balanceadores, políticas de organización ni vulnerabilidades del sistema operativo. Sirve para encontrar lo evidente (SSH o RDP abiertos a Internet, claves SSH de proyecto, puerto serie) y seguirlo en el tiempo con el historial y la comparación.
 
 **¿Puedo añadir mis propias reglas o pestañas?**
 El código es abierto: el README explica cómo añadir una pestaña. Las propuestas de reglas son bienvenidas en GitHub.

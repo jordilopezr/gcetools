@@ -69,19 +69,19 @@ xattr -dr com.apple.quarantine /Applications/gceTools.app
 **Debian / Ubuntu:**
 
 ```bash
-sudo apt install ./gcetools-0.7.0-linux-amd64.deb
+sudo apt install ./gcetools-0.8.0-linux-amd64.deb
 ```
 
 **Fedora / RHEL / openSUSE:**
 
 ```bash
-sudo dnf install ./gcetools-0.7.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
 ```
 
 **AppImage:**
 
 ```bash
-chmod +x gcetools-0.7.0-linux-x86_64.AppImage && ./gcetools-0.7.0-linux-x86_64.AppImage
+chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
 ```
 
 The `.deb` and `.rpm` packages install `gcetools` and `gcetools-cli` in `/usr/bin` and add gceTools to the applications menu.
@@ -257,7 +257,7 @@ The **Actual cost (BigQuery)** button expands the actual cost settings. Full exp
 
 ### 6.7 Health rules
 
-The **Health rules** button expands the list of the 22 rules, with their severity, category, ID and where the label exception is read.
+The **Health rules** button expands the list of the 28 rules, with their severity, category, ID and where the label exception is read.
 
 - Clear a rule's checkbox to **disable it** for this scan and in the profile.
 - Rules with a threshold have a field to adjust it: days stopped, age of snapshots and images, % of low or saturated CPU, % of RAM, % of quota and days until a CUD expires.
@@ -704,6 +704,8 @@ You can also compare from **History** without exporting anything.
 - service account or Shielded VM changes;
 - new public IPs;
 - firewall rules open to the internet;
+- new or existing VMs that become exposed to the Internet, and changes to their open ports (gSecurity);
+- VMs that start accepting project SSH keys or the serial port;
 - disks that become orphaned;
 - new high-severity findings;
 - changes to commitments.
@@ -734,6 +736,7 @@ When you open an old scan, the headers are shown in the active language.
 **Inventory → Export → Executive report (HTML)** generates a self-contained page (no scripts or external resources). It opens in any browser and can be printed to PDF. It's designed for management or for customers:
 
 - inventory totals;
+- VMs exposed to the Internet on sensitive ports (scans from 0.8 onwards);
 - the month's estimated or actual cost;
 - potential savings according to Recommender;
 - the top 10 high or medium severity findings;
@@ -904,7 +907,7 @@ The session is the same one the app uses: if you already signed in in the app, `
 
 ```bash
 gcetools-cli profiles   # profiles saved in the app and path of profiles.json
-gcetools-cli rules      # the 22 rules with their ID, severity, category and threshold
+gcetools-cli rules      # the 28 rules with their ID, severity, category and threshold
 gcetools-cli version    # installed version and whether a newer one exists
 ```
 
@@ -944,6 +947,8 @@ In scheduled tasks use a service account (`--auth sa` or `--auth impersonate`): 
 | Detect projects and fast mode | `roles/cloudasset.viewer` | Organization, folder or project |
 | Actual cost | `roles/bigquery.jobUser` and `roles/bigquery.dataViewer` | Table's project and dataset |
 | Impersonation | `roles/iam.serviceAccountTokenCreator` | On the service account |
+
+**gSecurity and Shared VPC:** to tell whether a VM in a service project is exposed, gceTools needs the host project's firewall rules, so the host project must be in the scan and the identity needs `roles/compute.viewer` on it. Project metadata (OS Login, SSH keys, serial port) is also read with `roles/compute.viewer`.
 
 For a global view, grant the roles at the organization or folder level. Without `resourcemanager.projects.list` you can add projects manually by ID.
 
@@ -1041,6 +1046,8 @@ Full policy: [PRIVACY.en.md](../PRIVACY.en.md).
 | Windows: "Unknown publisher" | The executables aren't signed yet | **More info → Run anyway** |
 | macOS: "can't be opened because it is from an unidentified developer" | Gatekeeper blocks unsigned apps | Right-click → Open, or `xattr -dr com.apple.quarantine /Applications/gceTools.app` |
 | Linux: the AppImage doesn't start | GTK 3 or WebKitGTK 4.1 is missing | Install them (`libwebkit2gtk-4.1-0`) or use the `.deb`/`.rpm` |
+| gSecurity: **Internet exposed** empty and "No firewall data for VPC …" in Notes | The VM's VPC is in another project (Shared VPC) that wasn't scanned or couldn't be read | Add the host project to the scan with `roles/compute.viewer` |
+| gSecurity flags OS Login as off although the organization enforces it | The organization policy isn't visible to gceTools | Turn off the `no-os-login` rule in **Projects → Health rules** (or `--disable-rules no-os-login`) |
 | The CSV opens in a single column in Excel | Excel with Spanish regional settings expects `;` | Export as **CSV (semicolon)** or use `--csv-sep ";"` |
 
 If the problem persists, open an issue on [GitHub](https://github.com/jordilopezr/gcetools/issues) with the version (`gcetools-cli version`) and the contents of gErrors, without sensitive data.
@@ -1067,6 +1074,9 @@ For tracking, once a week or once a month, with history turned on. To detect cha
 
 **Does fast mode give the same data?**
 Yes, for the resource types it covers, except that Cloud Asset Inventory can take a few minutes to reflect the most recent changes. To check, scan in both modes and compare the results.
+
+**Does gSecurity replace Security Command Center?**
+No. It's a quick review of each VM's configuration based on the inventory: it doesn't read hierarchical firewall policies or network firewall policies, load balancers, organization policies or operating system vulnerabilities. It's for finding the obvious (SSH or RDP open to the Internet, project SSH keys, serial port) and tracking it over time with history and comparison.
 
 **Can I add my own rules or tabs?**
 The code is open source: the README explains how to add a tab. Rule proposals are welcome on GitHub.
