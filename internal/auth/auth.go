@@ -23,8 +23,25 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Scope is the only scope ever requested: the tool never writes anything.
-const Scope = "https://www.googleapis.com/auth/cloud-platform.read-only"
+// Scopes are the read-only scopes gceTools requests; it never writes
+// anything. Compute Engine, Cloud Monitoring and Cloud Billing do not accept
+// cloud-platform.read-only, so their own read-only scopes are requested too.
+//
+// Cloud Asset Inventory, Recommender and OS Config only accept the full
+// cloud-platform scope. With the methods where gceTools chooses the scopes
+// (Google sign-in, service account key, impersonation) those modules are not
+// available; gcloud ADC tokens already carry cloud-platform.
+var Scopes = []string{
+	"https://www.googleapis.com/auth/cloud-platform.read-only",
+	ScopeCompute,
+	"https://www.googleapis.com/auth/monitoring.read",
+	"https://www.googleapis.com/auth/cloud-billing.readonly",
+}
+
+const (
+	ScopeCompute  = "https://www.googleapis.com/auth/compute.readonly"
+	ScopeCloudAll = "https://www.googleapis.com/auth/cloud-platform"
+)
 
 type Method string
 
@@ -48,6 +65,9 @@ type Session struct {
 	// QuotaProject is the ADC quota_project_id. Some APIs (Recommender) reject
 	// user credentials unless requests name a project to bill quota to.
 	QuotaProject string
+	// FullScope is true when the token carries cloud-platform (gcloud ADC),
+	// which Cloud Asset Inventory, Recommender and OS Config require.
+	FullScope bool `json:"fullScope"`
 }
 
 // KeyInfo is the non-secret part of a service account key.
@@ -80,10 +100,10 @@ func ParseKey(data []byte) (KeyInfo, error) {
 }
 
 func Connect(ctx context.Context, cfg Config) (*Session, error) {
-	s := &Session{Method: cfg.Method}
+	s := &Session{Method: cfg.Method, FullScope: cfg.Method == ADC}
 	switch cfg.Method {
 	case ADC:
-		creds, err := google.FindDefaultCredentials(ctx, Scope)
+		creds, err := google.FindDefaultCredentials(ctx, Scopes...)
 		if err != nil {
 			return nil, fmt.Errorf(i18n.T("no se encontraron credenciales ADC (ejecuta `gcloud auth application-default login`): %w"), err)
 		}
@@ -97,7 +117,7 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		if err != nil {
 			return nil, err
 		}
-		creds, err := google.CredentialsFromJSONWithType(ctx, cfg.KeyJSON, google.ServiceAccount, Scope)
+		creds, err := google.CredentialsFromJSONWithType(ctx, cfg.KeyJSON, google.ServiceAccount, Scopes...)
 		if err != nil {
 			return nil, fmt.Errorf(i18n.T("clave de service account inválida: %w"), err)
 		}
@@ -110,13 +130,13 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		if !strings.Contains(target, "@") {
 			return nil, errors.New(i18n.T("indica el email de la service account a impersonar"))
 		}
-		base, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
+		base, err := google.FindDefaultCredentials(ctx, ScopeCloudAll)
 		if err != nil {
 			return nil, fmt.Errorf(i18n.T("la impersonación necesita credenciales ADC: %w"), err)
 		}
 		ts, err := impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
 			TargetPrincipal: target,
-			Scopes:          []string{Scope},
+			Scopes:          Scopes,
 		}, option.WithCredentials(base))
 		if err != nil {
 			return nil, fmt.Errorf(i18n.T("no se pudo impersonar %s: %w"), target, err)
@@ -160,17 +180,17 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 	return s, nil
 }
 
-// grantsCloud reports whether a token covers Google Cloud APIs. Google lets
-// users untick individual permissions on the consent screen, leaving a
-// token with only openid/email. Tokens that do not list their scopes are
-// assumed to be fine.
+// grantsCloud reports whether a token can read Compute Engine. Google lets
+// users untick individual permissions on the consent screen, and sessions
+// started before 0.9 only hold cloud-platform.read-only, which Compute
+// rejects. Tokens that do not list their scopes are assumed to be fine.
 func grantsCloud(tok *oauth2.Token) bool {
 	granted, _ := tok.Extra("scope").(string)
 	if granted == "" {
 		return true
 	}
 	for _, sc := range strings.Fields(granted) {
-		if sc == Scope || sc == "https://www.googleapis.com/auth/cloud-platform" {
+		if sc == ScopeCompute || sc == ScopeCloudAll {
 			return true
 		}
 	}
@@ -178,14 +198,14 @@ func grantsCloud(tok *oauth2.Token) bool {
 }
 
 func errNoCloudScope() error {
-	return errors.New(i18n.T("tu sesión de Google no incluye el permiso para ver los datos de Google Cloud. Cierra la sesión, vuelve a iniciarla y marca la casilla «Ver tus datos de Google Cloud» en la pantalla de consentimiento"))
+	return errors.New(i18n.T("tu sesión de Google no incluye el permiso de lectura de Compute Engine. Cierra la sesión de Google, vuelve a iniciarla y acepta todos los permisos en la pantalla de consentimiento"))
 }
 
 // DetectADC reports whether ADC is available without fetching a token.
 func DetectADC(ctx context.Context) (found bool, identity string) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	creds, err := google.FindDefaultCredentials(ctx, Scope)
+	creds, err := google.FindDefaultCredentials(ctx, Scopes...)
 	if err != nil {
 		return false, ""
 	}

@@ -36,7 +36,7 @@ Este manual explica cada pantalla, cada opción y cada comando.
 
 ## 1. Conceptos básicos
 
-- **Solo lectura.** gceTools pide únicamente el scope `cloud-platform.read-only`. No crea, modifica ni borra nada en Google Cloud.
+- **Solo lectura.** gceTools pide únicamente scopes de lectura: `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` y `cloud-billing.readonly`. No crea, modifica ni borra nada en Google Cloud.
 - **Identidad.** El inventario incluye lo que puede ver la identidad con la que te conectas: tu cuenta de Google, tus credenciales de gcloud o una service account. Lo que no ve (por permisos IAM) no aparece, y gceTools lo indica en la pestaña gErrors.
 - **Escaneo.** Leer los proyectos seleccionados. Cada escaneo produce un **inventario**: un conjunto de pestañas (gInfo, gDisks, gHealth…) más los metadatos del escaneo.
 - **Módulos opcionales.** Además de la Compute API, gceTools puede leer OS Config (SO real de las VMs), Cloud Monitoring (CPU y RAM), Recommender (recomendaciones de ahorro), el catálogo de precios (coste estimado) y la exportación de facturación a BigQuery (coste real). Cada uno se activa por separado.
@@ -131,7 +131,7 @@ Elige con qué identidad leer el inventario. Lo que veas depende de los permisos
 La opción recomendada: no hace falta instalar gcloud.
 
 1. Selecciona **Iniciar sesión con Google** y pulsa el botón del mismo nombre.
-2. Se abre tu navegador con la pantalla de Google. Elige la cuenta y acepta. gceTools pide solo `cloud-platform.read-only` y tu email (para mostrar con qué cuenta has entrado).
+2. Se abre tu navegador con la pantalla de Google. Elige la cuenta y acepta. gceTools pide solo scopes de lectura (`cloud-platform.read-only`, `compute.readonly`, `monitoring.read` y `cloud-billing.readonly`) y tu email (para mostrar con qué cuenta has entrado). Acéptalos todos: sin el de Compute Engine la app no puede leer las VMs y te pide volver a iniciar sesión.
 3. El navegador muestra "Sesión iniciada"; ya puedes cerrar esa pestaña. La app se conecta sola.
 
 La sesión (un token de refresco) se guarda **en el llavero del sistema**: Credential Manager en Windows, Keychain en macOS o Secret Service (GNOME Keyring, KWallet) en Linux. Al volver a abrir gceTools ya estás conectado: aparece **Sesión guardada** con tu cuenta.
@@ -227,6 +227,8 @@ Los perfiles **no guardan secretos**: de una clave de service account solo se gu
 | **Métricas CPU/RAM** | Pestaña gPerf: media, p95 y máximo de CPU y RAM; reglas cpu-low, cpu-high, mem-high, no-ops-agent | Selector de días: 7, 14, 30 o 42. La RAM requiere Ops Agent |
 | **Recomendaciones** | Pestaña gRecommend: rightsizing, recursos idle y CUDs, con ahorro mensual | Con credenciales de usuario exige un quota project con la Recommender API |
 | **Coste estimado** | Columnas de coste en varias pestañas y la pestaña gCost | Selector de moneda: USD, EUR, CLP, MXN, COP, BRL, GBP |
+
+Con **Iniciar sesión con Google**, clave o impersonación de service account no están disponibles el **modo rápido** y la **detección de proyectos** (Cloud Asset Inventory), las **recomendaciones** ni **SO y agentes** (OS Config): esas APIs solo aceptan el permiso completo `cloud-platform`, que gceTools no pide. Con **credenciales de gcloud (ADC)** sí funcionan, porque el token de gcloud ya lo incluye. La app los muestra desactivados.
 
 Si la API de un módulo está deshabilitada en un proyecto o falta el permiso, el módulo se omite **sin marcar el proyecto como error**. El proyecto queda como "OK (sin osconfig)" o similar, y el motivo se anota en gErrors.
 
@@ -1057,7 +1059,7 @@ Si el problema persiste, abre una incidencia en [GitHub](https://github.com/jord
 ## 22. Preguntas frecuentes
 
 **¿gceTools puede cambiar algo en mi Google Cloud?**
-No. Solo pide el scope de solo lectura y solo hace consultas.
+No. Solo pide scopes de lectura y solo hace consultas.
 
 **¿Cuesta dinero usarlo?**
 La app es gratuita. Las APIs que usa son gratuitas salvo Cloud Monitoring, cuyo tramo gratuito es amplio, y BigQuery si activas el coste real. Ver [Coste de uso de las APIs](#18-coste-de-uso-de-las-apis).

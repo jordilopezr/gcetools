@@ -309,4 +309,5 @@ export const en: Record<string, string> = {
   'Con credenciales de usuario, lo facturable va al quota project de ADC. Precios de noviembre de 2026; consulta la': 'With user credentials, billable usage goes to the ADC quota project. Prices as of November 2026; see the',
   'página de precios de Monitoring': 'Monitoring pricing page',
   'Componentes de terceros': 'Third-party components',
+  'Solo con gcloud (ADC)': 'Only with gcloud (ADC)',
 }

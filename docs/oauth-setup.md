@@ -31,7 +31,7 @@ Ninguna tiene coste por estar habilitada. Las cuotas por minuto de ese proyecto 
 | Política de privacidad | https://gcetools.jordilopezr.com/privacidad (publica ahí [PRIVACY.md](../PRIVACY.md)) |
 | Condiciones del servicio | opcional |
 | Dominios autorizados | `jordilopezr.com` (hay que verificarlo en Google Search Console) |
-| Scopes | `openid`, `.../auth/userinfo.email`, `.../auth/cloud-platform.read-only` |
+| Scopes | `openid`, `.../auth/userinfo.email`, `.../auth/cloud-platform.read-only`, `.../auth/compute.readonly`, `.../auth/monitoring.read`, `.../auth/cloud-billing.readonly` |
 
 ## 3. Cliente OAuth
 
@@ -64,12 +64,12 @@ Mientras la app esté en **Prueba**:
 - Solo pueden iniciar sesión los usuarios de prueba añadidos en la consola (hasta 100).
 - Los tokens de refresco **caducan a los 7 días**, así que hay que volver a iniciar sesión cada semana.
 
-Para pasarla a **Producción** sin esos límites, `cloud-platform.read-only` es un scope **sensible** y Google exige verificarla. No hace falta la evaluación de seguridad (CASA), que solo se pide para scopes restringidos. Para la verificación necesitas:
+Para pasarla a **Producción** sin esos límites, `cloud-platform.read-only` y `compute.readonly` son scopes **sensibles** y Google exige verificarla. No hace falta la evaluación de seguridad (CASA), que solo se pide para scopes restringidos. Para la verificación necesitas:
 
 1. El dominio verificado en Search Console y la política de privacidad publicada en él.
 2. La **justificación del scope**, por ejemplo:
 
-   > gceTools es una aplicación de escritorio de código abierto que genera un inventario de solo lectura de los recursos de Google Compute Engine del usuario (máquinas virtuales, discos, redes, snapshots, métricas y costes) y lo exporta a Excel/CSV, al estilo de RVTools en VMware. Necesita cloud-platform.read-only porque lee varias APIs de Google Cloud (Compute Engine, Resource Manager, Cloud Monitoring, OS Config, Recommender, Cloud Asset Inventory, Cloud Billing y BigQuery para la exportación de facturación) y no existe un scope de solo lectura más restringido que las cubra todas. La app nunca modifica recursos y procesa los datos solo en el equipo del usuario, sin servidores propios.
+   > gceTools es una aplicación de escritorio de código abierto que genera un inventario de solo lectura de los recursos de Google Compute Engine del usuario (máquinas virtuales, discos, redes, snapshots, métricas y costes) y lo exporta a Excel/CSV, al estilo de RVTools en VMware. Pide solo scopes de lectura: compute.readonly para leer Compute Engine, monitoring.read para las métricas de CPU y memoria, cloud-billing.readonly para el catálogo de precios y cloud-platform.read-only para Resource Manager y BigQuery (exportación de facturación). Compute Engine, Monitoring y Cloud Billing no aceptan cloud-platform.read-only, por eso se piden por separado. La app nunca modifica recursos y procesa los datos solo en el equipo del usuario, sin servidores propios.
 
 3. Un **vídeo de demostración** (YouTube, puede estar como "no listado") que muestre:
    - abrir gceTools y pulsar "Iniciar sesión con Google";

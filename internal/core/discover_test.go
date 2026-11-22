@@ -33,7 +33,7 @@ func TestDiscover(t *testing.T) {
 	assetEndpoint = srv.URL + "/"
 	defer func() { assetEndpoint = old }()
 
-	e := &Engine{Session: &auth.Session{QuotaProject: "billing-prj"}, Client: srv.Client()}
+	e := &Engine{Session: &auth.Session{QuotaProject: "billing-prj", FullScope: true}, Client: srv.Client()}
 	got, err := e.Discover(context.Background(), "organizations/123")
 	if err != nil {
 		t.Fatal(err)
@@ -63,5 +63,14 @@ func TestValidScope(t *testing.T) {
 		if ValidScope(s) != want {
 			t.Errorf("ValidScope(%q) = %v", s, !want)
 		}
+	}
+}
+
+// Cloud Asset Inventory only accepts cloud-platform: without it Discover
+// fails up front with an explanation instead of a 403.
+func TestDiscoverNeedsFullScope(t *testing.T) {
+	e := &Engine{Session: &auth.Session{Method: auth.OAuth}}
+	if _, err := e.Discover(context.Background(), "organizations/123"); err == nil || !strings.Contains(err.Error(), "ADC") {
+		t.Fatalf("err = %v", err)
 	}
 }

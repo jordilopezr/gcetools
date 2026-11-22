@@ -475,7 +475,9 @@ func init() {
 	})
 	add(map[string]string{
 		"moneda no válida: %q (usa un código ISO 4217, p. ej. EUR)": "invalid currency: %q (use an ISO 4217 code, e.g. EUR)",
-		"tu sesión de Google no incluye el permiso para ver los datos de Google Cloud. Cierra la sesión, vuelve a iniciarla y marca la casilla «Ver tus datos de Google Cloud» en la pantalla de consentimiento": "your Google session does not include the permission to view Google Cloud data. Sign out, sign in again and tick the \"View your Google Cloud data\" box on the consent screen",
-		" (el token no incluye el permiso de lectura de Google Cloud: vuelve a iniciar sesión y acepta todos los permisos)": " (the token lacks the Google Cloud read permission: sign in again and accept all permissions)",
+		"tu sesión de Google no incluye el permiso de lectura de Compute Engine. Cierra la sesión de Google, vuelve a iniciarla y acepta todos los permisos en la pantalla de consentimiento": "your Google session lacks the Compute Engine read permission. Sign out of Google, sign in again and accept all permissions on the consent screen",
+		" (el permiso concedido no cubre esta API: con inicio de sesión con Google, vuelve a iniciar sesión y acepta todos los permisos)":                                                     " (the granted permission does not cover this API: with Google sign-in, sign in again and accept all permissions)",
+		"no disponible con inicio de sesión con Google, clave o impersonación de service account: esta API solo acepta el permiso completo de Google Cloud. Usa gcloud (ADC) para incluirlo":  "not available with Google sign-in, service account key or impersonation: this API only accepts the full Google Cloud permission. Use gcloud (ADC) to include it",
+		"El descubrimiento con Cloud Asset Inventory necesita gcloud (ADC): con inicio de sesión con Google, clave o impersonación de service account no está disponible":                     "Discovery with Cloud Asset Inventory needs gcloud (ADC): it is not available with Google sign-in, service account key or impersonation",
 	})
 }

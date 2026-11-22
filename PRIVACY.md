@@ -16,7 +16,10 @@ Al iniciar sesión con Google, gceTools solicita estos permisos:
 
 | Permiso | Para qué |
 |---|---|
-| `https://www.googleapis.com/auth/cloud-platform.read-only` | Leer, sin modificar, los recursos de Google Cloud a los que ya tiene acceso la cuenta: proyectos, máquinas virtuales, discos, redes, snapshots, métricas, recomendaciones, precios y, si el usuario lo configura, la exportación de facturación |
+| `https://www.googleapis.com/auth/cloud-platform.read-only` | Leer, sin modificar, los recursos de Google Cloud a los que ya tiene acceso la cuenta: proyectos y, si el usuario lo configura, la exportación de facturación en BigQuery |
+| `https://www.googleapis.com/auth/compute.readonly` | Leer máquinas virtuales, discos, redes, snapshots, imágenes y cuotas de Compute Engine |
+| `https://www.googleapis.com/auth/monitoring.read` | Leer las métricas de CPU y memoria de las VMs |
+| `https://www.googleapis.com/auth/cloud-billing.readonly` | Leer el catálogo público de precios para estimar costes |
 | `openid`, `email` | Mostrar en la aplicación con qué cuenta se ha iniciado sesión |
 
 gceTools nunca crea, modifica ni borra recursos de Google Cloud.

@@ -5,7 +5,7 @@
 Inventario de Google Compute Engine al estilo RVTools: aplicación de escritorio para Windows, Linux y macOS, más un modo de línea de comandos.
 Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja por pestaña), CSV (ZIP) o JSON.
 
-- **Solo lectura:** pide únicamente el scope `cloud-platform.read-only`.
+- **Solo lectura:** pide únicamente scopes de lectura: `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` y `cloud-billing.readonly`.
 - **Autenticación:** inicio de sesión con Google sin gcloud (sesión guardada en el llavero del sistema), credenciales de gcloud (ADC), clave JSON de service account (solo en memoria) o impersonación de service account.
 - **Idiomas:** español e inglés (interfaz, inventario, informe y CLI).
 - **Más allá de RVTools:** postura de seguridad por VM, 28 reglas de salud configurables, coste estimado y real, recomendaciones, historial con tendencias, comparación de inventarios e informe ejecutivo.
@@ -48,7 +48,8 @@ Lee todos los proyectos a los que llega la identidad y exporta a XLSX (una hoja 
 
 Para usar gceTools sin instalar Google Cloud CLI: **Conexión → Iniciar sesión con Google**. Se abre el navegador, aceptas el permiso y la sesión queda guardada; al volver a abrir la app ya estás conectado.
 
-- Se solicita solo `cloud-platform.read-only` (más tu email, para mostrar la cuenta). Flujo OAuth para apps instaladas con PKCE y redirección a `127.0.0.1`.
+- Se solicitan solo los scopes de lectura `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` y `cloud-billing.readonly` (más tu email, para mostrar la cuenta). Compute Engine, Monitoring y Billing no aceptan `cloud-platform.read-only`, por eso se piden aparte. Con este método, clave o impersonación de service account no están disponibles el **modo rápido** y la **detección** (Cloud Asset Inventory), las **recomendaciones** ni **SO y agentes** (OS Config): esas APIs solo aceptan el permiso completo `cloud-platform`, que gceTools no pide. Con **credenciales de gcloud (ADC)** funcionan, porque el token de gcloud ya lo incluye. La app las muestra desactivadas.
+- Flujo OAuth para apps instaladas con PKCE y redirección a `127.0.0.1`.
 - El token de refresco se guarda **solo en el llavero del sistema** (Credential Manager en Windows, Keychain en macOS, Secret Service en Linux), nunca en archivos. "Cerrar sesión" lo borra; también puedes revocar el acceso en [tu cuenta de Google](https://myaccount.google.com/permissions).
 - gceTools no envía tus datos a ningún servidor propio: habla directamente con las APIs de Google. Ver [PRIVACY.md](PRIVACY.md).
 - En consola: `gcetools-cli login` y luego `gcetools-cli scan --auth oauth`; `gcetools-cli logout` cierra la sesión.

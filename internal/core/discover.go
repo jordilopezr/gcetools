@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -56,6 +57,9 @@ func ValidScope(s string) bool { return reScope.MatchString(s) }
 // quota project (user credentials) or in the service account's project.
 func (e *Engine) Discover(ctx context.Context, scope string) ([]Footprint, error) {
 	scope = strings.TrimSpace(scope)
+	if !e.Session.FullScope {
+		return nil, errors.New(i18n.T("El descubrimiento con Cloud Asset Inventory necesita gcloud (ADC): con inicio de sesión con Google, clave o impersonación de service account no está disponible"))
+	}
 	if !ValidScope(scope) {
 		return nil, fmt.Errorf(i18n.T("ámbito no válido %q: usa organizations/123, folders/456 o projects/mi-proyecto"), scope)
 	}

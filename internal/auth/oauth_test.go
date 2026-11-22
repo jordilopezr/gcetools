@@ -203,10 +203,11 @@ func TestGrantsCloud(t *testing.T) {
 		return (&oauth2.Token{AccessToken: "x"}).WithExtra(map[string]any{"scope": scope})
 	}
 	for scope, want := range map[string]bool{
-		"":                           true, // not reported: assume fine
-		"openid " + Scope + " email": true,
-		"https://www.googleapis.com/auth/cloud-platform":        true,
-		"openid https://www.googleapis.com/auth/userinfo.email": false,
+		"":                                  true, // not reported: assume fine
+		"openid " + ScopeCompute + " email": true,
+		ScopeCloudAll:                       true,
+		"openid https://www.googleapis.com/auth/userinfo.email":    false,
+		"https://www.googleapis.com/auth/cloud-platform.read-only": false, // sessions from before 0.9
 	} {
 		if got := grantsCloud(mk(scope)); got != want {
 			t.Errorf("%q = %v, want %v", scope, got, want)

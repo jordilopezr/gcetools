@@ -36,7 +36,7 @@ This manual explains every screen, every option and every command.
 
 ## 1. Basic concepts
 
-- **Read-only.** gceTools only requests the `cloud-platform.read-only` scope. It doesn't create, modify or delete anything in Google Cloud.
+- **Read-only.** gceTools only requests read-only scopes: `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` and `cloud-billing.readonly`. It doesn't create, modify or delete anything in Google Cloud.
 - **Identity.** The inventory includes whatever the identity you connect with can see: your Google account, your gcloud credentials or a service account. Anything it can't see (because of IAM permissions) doesn't appear, and gceTools reports it in the gErrors tab.
 - **Scan.** Reading the selected projects. Each scan produces an **inventory**: a set of tabs (gInfo, gDisks, gHealth…) plus the scan metadata.
 - **Optional modules.** Besides the Compute API, gceTools can read OS Config (the VMs' actual OS), Cloud Monitoring (CPU and RAM), Recommender (savings recommendations), the pricing catalog (estimated cost) and the Cloud Billing export to BigQuery (actual cost). Each one is turned on separately.
@@ -131,7 +131,7 @@ Choose the identity used to read the inventory. What you see depends on that ide
 The recommended option: you don't need to install gcloud.
 
 1. Select **Sign in with Google** and click the button of the same name.
-2. Your browser opens the Google sign-in screen. Pick the account and accept. gceTools only requests `cloud-platform.read-only` and your email (to show which account you signed in with).
+2. Your browser opens the Google sign-in screen. Pick the account and accept. gceTools only requests read-only scopes (`cloud-platform.read-only`, `compute.readonly`, `monitoring.read` and `cloud-billing.readonly`) and your email (to show which account you signed in with). Accept them all: without the Compute Engine one the app cannot read the VMs and asks you to sign in again.
 3. The browser shows "Signed in"; you can close that tab. The app connects on its own.
 
 The session (a refresh token) is stored **in the system keyring**: Credential Manager on Windows, Keychain on macOS or Secret Service (GNOME Keyring, KWallet) on Linux. When you reopen gceTools you're already connected: **Session saved** appears with your account.
@@ -227,6 +227,8 @@ Profiles **don't store secrets**: for a service account key, only the file path 
 | **CPU/RAM metrics** | gPerf tab: average, p95 and maximum CPU and RAM; rules cpu-low, cpu-high, mem-high, no-ops-agent | Days selector: 7, 14, 30 or 42. RAM requires the Ops Agent |
 | **Recommendations** | gRecommend tab: rightsizing, idle resources and CUDs, with monthly savings | With user credentials, requires a quota project with the Recommender API |
 | **Estimated cost** | Cost columns in several tabs and the gCost tab | Currency selector: USD, EUR, CLP, MXN, COP, BRL, GBP |
+
+With **Sign in with Google**, a service account key or impersonation, **fast mode** and **project discovery** (Cloud Asset Inventory), **recommendations** and **OS and agents** (OS Config) are not available: those APIs only accept the full `cloud-platform` permission, which gceTools does not request. They do work with **gcloud credentials (ADC)**, whose token already includes it. The app shows them disabled.
 
 If a module's API is disabled in a project or a permission is missing, the module is skipped **without marking the project as an error**. The project shows as "OK (without osconfig)" or similar, and the reason is recorded in gErrors.
 
@@ -1057,7 +1059,7 @@ If the problem persists, open an issue on [GitHub](https://github.com/jordilopez
 ## 22. Frequently asked questions
 
 **Can gceTools change anything in my Google Cloud?**
-No. It only requests the read-only scope and only runs queries.
+No. It only requests read-only scopes and only runs queries.
 
 **Does it cost money to use?**
 The app is free. The APIs it uses are free except Cloud Monitoring, whose free tier is generous, and BigQuery if you turn on actual cost. See [API usage cost](#18-api-usage-cost).

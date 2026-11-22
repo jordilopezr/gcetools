@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -224,7 +225,7 @@ func ForgetOAuth(all bool) error {
 
 func oauthConfig(c OAuthClient, redirect string) *oauth2.Config {
 	return &oauth2.Config{ClientID: c.ClientID, ClientSecret: c.ClientSecret, Endpoint: oauthEndpoint,
-		RedirectURL: redirect, Scopes: []string{Scope, "openid", "email"}}
+		RedirectURL: redirect, Scopes: append(slices.Clone(Scopes), "openid", "email")}
 }
 
 // Login runs the browser flow and stores the refresh token. open receives

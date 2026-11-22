@@ -38,6 +38,9 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
   const [concurrency, setConcurrency] = useState(8)
   const [modules, setModules] = useState<Modules>({ osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'USD' })
   const toggle = (k: 'osconfig' | 'monitoring' | 'recommender' | 'pricing') => setModules(m => ({ ...m, [k]: !m[k] }))
+  // These APIs only accept the full cloud-platform scope, which only gcloud
+  // (ADC) tokens carry.
+  const fullScopeOnly = (k: string) => !session.fullScope && (k === 'osconfig' || k === 'recommender' || k === 'fast')
   const [health, setHealth] = useState<HealthOptions>(defaultHealth)
   const [rules, setRules] = useState<HealthRule[]>([])
   const [showRules, setShowRules] = useState(false)
@@ -232,7 +235,8 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           <input value={scope} onChange={e => setScope(e.target.value)} placeholder={t('organizations/123 o folders/456')} aria-label={t('Ámbito de Cloud Asset Inventory')}
             onKeyDown={e => { if (e.key === 'Enter' && scope.trim()) runDiscover(scope) }} spellCheck={false} />
         </div>
-        <button className="btn outlined" disabled={!scope.trim() || discovering} onClick={() => runDiscover(scope)}>
+        <button className="btn outlined" disabled={!scope.trim() || discovering || !session.fullScope} onClick={() => runDiscover(scope)}
+          title={session.fullScope ? undefined : t('Solo con gcloud (ADC)')}>
           <Icon name="travel_explore" />{discovering ? t('Detectando…') : t('Detectar proyectos con Compute')}
         </button>
       </div>
@@ -276,11 +280,16 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           ['monitoring', 'monitoring', t('Métricas CPU/RAM')],
           ['recommender', 'lightbulb', t('Recomendaciones')],
           ['pricing', 'payments', t('Coste estimado')],
-        ] as const).map(([k, icon, label]) => (
-          <button key={k} className={`chip ${modules[k] ? 'selected' : ''}`} onClick={() => toggle(k)} aria-pressed={modules[k]}>
-            <Icon name={modules[k] ? 'check' : icon} size="sm" />{label}
-          </button>
-        ))}
+        ] as const).map(([k, icon, label]) => {
+          const off = fullScopeOnly(k)
+          const on = modules[k] && !off
+          return (
+            <button key={k} className={`chip ${on ? 'selected' : ''}`} onClick={() => toggle(k)} aria-pressed={on}
+              disabled={off} title={off ? t('Solo con gcloud (ADC)') : undefined}>
+              <Icon name={on ? 'check' : icon} size="sm" />{label}
+            </button>
+          )
+        })}
         {modules.monitoring && (
           <select value={modules.metricsDays} onChange={e => setModules(m => ({ ...m, metricsDays: Number(e.target.value) }))}
             aria-label={t('Días de métricas')}
@@ -297,9 +306,10 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
         )}
         <span className="body-s muted">{t('Si la API no está habilitada en un proyecto, el módulo se omite sin marcarlo como error.')}</span>
         <span className="spacer" />
-        <button className={`chip ${modules.fast ? 'selected' : ''}`} onClick={() => setModules(m => ({ ...m, fast: !m.fast }))} aria-pressed={!!modules.fast}
-          title={t('Lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory: una consulta por proyecto, o una sola para toda la organización o carpeta indicada en el ámbito de detección. Puede reflejar cambios con unos minutos de retraso. Necesita roles/cloudasset.viewer.')}>
-          <Icon name={modules.fast ? 'check' : 'bolt'} size="sm" />{t('Modo rápido (Cloud Asset Inventory)')}
+        <button className={`chip ${modules.fast && !fullScopeOnly('fast') ? 'selected' : ''}`} onClick={() => setModules(m => ({ ...m, fast: !m.fast }))}
+          aria-pressed={!!modules.fast && !fullScopeOnly('fast')} disabled={fullScopeOnly('fast')}
+          title={fullScopeOnly('fast') ? t('Solo con gcloud (ADC)') : t('Lee VMs, discos, snapshots, imágenes, templates, MIGs y redes de Cloud Asset Inventory: una consulta por proyecto, o una sola para toda la organización o carpeta indicada en el ámbito de detección. Puede reflejar cambios con unos minutos de retraso. Necesita roles/cloudasset.viewer.')}>
+          <Icon name={modules.fast && !fullScopeOnly('fast') ? 'check' : 'bolt'} size="sm" />{t('Modo rápido (Cloud Asset Inventory)')}
         </button>
         <button className={`chip ${modules.billingTable ? 'selected' : ''}`} onClick={() => setShowBilling(v => !v)} aria-expanded={showBilling}
           title={t('Coste neto real del mes (con CUD, SUD y descuentos) desde la exportación de facturación a BigQuery')}>

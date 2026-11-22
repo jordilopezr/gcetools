@@ -106,6 +106,7 @@ type SessionInfo struct {
 	Identity    string `json:"identity"`
 	Method      string `json:"method"`
 	ProjectHint string `json:"projectHint"`
+	FullScope   bool   `json:"fullScope"` // false: no Cloud Asset Inventory, Recommender or OS Config
 }
 
 func (a *App) Connect(method string, impersonateSA string) (*SessionInfo, error) {
@@ -127,7 +128,7 @@ func (a *App) Connect(method string, impersonateSA string) (*SessionInfo, error)
 	a.projects = map[string]core.Project{}
 	a.inv = nil
 	a.mu.Unlock()
-	return &SessionInfo{Identity: sess.Identity, Method: string(sess.Method), ProjectHint: sess.ProjectHint}, nil
+	return &SessionInfo{Identity: sess.Identity, Method: string(sess.Method), ProjectHint: sess.ProjectHint, FullScope: sess.FullScope}, nil
 }
 
 func (a *App) Disconnect() {

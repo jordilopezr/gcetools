@@ -215,7 +215,7 @@ export const mockApi: Api = {
     await sleep(500)
     if (method === 'oauth' && !oauth.account) throw new Error('no has iniciado sesión con Google en gceTools')
     const identity = method === 'sa' ? 'inventory@acme-tools.iam.gserviceaccount.com' : method === 'impersonate' ? sa : 'demo@example.com'
-    return { identity, method, projectHint: 'acme-tools' }
+    return { identity, method, projectHint: 'acme-tools', fullScope: method === 'adc' }
   },
   disconnect: async () => { inventory = null },
   listProjects: async (q) => { await sleep(400); return projects.filter(p => !q || JSON.stringify(p).includes(q.replace(/^.*:/, ''))) },

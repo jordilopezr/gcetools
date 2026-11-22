@@ -5,7 +5,7 @@
 An RVTools-style inventory for Google Compute Engine: a desktop app for Windows, Linux and macOS, plus a command-line mode.
 It reads every project the identity can reach and exports to XLSX (one sheet per tab), CSV (ZIP) or JSON.
 
-- **Read-only:** it only requests the `cloud-platform.read-only` scope.
+- **Read-only:** it only requests read-only scopes: `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` and `cloud-billing.readonly`.
 - **Authentication:** Sign in with Google without gcloud (session kept in the system keyring), gcloud credentials (ADC), a service account JSON key (kept in memory only) or service account impersonation.
 - **Languages:** English and Spanish (UI, inventory, report and CLI).
 - **Beyond RVTools:** per-VM security posture, 28 configurable health rules, estimated and actual cost, recommendations, history with trends, inventory comparison and an executive report.
@@ -48,7 +48,8 @@ It reads every project the identity can reach and exports to XLSX (one sheet per
 
 To use gceTools without installing the Google Cloud CLI: **Connection → Sign in with Google**. Your browser opens, you grant access and the session is saved; next time you open the app you are already connected.
 
-- It only requests `cloud-platform.read-only` (plus your email, to show the account). It uses the OAuth flow for installed apps with PKCE and a redirect to `127.0.0.1`.
+- It only requests the read-only scopes `cloud-platform.read-only`, `compute.readonly`, `monitoring.read` and `cloud-billing.readonly` (plus your email, to show the account). Compute Engine, Monitoring and Billing do not accept `cloud-platform.read-only`, so they are requested separately. With this method, a service account key or impersonation, **fast mode** and **project discovery** (Cloud Asset Inventory), **recommendations** and **OS and agents** (OS Config) are not available: those APIs only accept the full `cloud-platform` permission, which gceTools does not request. They do work with **gcloud credentials (ADC)**, whose token already includes it. The app shows them disabled.
+- It uses the OAuth flow for installed apps with PKCE and a redirect to `127.0.0.1`.
 - The refresh token is stored **only in the system keyring** (Credential Manager on Windows, Keychain on macOS, Secret Service on Linux), never in files. "Sign out" deletes it; you can also revoke access from [your Google Account](https://myaccount.google.com/permissions).
 - gceTools does not send your data to any server of its own: it talks to Google APIs directly. See [PRIVACY.md](PRIVACY.md).
 - From the command line: `gcetools-cli login`, then `gcetools-cli scan --auth oauth`; `gcetools-cli logout` signs out.

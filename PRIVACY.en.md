@@ -16,7 +16,10 @@ When you sign in with Google, gceTools requests these permissions:
 
 | Permission | Why |
 |---|---|
-| `https://www.googleapis.com/auth/cloud-platform.read-only` | To read, without modifying, the Google Cloud resources the account already has access to: projects, virtual machines, disks, networks, snapshots, metrics, recommendations, prices and, if the user configures it, the billing export |
+| `https://www.googleapis.com/auth/cloud-platform.read-only` | To read, without modifying, the Google Cloud resources the account already has access to: projects and, if the user configures it, the billing export in BigQuery |
+| `https://www.googleapis.com/auth/compute.readonly` | To read Compute Engine virtual machines, disks, networks, snapshots, images and quotas |
+| `https://www.googleapis.com/auth/monitoring.read` | To read VM CPU and memory metrics |
+| `https://www.googleapis.com/auth/cloud-billing.readonly` | To read the public price catalog to estimate costs |
 | `openid`, `email` | To show in the app which account is signed in |
 
 gceTools never creates, modifies or deletes Google Cloud resources.

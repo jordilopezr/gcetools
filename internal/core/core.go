@@ -133,6 +133,20 @@ func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, 
 	if opt.Concurrency <= 0 {
 		opt.Concurrency = 8
 	}
+	// Without cloud-platform these APIs refuse every call: switch them off
+	// and say why once, instead of one permission error per project.
+	var unavailable []string
+	if !e.Session.FullScope {
+		for _, m := range []struct {
+			on   *bool
+			name string
+		}{{&opt.Modules.Fast, "cloudasset"}, {&opt.Modules.OSConfig, "osconfig"}, {&opt.Modules.Recommender, "recommender"}} {
+			if *m.on {
+				*m.on = false
+				unavailable = append(unavailable, m.name)
+			}
+		}
+	}
 	svcs, err := e.services(ctx, opt.Modules)
 	if err != nil {
 		return nil, err
@@ -142,6 +156,10 @@ func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, 
 	inv.Meta = model.Meta{
 		Tool: "gceTools", Version: Version, Identity: e.Session.Identity,
 		AuthMethod: string(e.Session.Method), StartedAt: time.Now(), Projects: len(projects),
+	}
+	for _, name := range unavailable {
+		inv.AddError(model.ScanError{Project: "(all)", Collector: name, Kind: model.ErrPermission,
+			Message: i18n.T("no disponible con inicio de sesión con Google, clave o impersonación de service account: esta API solo acepta el permiso completo de Google Cloud. Usa gcloud (ADC) para incluirlo")})
 	}
 
 	var (
@@ -270,7 +288,7 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		{i18n.T("Herramienta"), m.Tool + " " + m.Version},
 		{i18n.T("Identidad"), m.Identity},
 		{i18n.T("Método de autenticación"), m.AuthMethod},
-		{i18n.T("Scope OAuth"), auth.Scope},
+		{i18n.T("Scope OAuth"), scopesText(e.Session)},
 		{i18n.T("Módulos opcionales"), modulesText(opt.Modules)},
 		{i18n.T("Quota project"), e.Session.QuotaProject},
 		{i18n.T("Moneda de costes"), m.Currency},
@@ -319,6 +337,13 @@ func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, err
 		}
 	}
 	return s, nil
+}
+
+func scopesText(s *auth.Session) string {
+	if s.FullScope {
+		return auth.ScopeCloudAll + " (gcloud)"
+	}
+	return strings.Join(auth.Scopes, " ")
 }
 
 func modulesText(m Modules) string {

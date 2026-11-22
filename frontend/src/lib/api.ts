@@ -21,7 +21,9 @@ export interface Project {
 }
 export interface Progress { total: number; done: number; project: string; step: string; vms: number; errors: number; message: string }
 export interface KeyInfo { clientEmail: string; projectId: string; keyId: string }
-export interface SessionInfo { identity: string; method: string; projectHint: string }
+// fullScope false (Google sign-in, service account key, impersonation): Cloud
+// Asset Inventory, Recommender and OS Config are unavailable.
+export interface SessionInfo { identity: string; method: string; projectHint: string; fullScope: boolean }
 export interface ADCStatus { found: boolean; identity: string }
 export interface Modules {
   osconfig: boolean; monitoring: boolean; recommender: boolean; metricsDays: number; pricing: boolean; currency: string

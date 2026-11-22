@@ -341,6 +341,7 @@ export namespace main {
 	    identity: string;
 	    method: string;
 	    projectHint: string;
+	    fullScope: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -351,6 +352,7 @@ export namespace main {
 	        this.identity = source["identity"];
 	        this.method = source["method"];
 	        this.projectHint = source["projectHint"];
+	        this.fullScope = source["fullScope"];
 	    }
 	}
 	export class SnapshotInfo {
