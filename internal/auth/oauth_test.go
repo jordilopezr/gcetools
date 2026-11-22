@@ -197,3 +197,19 @@ func TestLoginCancelled(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestGrantsCloud(t *testing.T) {
+	mk := func(scope string) *oauth2.Token {
+		return (&oauth2.Token{AccessToken: "x"}).WithExtra(map[string]any{"scope": scope})
+	}
+	for scope, want := range map[string]bool{
+		"":                           true, // not reported: assume fine
+		"openid " + Scope + " email": true,
+		"https://www.googleapis.com/auth/cloud-platform":        true,
+		"openid https://www.googleapis.com/auth/userinfo.email": false,
+	} {
+		if got := grantsCloud(mk(scope)); got != want {
+			t.Errorf("%q = %v, want %v", scope, got, want)
+		}
+	}
+}

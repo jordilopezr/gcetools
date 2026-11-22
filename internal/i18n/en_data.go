@@ -475,5 +475,7 @@ func init() {
 	})
 	add(map[string]string{
 		"moneda no válida: %q (usa un código ISO 4217, p. ej. EUR)": "invalid currency: %q (use an ISO 4217 code, e.g. EUR)",
+		"tu sesión de Google no incluye el permiso para ver los datos de Google Cloud. Cierra la sesión, vuelve a iniciarla y marca la casilla «Ver tus datos de Google Cloud» en la pantalla de consentimiento": "your Google session does not include the permission to view Google Cloud data. Sign out, sign in again and tick the \"View your Google Cloud data\" box on the consent screen",
+		" (el token no incluye el permiso de lectura de Google Cloud: vuelve a iniciar sesión y acepta todos los permisos)": " (the token lacks the Google Cloud read permission: sign in again and accept all permissions)",
 	})
 }

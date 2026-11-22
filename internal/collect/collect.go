@@ -238,6 +238,9 @@ func Classify(err error) (model.ErrorKind, string) {
 			strings.Contains(gerr.Body, "SERVICE_DISABLED") {
 			return model.ErrAPIDisabled, msg
 		}
+		if strings.Contains(msg, "insufficient authentication scopes") {
+			msg += i18n.T(" (el token no incluye el permiso de lectura de Google Cloud: vuelve a iniciar sesión y acepta todos los permisos)")
+		}
 		return model.ErrPermission, msg
 	case 404:
 		return model.ErrNotFound, msg

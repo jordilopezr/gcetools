@@ -148,6 +148,9 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		}
 		return nil, fmt.Errorf(i18n.T("no se pudo obtener un token: %w"), err)
 	}
+	if cfg.Method == OAuth && !grantsCloud(tok) {
+		return nil, errNoCloudScope()
+	}
 	if s.Identity == "" {
 		s.Identity = emailFromTokenInfo(ctx, tok.AccessToken)
 	}
@@ -155,6 +158,27 @@ func Connect(ctx context.Context, cfg Config) (*Session, error) {
 		s.Identity = i18n.T("Usuario (ADC)")
 	}
 	return s, nil
+}
+
+// grantsCloud reports whether a token covers Google Cloud APIs. Google lets
+// users untick individual permissions on the consent screen, leaving a
+// token with only openid/email. Tokens that do not list their scopes are
+// assumed to be fine.
+func grantsCloud(tok *oauth2.Token) bool {
+	granted, _ := tok.Extra("scope").(string)
+	if granted == "" {
+		return true
+	}
+	for _, sc := range strings.Fields(granted) {
+		if sc == Scope || sc == "https://www.googleapis.com/auth/cloud-platform" {
+			return true
+		}
+	}
+	return false
+}
+
+func errNoCloudScope() error {
+	return errors.New(i18n.T("tu sesión de Google no incluye el permiso para ver los datos de Google Cloud. Cierra la sesión, vuelve a iniciarla y marca la casilla «Ver tus datos de Google Cloud» en la pantalla de consentimiento"))
 }
 
 // DetectADC reports whether ADC is available without fetching a token.

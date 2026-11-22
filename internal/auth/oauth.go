@@ -295,6 +295,9 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 	if err != nil {
 		return "", fmt.Errorf(i18n.T("no se pudo completar el inicio de sesión: %w"), err)
 	}
+	if !grantsCloud(tok) {
+		return "", errNoCloudScope()
+	}
 	if tok.RefreshToken == "" {
 		return "", errors.New(i18n.T("Google no devolvió un token de refresco; revoca el acceso de la app en tu cuenta de Google y vuelve a intentarlo"))
 	}
