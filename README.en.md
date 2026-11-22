@@ -8,6 +8,7 @@ It reads every project the identity can reach and exports to XLSX (one sheet per
 - **Read-only:** it only requests the `cloud-platform.read-only` scope.
 - **Authentication:** Sign in with Google without gcloud (session kept in the system keyring), gcloud credentials (ADC), a service account JSON key (kept in memory only) or service account impersonation.
 - **Languages:** English and Spanish (UI, inventory, report and CLI).
+- **Beyond RVTools:** per-VM security posture, 28 configurable health rules, estimated and actual cost, recommendations, history with trends, inventory comparison and an executive report.
 - **Stack:** Go + [Wails v2](https://wails.io) + React/TypeScript, with a Material 3 UI and AG Grid Community.
 
 **[Full manual for the app and the CLI →](docs/manual.en.md)**
@@ -33,12 +34,15 @@ It reads every project the identity can reach and exports to XLSX (one sheet per
 | gPerf * | — | CPU and RAM: average, p95 and maximum over N days (Cloud Monitoring; RAM needs the Ops Agent) |
 | gRecommend * | — | Active recommendations: rightsizing, idle resources and CUDs, with monthly savings |
 | gCost * | — | Estimated monthly cost per project: compute and GPU, licenses, disks, snapshots, images, unused IPs |
+| gCostReal † | — | The month's actual cost from the BigQuery billing export: gross, credits, net and difference from the estimate |
 | gProject | vSource | Per-project summary and scan result |
 | gSecurity | — | Security posture per VM: exposed to the Internet on sensitive ports (external IP + firewall, Shared VPC included), default SA, OS Login, project SSH keys, serial port, IP forwarding, Shielded VM, disk encryption |
-| gHealth | vHealth | Findings: orphaned disks, firewall open to the Internet, default service account, stopped VMs, disks without a snapshot schedule, templates with deprecated or old images… |
+| gHealth | vHealth | 28 rules with stable IDs: orphaned disks, firewall open to the Internet, default service account, stopped VMs, disks without a snapshot schedule, templates with deprecated or old images… |
 | gErrors / gMetaData | vMetaData | Errors per project and scan information |
 
 \* Optional modules. Turn them on in the Projects screen or with `--modules`. If the API is disabled or the permission is missing, the module is skipped: the project shows as "OK (without …)" and the reason is logged in gErrors.
+
+† Only when a billing table is given (see [Actual cost](#actual-cost-bigquery-billing-export)).
 
 ### Sign in with Google
 
@@ -233,7 +237,7 @@ The [.github/workflows/build.yml](.github/workflows/build.yml) workflow runs the
 |---|---|
 | Linux | `.deb`, `.rpm`, `.AppImage` and `.tar.gz` ([build/linux/package.sh](build/linux/package.sh), with nfpm and appimagetool) |
 | Windows | `.zip` and NSIS installer |
-| macOS | `.dmg` and `.zip` with the universal `.app` |
+| macOS | `.dmg` (install window with a branded background, built with create-dmg) and `.zip` with the universal `.app` |
 
 Each build is published as an artifact. Pushing a `v*` tag also creates a GitHub Release.
 
@@ -317,6 +321,7 @@ For reference, a scan requests about 2 Monitoring series per VM (CPU and RAM): w
 - Discovery and fast mode with Cloud Asset Inventory: `roles/cloudasset.viewer` on the organization, folder or project.
 - Actual cost: `roles/bigquery.jobUser` on the billing table's project and `roles/bigquery.dataViewer` on its dataset.
 - gRecommend: `roles/recommender.computeViewer`. With user credentials Google requires a quota project: the ADC `quota_project_id` is used (`gcloud auth application-default set-quota-project <project>`), which must have the Recommender API enabled.
+- gSecurity with Shared VPC: the host project must be in the scan (with `roles/compute.viewer`) to assess Internet exposure for VMs in service projects.
 - Without `resourcemanager.projects.list` you can add projects by ID by hand.
 
 ## Layout
@@ -331,13 +336,14 @@ internal/security         gSecurity Internet exposure
 internal/diff             Comparison of two inventories (additions, removals and changes)
 internal/pricing          Cloud Billing catalog and estimated cost
 internal/export           XLSX (excelize streaming), CSV in ZIP, JSON
-internal/cli              `scan`, `diff`, `profiles`, `rules`, `login` and `version` commands
+internal/cli              `scan`, `diff`, `profiles`, `rules`, `login`, `logout` and `version` commands
 internal/profile          Saved scan profiles
 internal/billing          Actual cost from the Cloud Billing export to BigQuery
 internal/history          Local scan history
 internal/report           Executive report in HTML
 internal/i18n             Translations (the Spanish text is the key; English in en_*.go)
 frontend/                 React + TS, Material 3 tokens, AG Grid
+build/                    Packaging: Linux (nfpm, AppImage), Windows (NSIS) and the macOS DMG background
 assets/brand/             Visual identity: master SVGs, per-platform icons, favicon and web assets
 ```
 
@@ -359,8 +365,8 @@ At startup the app checks GitHub for a newer release; you can turn the check off
 2. Create and push the tag:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.9.0
+   git push origin v0.9.0
    ```
 
 3. The workflow publishes the GitHub Release with the Linux, Windows and macOS packages.
