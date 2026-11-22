@@ -55,6 +55,30 @@ func Write(inv *model.Inventory, path string, f Format, csvSep rune) (string, er
 	return "", fmt.Errorf(i18n.T("formato no soportado: %s"), f)
 }
 
+// create opens path for writing with owner-only permissions: exports hold
+// the whole inventory (IPs, service accounts, Internet exposure, costs).
+func create(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	_ = f.Chmod(0o600) // an existing file keeps its mode otherwise
+	return f, nil
+}
+
+// WritePrivate writes data to path readable only by the current user.
+func WritePrivate(path string, data []byte) error {
+	f, err := create(path)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 // ---------- XLSX ----------
 
 func writeXLSX(inv *model.Inventory, path string) error {
@@ -141,7 +165,7 @@ func writeXLSX(inv *model.Inventory, path string) error {
 	}
 	// Not f.SaveAs: excelize rejects paths longer than 207 characters, which
 	// deep folders (and most Windows profiles with OneDrive) easily exceed.
-	out, err := os.Create(path)
+	out, err := create(path)
 	if err != nil {
 		return err
 	}
@@ -158,7 +182,7 @@ func writeCSVZip(inv *model.Inventory, path string, sep rune) error {
 	if sep == 0 {
 		sep = ','
 	}
-	out, err := os.Create(path)
+	out, err := create(path)
 	if err != nil {
 		return err
 	}
@@ -176,7 +200,7 @@ func writeCSVZip(inv *model.Inventory, path string, sep rune) error {
 		cw.Comma = sep
 		hdr := make([]string, len(sh.Columns))
 		for i, col := range sh.Columns {
-			hdr[i] = col.Title
+			hdr[i] = csvSafe(col.Title)
 		}
 		if err := cw.Write(hdr); err != nil {
 			return err
@@ -206,7 +230,7 @@ func cellString(v any) string {
 	case nil:
 		return ""
 	case string:
-		return x
+		return csvSafe(x)
 	case bool:
 		if x {
 			return "true"
@@ -222,10 +246,20 @@ func cellString(v any) string {
 	return fmt.Sprint(v)
 }
 
+// csvSafe stops spreadsheets from running a text value as a formula (CSV
+// injection): resource descriptions and imported snapshots are not trusted,
+// so text starting with = + - @ tab or CR gets a leading apostrophe.
+func csvSafe(s string) string {
+	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+		return "'" + s
+	}
+	return s
+}
+
 // ---------- JSON ----------
 
 func writeJSON(inv *model.Inventory, path string) error {
-	out, err := os.Create(path)
+	out, err := create(path)
 	if err != nil {
 		return err
 	}
@@ -238,8 +272,8 @@ func writeJSON(inv *model.Inventory, path string) error {
 	return out.Close()
 }
 
-// ReadJSON loads a snapshot written by Write(..., JSON). Row values come back
-// as JSON types (dates as RFC 3339 strings, numbers as float64).
+// ReadJSON loads a snapshot written by Write(..., JSON). Dates and integer
+// columns get their Go types back (model.Normalize); other numbers stay float64.
 func ReadJSON(path string) (*model.Inventory, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -253,5 +287,6 @@ func ReadJSON(path string) (*model.Inventory, error) {
 	if inv.Meta.Tool == "" && len(inv.Sheets) == 0 {
 		return nil, fmt.Errorf(i18n.T("%s no es un snapshot JSON de gceTools"), filepath.Base(path))
 	}
+	model.Normalize(&inv)
 	return &inv, nil
 }

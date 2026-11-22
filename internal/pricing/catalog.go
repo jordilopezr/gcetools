@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -40,12 +41,17 @@ type Catalog struct {
 	SKUs     []SKU     `json:"skus"`
 }
 
+var reCurrency = regexp.MustCompile(`^[A-Z]{3}$`)
+
 // Load returns the catalog from the local cache if younger than maxAge,
 // otherwise downloads it with the first client that works.
 func Load(ctx context.Context, currency string, maxAge time.Duration, clients ...*http.Client) (*Catalog, error) {
 	currency = strings.ToUpper(strings.TrimSpace(currency))
 	if currency == "" {
 		currency = "USD"
+	}
+	if !reCurrency.MatchString(currency) { // also part of the cache file name
+		return nil, fmt.Errorf(i18n.T("moneda no válida: %q (usa un código ISO 4217, p. ej. EUR)"), currency)
 	}
 	path := cachePath(currency)
 	if c, err := readCache(path); err == nil && time.Since(c.Fetched) < maxAge {

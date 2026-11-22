@@ -71,6 +71,7 @@ export interface Api {
   onProgress(cb: (p: Progress) => void): () => void
   onDone(cb: (m: Meta) => void): () => void
   onError(cb: (msg: string) => void): () => void
+  onWarning(cb: (msg: string) => void): () => void
   appInfo(): Promise<AboutInfo>
   checkUpdate(): Promise<UpdateInfo>
   openURL(url: string): void
@@ -127,6 +128,7 @@ const wailsApi: Api = {
   onProgress: (cb) => EventsOn('scan:progress', cb),
   onDone: (cb) => EventsOn('scan:done', cb),
   onError: (cb) => EventsOn('scan:error', cb),
+  onWarning: (cb) => EventsOn('scan:warning', cb),
   appInfo: () => App.AppInfo(),
   checkUpdate: () => App.CheckUpdate(),
   openURL: (url) => BrowserOpenURL(url),

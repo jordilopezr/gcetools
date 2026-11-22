@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, CURRENT, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
 import { Icon, Snackbar, Menu } from './components/ui'
 import appIcon from './assets/gcetools-icon-small.svg' // simplified variant for small sizes
@@ -80,7 +80,9 @@ export default function App() {
     try { localStorage.setItem('theme', theme) } catch { /* storage unavailable */ }
   }, [theme])
 
+  const scanWarning = useRef<string | null>(null)
   useEffect(() => {
+    const offW = api.onWarning(msg => { scanWarning.current = msg })
     const offP = api.onProgress(p => setScan(s => ({
       running: true,
       progress: p,
@@ -93,11 +95,12 @@ export default function App() {
       try {
         setInventory(await api.getInventory())
         setPage('inventory')
-        setSnack(meta.cancelled ? t('Escaneo cancelado: se muestran resultados parciales') : t('Escaneo completado'))
-      } catch (e) { setSnack(errorText(e)) }
+        const done = meta.cancelled ? t('Escaneo cancelado: se muestran resultados parciales') : t('Escaneo completado')
+        setSnack(scanWarning.current ? `${done}. ${scanWarning.current}` : done)
+      } catch (e) { setSnack(errorText(e)) } finally { scanWarning.current = null }
     })
     const offE = api.onError(msg => { setScan(s => ({ ...s, running: false })); setSnack(msg) })
-    return () => { offP(); offD(); offE() }
+    return () => { offW(); offP(); offD(); offE() }
   }, [])
 
   const notify = useCallback((m: string) => setSnack(m), [])

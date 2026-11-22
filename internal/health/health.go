@@ -20,6 +20,7 @@ import (
 	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
+	"gcetools/internal/security"
 )
 
 type Options struct {
@@ -462,8 +463,7 @@ func Evaluate(inv *model.Inventory, opt Options, now time.Time) Result {
 		}
 		rules := str(r, "rules")
 		sev, rule := Medium, i18n.T("Regla de firewall abierta a Internet")
-		if rules == "all" || strings.Contains(rules, ":22") || strings.Contains(rules, "3389") ||
-			rules == "tcp" || strings.Contains(rules, "tcp:0-65535") {
+		if security.OpensAdminOrAllPorts(rules) {
 			sev, rule = High, i18n.T("SSH/RDP o todos los puertos abiertos a Internet")
 		}
 		add(finding{"firewall-open", sev, "Seguridad", rule, str(r, "project"), str(r, "name"), str(r, "network"),

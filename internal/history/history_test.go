@@ -26,6 +26,9 @@ func inventory(at time.Time, vms int) *model.Inventory {
 		inv.Sheet(collect.SInfo).Add(model.Row{"name": "vm", "status": "RUNNING", "vcpu": int64(2), "memoryGB": 8.0})
 	}
 	inv.Sheet(collect.SDisks).Add(model.Row{"sizeGB": 100.0, "orphan": true})
+	// CostList sums the projects; the TOTAL row (only with several projects) is skipped.
+	inv.Sheet(collect.SCost).Add(model.Row{"project": "p1", "total": 100.456})
+	inv.Sheet(collect.SCost).Add(model.Row{"project": "p2", "total": 23.0})
 	inv.Sheet(collect.SCost).Add(model.Row{"project": "TOTAL", "total": 123.456})
 	inv.Sheet(collect.SHealth).Add(model.Row{"severity": "Alta"})
 	inv.Sheet(collect.SHealth).Add(model.Row{"severity": "Baja"})
@@ -95,5 +98,44 @@ func TestRetention(t *testing.T) {
 	files, _ := filepath.Glob(filepath.Join(dir, "*.json.gz"))
 	if len(all) != 3 || len(files) != 3 || !all[2].StartedAt.Equal(t0.Add(2*time.Hour)) {
 		t.Errorf("kept %d entries / %d files: %+v", len(all), len(files), all)
+	}
+}
+
+// A damaged index is rebuilt on Save instead of being replaced by the new
+// entry alone (which hid every older scan), and bad IDs are never used as
+// file names.
+func TestDamagedIndex(t *testing.T) {
+	dir := store(t)
+	t1 := time.Date(2026, 11, 1, 9, 0, 0, 0, time.Local)
+	if _, err := Save(inventory(t1, 1), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Save(inventory(t1.Add(time.Hour), 2), ""); err != nil {
+		t.Fatal(err)
+	}
+	all, err := List()
+	if err != nil || len(all) != 2 {
+		t.Fatalf("List = %d entries, %v; want both scans", len(all), err)
+	}
+
+	outside := filepath.Join(filepath.Dir(dir), "victim.json.gz")
+	if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	idx := `[{"id":"../victim","startedAt":"2000-01-01T00:00:00Z"}]`
+	if err := os.WriteFile(filepath.Join(dir, "index.json"), []byte(idx), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := Keep
+	Keep = 1
+	defer func() { Keep = old }()
+	if _, err := Save(inventory(t1.Add(2*time.Hour), 1), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Errorf("pruning followed an ID from the index: %v", err)
 	}
 }

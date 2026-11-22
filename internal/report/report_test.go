@@ -82,3 +82,17 @@ func TestGroup(t *testing.T) {
 		}
 	}
 }
+
+// With a single project gCost has no TOTAL row: the report sums projects.
+func TestSingleProjectCost(t *testing.T) {
+	inv := sample()
+	s := inv.Sheet(collect.SCost)
+	s.Rows = s.Rows[:1] // drop TOTAL
+	out, err := Render(inv, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "1.235 USD") {
+		t.Errorf("estimated cost missing from the report")
+	}
+}

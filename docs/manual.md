@@ -338,6 +338,8 @@ El botón **Exportar** ofrece:
 
 El nombre propuesto es `gcetools-AAAAMMDD-HHMM` con la fecha del escaneo. Las cabeceras y los textos se exportan en el idioma activo; los nombres de las hojas (`gInfo`…) son siempre los mismos.
 
+Los archivos exportados y el informe solo los puede leer tu usuario (permisos 0600 en Linux y macOS): contienen IPs, cuentas de servicio y exposición a Internet. En los CSV, los textos que empiezan por `=`, `+`, `-` o `@` llevan delante un apóstrofo para que Excel no los ejecute como fórmula; en el XLSX no hace falta.
+
 ## 8. Referencia de pestañas
 
 Cada pestaña es una tabla. Las que dependen de un módulo opcional o del coste solo tienen datos si ese módulo estaba activado.

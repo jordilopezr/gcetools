@@ -11,6 +11,7 @@ package collect
 import (
 	"context"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -327,7 +328,7 @@ func encryption(k *compute.CustomerEncryptionKey) string {
 }
 
 func round2(f float64) float64 {
-	return float64(int64(f*100+0.5)) / 100
+	return math.Round(f*100) / 100
 }
 
 func boolPtr(b *bool, def bool) bool {

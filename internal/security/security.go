@@ -250,6 +250,13 @@ func (fr *rule) everyPort() bool {
 	return false
 }
 
+// OpensAdminOrAllPorts reports whether a gFirewall "rules" value ("tcp:22,
+// 80-90; udp; all") lets in TCP 22 (SSH), TCP 3389 (RDP) or every TCP port.
+func OpensAdminOrAllPorts(rules string) bool {
+	fr := rule{protos: parseRules(rules)}
+	return fr.covers(22) || fr.covers(3389) || fr.everyPort()
+}
+
 // parseRules reads the gFirewall "rules" column: "tcp:22,80-90; udp; all".
 func parseRules(s string) []protoPorts {
 	var out []protoPorts

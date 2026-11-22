@@ -5,6 +5,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -31,7 +32,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.8.0"
+var Version = "0.9.0"
 
 type Engine struct {
 	Session *auth.Session
@@ -217,7 +218,7 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 		ps.Add(model.Row{
 			"projectId": p.ID, "number": p.Number, "name": p.Name, "parent": p.Parent, "state": p.State,
 			"scanStatus": status, "vms": st.VMs, "vmsRunning": st.VMsRunning, "vcpu": st.VCPU,
-			"memoryGB": float64(int64(st.MemoryGB*100+0.5)) / 100, "disks": st.Disks, "diskGB": st.DiskGB,
+			"memoryGB": math.Round(st.MemoryGB*100) / 100, "disks": st.Disks, "diskGB": st.DiskGB,
 			"labels":  strings.Join(lbl, "; "),
 			"osLogin": st.OSLogin, "sshKeys": st.SSHKeys, "serialPort": st.SerialPort,
 		})

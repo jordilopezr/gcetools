@@ -137,12 +137,12 @@ func build(inv *model.Inventory, opt Options) Data {
 	}
 	for _, r := range rows("gCost") {
 		p := str(r, "project")
-		if p == "TOTAL" {
-			listTotal = num(r["total"])
+		if p == "TOTAL" { // only present with several projects: sum them instead
 			continue
 		}
 		c := pc(p)
 		c.List = num(r["total"])
+		listTotal += c.List
 		c.VMs = int(num(r["vmsRunning"]))
 	}
 	for _, r := range rows("gCostReal") {

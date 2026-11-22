@@ -473,4 +473,7 @@ func init() {
 		"Acceso a la VM ampliado":                        "VM access widened",
 		"puertos sensibles abiertos":                     "sensitive ports open",
 	})
+	add(map[string]string{
+		"moneda no válida: %q (usa un código ISO 4217, p. ej. EUR)": "invalid currency: %q (use an ISO 4217 code, e.g. EUR)",
+	})
 }

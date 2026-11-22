@@ -255,7 +255,7 @@ func Run(args []string) int {
 		}
 		if html, err := report.Render(inv, ropt); err != nil {
 			fmt.Fprint(os.Stderr, i18n.Tf("aviso: no se pudo generar el informe: %v\n", err))
-		} else if err := os.WriteFile(*reportPath, html, 0o644); err != nil {
+		} else if err := os.WriteFile(*reportPath, html, 0o600); err != nil {
 			fmt.Fprint(os.Stderr, i18n.Tf("aviso: no se pudo guardar el informe: %v\n", err))
 		} else {
 			fmt.Fprint(os.Stderr, i18n.Tf("Informe ejecutivo: %s\n", *reportPath))

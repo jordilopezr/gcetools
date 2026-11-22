@@ -1,0 +1,31 @@
+# Weekly dependency updates, grouped to keep the number of PRs low:
+# one PR per ecosystem for minor/patch updates, majors grouped separately.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+      go-major:
+        update-types: [major]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+      npm-major:
+        update-types: [major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

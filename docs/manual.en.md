@@ -338,6 +338,8 @@ The **Export** button offers:
 
 The suggested name is `gcetools-YYYYMMDD-HHMM` with the scan date. Headers and texts are exported in the active language; sheet names (`gInfo`…) are always the same.
 
+Exported files and the report can only be read by your user (0600 permissions on Linux and macOS): they contain IPs, service accounts and Internet exposure. In CSV files, text starting with `=`, `+`, `-` or `@` gets a leading apostrophe so Excel does not run it as a formula; XLSX does not need it.
+
 ## 8. Tab reference
 
 Each tab is a table. Tabs that depend on an optional module or on cost only have data if that module was turned on.

@@ -22,28 +22,47 @@ env:
   WAILS_VERSION: v2.17.1
   NFPM_VERSION: v2.49.0          # .deb / .rpm
   APPIMAGETOOL_VERSION: "1.9.1"  # .AppImage
+  # sha256 of appimagetool-x86_64.AppImage from the release above; update both together
+  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
   NODE_VERSION: "26" # Node.js 26 LTS for the frontend build
+  STATICCHECK_VERSION: v0.8.2    # staticcheck 2026.2.2
+  GOVULNCHECK_VERSION: v1.10.0
 
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Frontend build (needed by go:embed)
-        run: npm ci && npm run build
+        # --ignore-scripts: no dependency needs an install script (vite uses
+        # rolldown's prebuilt optional binaries, there is no esbuild).
+        run: npm ci --ignore-scripts && npm run build
+        working-directory: frontend
+      - name: i18n check
+        run: npm run check:i18n
         working-directory: frontend
       - name: Linux GUI deps (for vet of the main package)
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - run: go vet -tags webkit2_41 ./...
       - run: go test -race -tags webkit2_41 ./...
+      - name: govulncheck
+        # Fails only on vulnerabilities reachable from our code; module-level
+        # findings that are never called are reported but do not fail.
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
+          govulncheck -tags webkit2_41 ./...
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@${{ env.STATICCHECK_VERSION }}
+          staticcheck -tags webkit2_41 ./...
 
   build:
     needs: test
@@ -63,22 +82,24 @@ jobs:
             os: macos-latest
             platform: darwin/universal
     runs-on: ${{ matrix.os }}
-    env:
-      # Exposed at job level so the signing step's `if:` can test for it.
-      APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-      # gceTools' own "Desktop app" OAuth client for "Iniciar sesión con Google".
-      # Injected with -ldflags so it never lives in the repository; without
-      # these secrets the build simply lacks the built-in client.
-      GCETOOLS_OAUTH_CLIENT_ID: ${{ secrets.GCETOOLS_OAUTH_CLIENT_ID }}
-      GCETOOLS_OAUTH_CLIENT_SECRET: ${{ secrets.GCETOOLS_OAUTH_CLIENT_SECRET }}
-      GCETOOLS_OAUTH_PROJECT: ${{ vars.GCETOOLS_OAUTH_PROJECT }}
+    # No secrets at job level: each one is passed only to the step that uses
+    # it, so dependency installs and downloaded tools never see them.
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - name: Detect optional signing secrets
+        id: secrets
+        shell: bash
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          echo "has_apple=$([[ -n "$APPLE_CERT_P12" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_signpath=$([[ -n "$SIGNPATH_API_TOKEN" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -91,6 +112,7 @@ jobs:
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@${{ env.NFPM_VERSION }}
           mkdir -p "$HOME/.local/bin"
           curl -fsSLo "$HOME/.local/bin/appimagetool" "https://github.com/AppImage/appimagetool/releases/download/${{ env.APPIMAGETOOL_VERSION }}/appimagetool-x86_64.AppImage"
+          echo "${{ env.APPIMAGETOOL_SHA256 }}  $HOME/.local/bin/appimagetool" | sha256sum -c -
           chmod +x "$HOME/.local/bin/appimagetool"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: NSIS
@@ -121,20 +143,39 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "ldflags=-s -w -X gcetools/internal/core.Version=$v" >> "$GITHUB_OUTPUT"
 
+      # Built here (no secrets in env, install scripts disabled) instead of
+      # letting `wails build` run `npm install` inside the step that holds the
+      # OAuth secret; wails is then called with -s (skip frontend).
+      - name: Frontend build
+        shell: bash
+        working-directory: frontend
+        run: npm ci --ignore-scripts && npm run build
+
+      # gceTools' own "Desktop app" OAuth client for "Iniciar sesión con Google".
+      # Injected with -ldflags so it never lives in the repository; without
+      # these secrets the build simply lacks the built-in client.
       - name: Build GUI
         shell: bash
+        env:
+          GCETOOLS_OAUTH_CLIENT_ID: ${{ secrets.GCETOOLS_OAUTH_CLIENT_ID }}
+          GCETOOLS_OAUTH_CLIENT_SECRET: ${{ secrets.GCETOOLS_OAUTH_CLIENT_SECRET }}
+          GCETOOLS_OAUTH_PROJECT: ${{ vars.GCETOOLS_OAUTH_PROJECT }}
         run: |
           ld="${{ steps.v.outputs.ldflags }}"
           if [[ -n "$GCETOOLS_OAUTH_CLIENT_ID" ]]; then
             ld+=" -X gcetools/internal/auth.BuiltinClientID=$GCETOOLS_OAUTH_CLIENT_ID -X gcetools/internal/auth.BuiltinClientSecret=$GCETOOLS_OAUTH_CLIENT_SECRET -X gcetools/internal/auth.BuiltinClientProject=$GCETOOLS_OAUTH_PROJECT"
           fi
-          args=(-platform "${{ matrix.platform }}" -trimpath -ldflags "$ld")
+          args=(-platform "${{ matrix.platform }}" -s -trimpath -ldflags "$ld")
           [[ -n "${{ matrix.tags }}" ]] && args+=(-tags "${{ matrix.tags }}")
           [[ "${{ matrix.nsis }}" == "true" ]] && args+=(-nsis)
           wails build "${args[@]}"
 
       - name: Build CLI
         shell: bash
+        env:
+          GCETOOLS_OAUTH_CLIENT_ID: ${{ secrets.GCETOOLS_OAUTH_CLIENT_ID }}
+          GCETOOLS_OAUTH_CLIENT_SECRET: ${{ secrets.GCETOOLS_OAUTH_CLIENT_SECRET }}
+          GCETOOLS_OAUTH_PROJECT: ${{ vars.GCETOOLS_OAUTH_PROJECT }}
         run: |
           mkdir -p dist
           ext=""; [[ "$RUNNER_OS" == "Windows" ]] && ext=".exe"
@@ -154,20 +195,20 @@ jobs:
       # around the signed gcetools.exe and signed in round 2.
       - name: Stage executables for signing
         id: sign-stage
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v') && env.SIGNPATH_API_TOKEN != ''
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v') && steps.secrets.outputs.has_signpath == 'true'
         shell: bash
         run: mkdir -p unsigned-exes && cp build/bin/gcetools.exe dist/gcetools-cli.exe unsigned-exes/
       - name: Upload executables for signing
         id: up-exes
         if: steps.sign-stage.conclusion == 'success'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-exes-windows
           path: unsigned-exes/
           retention-days: 1
       - name: Sign executables (SignPath)
         if: steps.sign-stage.conclusion == 'success'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -192,14 +233,14 @@ jobs:
       - name: Upload installer for signing
         id: up-installer
         if: steps.sign-stage.conclusion == 'success'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-installer-windows
           path: unsigned-installer/
           retention-days: 1
       - name: Sign installer (SignPath)
         if: steps.sign-stage.conclusion == 'success'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2.3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -222,15 +263,15 @@ jobs:
           }
 
       - name: Sign and notarize (macOS, optional)
-        if: runner.os == 'macOS' && env.APPLE_CERT_P12 != ''
+        if: runner.os == 'macOS' && steps.secrets.outputs.has_apple == 'true'
         env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}            # base64 of the "Developer ID Application" .p12
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
           APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}  # "Developer ID Application: Org (TEAMID)"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}    # app-specific password
         run: |
-          # APPLE_CERT_P12 (job env): base64 of the "Developer ID Application" .p12
           app=$(find build/bin -maxdepth 1 -name "*.app" | head -1)
           kc=build.keychain; pw=$(uuidgen)
           echo "$APPLE_CERT_P12" | base64 --decode > cert.p12
@@ -283,7 +324,7 @@ jobs:
           esac
           ls -la
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gcetools-${{ matrix.name }}
           path: |
@@ -303,7 +344,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           path: out
           merge-multiple: true

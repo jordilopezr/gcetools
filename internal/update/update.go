@@ -74,7 +74,8 @@ func Check(ctx context.Context, current string) (Info, error) {
 		return info, err
 	}
 	info.Latest = strings.TrimPrefix(rel.TagName, "v")
-	if rel.HTMLURL != "" {
+	// The UI opens this URL: accept only release pages of this repository.
+	if strings.HasPrefix(rel.HTMLURL, ReleaseURL+"/") {
 		info.URL = rel.HTMLURL
 	}
 	info.Published = rel.PublishedAt

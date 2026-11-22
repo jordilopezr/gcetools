@@ -19,6 +19,7 @@ import (
 	"gcetools/internal/history"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
+	"gcetools/internal/osopen"
 	"gcetools/internal/profile"
 	"gcetools/internal/report"
 	"gcetools/internal/update"
@@ -38,7 +39,8 @@ type App struct {
 	engine      *core.Engine
 	projects    map[string]core.Project
 	inv         *model.Inventory
-	cancel      context.CancelFunc
+	cancel      context.CancelFunc          // running scan
+	scanGen     uint64                      // bumped by every scan start, Connect and Disconnect
 	diff        *model.Inventory            // last comparison
 	snaps       map[string]*model.Inventory // snapshots loaded for comparison, by path
 }
@@ -120,6 +122,7 @@ func (a *App) Connect(method string, impersonateSA string) (*SessionInfo, error)
 		return nil, err
 	}
 	a.mu.Lock()
+	a.stopScanLocked()
 	a.engine = core.NewEngine(sess, 20)
 	a.projects = map[string]core.Project{}
 	a.inv = nil
@@ -130,9 +133,7 @@ func (a *App) Connect(method string, impersonateSA string) (*SessionInfo, error)
 func (a *App) Disconnect() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cancel != nil {
-		a.cancel()
-	}
+	a.stopScanLocked()
 	a.engine, a.inv = nil, nil
 	clear(a.keyJSON)
 	a.keyJSON = nil
@@ -180,29 +181,49 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 	}
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.cancel = cancel
+	a.scanGen++
+	gen := a.scanGen
 	a.mu.Unlock()
 
 	go func() {
 		defer func() {
 			a.mu.Lock()
-			a.cancel = nil
+			if a.scanGen == gen {
+				a.cancel = nil
+			}
 			a.mu.Unlock()
 			cancel()
 		}()
+		// Workers report progress concurrently.
+		var progressMu sync.Mutex
 		var last time.Time
 		inv, err := eng.Scan(ctx, list, opt, func(p core.Progress) {
+			progressMu.Lock()
+			defer progressMu.Unlock()
 			// throttle UI updates, but always send project completions
 			if p.Step != "done" && time.Since(last) < 150*time.Millisecond {
 				return
 			}
+			a.mu.Lock()
+			current := a.scanGen == gen
+			a.mu.Unlock()
+			if !current {
+				return // superseded: the UI already left the scan page
+			}
 			last = time.Now()
 			runtime.EventsEmit(a.ctx, "scan:progress", p)
 		})
+		a.mu.Lock()
+		if a.scanGen != gen {
+			// Disconnect or a new sign-in superseded this scan: drop it.
+			a.mu.Unlock()
+			return
+		}
 		if err != nil {
+			a.mu.Unlock()
 			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
 			return
 		}
-		a.mu.Lock()
 		a.inv = inv
 		a.mu.Unlock()
 		if opt.SaveHistory {
@@ -213,6 +234,16 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 		runtime.EventsEmit(a.ctx, "scan:done", inv.Meta)
 	}()
 	return nil
+}
+
+// stopScanLocked cancels the running scan and makes sure its result is
+// discarded. Callers hold a.mu.
+func (a *App) stopScanLocked() {
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
+	a.scanGen++
 }
 
 func (a *App) CancelScan() {
@@ -235,11 +266,11 @@ func (a *App) GetInventory() *model.Inventory {
 func (a *App) Export(format string, csvSep string) (string, error) {
 	a.mu.Lock()
 	inv := a.inv
+	collect.Relabel(inv)
 	a.mu.Unlock()
 	if inv == nil {
 		return "", errors.New(i18n.T("no hay inventario que exportar"))
 	}
-	collect.Relabel(inv)
 	return a.save(inv, i18n.T("Exportar inventario"), "gcetools-"+inv.Meta.StartedAt.Format("20060102-1504"), format, csvSep)
 }
 
@@ -363,13 +394,21 @@ func (a *App) CurrentSnapshot() *SnapshotInfo {
 // result for ExportDiff.
 func (a *App) Compare(before, after string) (*model.Inventory, error) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	cur, snaps := a.inv, map[string]*model.Inventory{}
+	for _, p := range []string{before, after} {
+		if inv, ok := a.snaps[p]; ok {
+			snaps[p] = inv
+		}
+	}
+	a.mu.Unlock()
+	// History scans are read without holding a.mu: loading a large one takes
+	// seconds and would block CancelScan and the rest of the UI.
 	get := func(path string) (diff.Input, error) {
 		if path == CurrentInventory {
-			if a.inv == nil {
+			if cur == nil {
 				return diff.Input{}, errors.New(i18n.T("no hay inventario actual: escanea primero"))
 			}
-			return diff.Input{Inv: a.inv, Label: i18n.T("Inventario actual")}, nil
+			return diff.Input{Inv: cur, Label: i18n.T("Inventario actual")}, nil
 		}
 		if id, ok := strings.CutPrefix(path, HistoryPrefix); ok {
 			inv, err := history.Load(id)
@@ -378,7 +417,7 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 			}
 			return diff.Input{Inv: inv, Label: i18n.Tf("Historial %s", id)}, nil
 		}
-		inv, ok := a.snaps[path]
+		inv, ok := snaps[path]
 		if !ok {
 			return diff.Input{}, errors.New(i18n.T("snapshot no cargado: vuelve a elegirlo"))
 		}
@@ -392,8 +431,11 @@ func (a *App) Compare(before, after string) (*model.Inventory, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.diff = diff.Compare(x, y)
-	return diff.Display(a.diff), nil
+	res := diff.Compare(x, y)
+	a.mu.Lock()
+	a.diff = res
+	a.mu.Unlock()
+	return diff.Display(res), nil
 }
 
 // ---------- profiles & discovery ----------
@@ -405,11 +447,22 @@ func (a *App) HealthRules() []health.Rule { return health.LocalizedRules() }
 
 // SaveProfile stores p. For service account keys only the file path is kept,
 // so the CLI can reuse the profile; the key itself is never written.
+//
+// The key path never comes from the UI: it is the file picked in the native
+// dialog during this session or, failing that, the one already stored in the
+// profile. Otherwise a compromised frontend could make later CLI scans use a
+// key of its choice.
 func (a *App) SaveProfile(p profile.Profile) error {
-	if p.Auth == "sa" && p.KeyPath == "" {
+	p.KeyPath = ""
+	if p.Auth == "sa" {
 		a.mu.Lock()
 		p.KeyPath = a.keyPath
 		a.mu.Unlock()
+		if p.KeyPath == "" {
+			if old, err := profile.Get(p.Name); err == nil {
+				p.KeyPath = old.KeyPath
+			}
+		}
 	}
 	return profile.Save(p)
 }
@@ -487,10 +540,11 @@ func (a *App) ExportReport() (string, error) {
 	if err != nil || path == "" {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := export.WritePrivate(path, data); err != nil {
 		return "", err
 	}
-	runtime.BrowserOpenURL(a.ctx, "file://"+filepath.ToSlash(path))
+	// Not runtime.BrowserOpenURL: Wails rejects file:// URLs.
+	_ = osopen.Open(path)
 	return path, nil
 }
 

@@ -85,6 +85,7 @@ func (e *Engine) Discover(ctx context.Context, scope string) ([]Footprint, error
 	case model.ErrAPIDisabled:
 		msg += i18n.T(". Habilita la Cloud Asset API en el quota project (o en el proyecto de la service account)")
 	}
+	//lint:ignore ST1005 starts with the product name
 	return nil, fmt.Errorf("Cloud Asset Inventory: %s", msg)
 }
 

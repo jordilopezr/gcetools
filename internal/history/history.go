@@ -116,9 +116,10 @@ func Summarize(inv *model.Inventory) Summary {
 			s.Orphans++
 		}
 	}
+	// Sum the projects: gCost only has a TOTAL row when several were scanned.
 	for _, r := range rows("gCost") {
-		if r["project"] == "TOTAL" {
-			s.CostList = num(r["total"])
+		if r["project"] != "TOTAL" {
+			s.CostList += num(r["total"])
 		}
 	}
 	for _, r := range rows("gCostReal") {
@@ -181,7 +182,8 @@ func Save(inv *model.Inventory, profile string) (Summary, error) {
 		s.SizeBytes = st.Size()
 	}
 
-	idx, _ := readIndex(dir)
+	idx := indexOrRebuild(dir)
+	idx = slices.DeleteFunc(idx, func(o Summary) bool { return o.ID == s.ID }) // rebuild may have found it
 	idx = append(idx, s)
 	sortNewestFirst(idx)
 	for len(idx) > Keep && Keep > 0 {
@@ -237,7 +239,7 @@ func Delete(id string) error {
 	if err := os.Remove(filepath.Join(dir, id+".json.gz")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	idx, _ := readIndex(dir)
+	idx := indexOrRebuild(dir)
 	return writeIndex(dir, slices.DeleteFunc(idx, func(s Summary) bool { return s.ID == id }))
 }
 
@@ -281,6 +283,19 @@ func rebuild(dir string) ([]Summary, error) {
 	return out, writeIndex(dir, out)
 }
 
+// indexOrRebuild returns the index, rebuilding it from the snapshot files
+// when it is missing or damaged, so Save and Delete never rewrite it with a
+// partial list (which would hide, and never prune, the older scans).
+func indexOrRebuild(dir string) []Summary {
+	if idx, err := readIndex(dir); err == nil {
+		return idx
+	}
+	idx, _ := rebuild(dir)
+	return idx
+}
+
+// readIndex reads index.json. Entries with an invalid ID are dropped: the ID
+// becomes a file name when pruning or deleting.
 func readIndex(dir string) ([]Summary, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "index.json"))
 	if err != nil {
@@ -290,10 +305,7 @@ func readIndex(dir string) ([]Summary, error) {
 	if err := json.Unmarshal(data, &idx); err != nil {
 		return nil, err
 	}
-	if idx == nil {
-		idx = []Summary{}
-	}
-	return idx, nil
+	return slices.DeleteFunc(append([]Summary{}, idx...), func(s Summary) bool { return !reID.MatchString(s.ID) }), nil
 }
 
 func writeIndex(dir string, idx []Summary) error {
@@ -340,6 +352,7 @@ func readGz(path string) (*model.Inventory, error) {
 	if err := json.NewDecoder(zr).Decode(&inv); err != nil {
 		return nil, err
 	}
+	model.Normalize(&inv)
 	return &inv, nil
 }
 

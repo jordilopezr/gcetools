@@ -5,12 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"runtime"
 
 	"gcetools/internal/auth"
 	"gcetools/internal/i18n"
+	"gcetools/internal/osopen"
 )
 
 const loginUsage = `gcetools login — inicia sesión con Google sin gcloud
@@ -76,14 +75,5 @@ func Logout(args []string) int {
 }
 
 func openBrowser(u string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u)
-	case "darwin":
-		cmd = exec.Command("open", u)
-	default:
-		cmd = exec.Command("xdg-open", u)
-	}
-	_ = cmd.Start() // best effort: the URL is printed anyway
+	_ = osopen.Open(u) // best effort: the URL is printed anyway
 }

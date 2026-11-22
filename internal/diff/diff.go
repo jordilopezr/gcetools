@@ -183,11 +183,6 @@ func comparable(a, b coverage, project, collector string) bool {
 	return true
 }
 
-type entry struct {
-	key string
-	row model.Row
-}
-
 var reSnapCount = regexp.MustCompile(`^\d+ snapshots$`)
 
 // Compare returns the differences going from a (before) to b (after).
@@ -209,6 +204,9 @@ func Compare(a, b Input) *model.Inventory {
 		for _, col := range cols {
 			colOf[col.Key] = col
 		}
+		// gHealth findings are matched by rule ID: the title is translated and
+		// embeds thresholds. Scans from before ruleId existed use the title.
+		byRuleID := sp.sheet == collect.SHealth && hasColumn(sa, "ruleId") && hasColumn(sb, "ruleId")
 		index := func(s *model.Sheet) (map[string]model.Row, []string) {
 			m, order, seen := map[string]model.Row{}, []string{}, map[string]int{}
 			for _, r := range s.Rows {
@@ -218,6 +216,9 @@ func Compare(a, b Input) *model.Inventory {
 				parts := make([]string, len(sp.keys))
 				for i, k := range sp.keys {
 					parts[i] = norm(colOf[k], r[k])
+					if byRuleID && k == "rule" {
+						parts[i] = str(r, "ruleId")
+					}
 					if sp.sheet == collect.SHealth && k == "resource" && reSnapCount.MatchString(parts[i]) {
 						parts[i] = "snapshots" // aggregated finding: the count is not identity
 					}
@@ -582,6 +583,10 @@ func fmtTime(t time.Time) string {
 		return ""
 	}
 	return t.Local().Format("2006-01-02 15:04")
+}
+
+func hasColumn(s *model.Sheet, key string) bool {
+	return slices.ContainsFunc(s.Columns, func(c model.Column) bool { return c.Key == key })
 }
 
 func str(r model.Row, k string) string {

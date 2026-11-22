@@ -138,3 +138,21 @@ func without(rows []model.Row, name string) []model.Row {
 	}
 	return out
 }
+
+// gHealth findings are matched by rule ID, so a new threshold (or another
+// language) in the title does not turn every finding into removed + added.
+func TestHealthMatchedByRuleID(t *testing.T) {
+	before, after := baseInventory(), baseInventory()
+	before.Sheet(collect.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM parada más de 30 días",
+		"project": "p1", "resource": "old", "location": "z"})
+	after.Sheet(collect.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM stopped for more than 60 days",
+		"project": "p1", "resource": "old", "location": "z"})
+	res := Compare(Input{Inv: roundTrip(t, before), Label: "a"}, Input{Inv: roundTrip(t, after), Label: "b"})
+	for _, sheet := range []string{SAdded, SRemoved} {
+		for _, r := range rowsOf(res, sheet) {
+			if r["sheet"] == collect.SHealth {
+				t.Errorf("%s: unexpected gHealth row %v", sheet, r)
+			}
+		}
+	}
+}

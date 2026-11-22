@@ -41,7 +41,10 @@ export default function ConnectPage({ session, onConnected, notify }: Props) {
       const o = await api.oauthLogin()
       setOauth(o)
       if (o.account) await connectWith('oauth')
-    } catch (e) { setError(errorText(e)); setOauth(await api.oauthStatus()) } finally { setSigningIn(false) }
+    } catch (e) {
+      setError(errorText(e))
+      try { setOauth(await api.oauthStatus()) } catch { /* keep the previous status */ }
+    } finally { setSigningIn(false) }
   }
   const useBuiltin = async () => {
     try { setOauth(await api.oauthUseBuiltin()) } catch (e) { setError(errorText(e)) }

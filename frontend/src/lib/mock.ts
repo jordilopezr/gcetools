@@ -242,6 +242,7 @@ export const mockApi: Api = {
   onProgress: (cb) => on(listeners.progress, cb),
   onDone: (cb) => on(listeners.done, cb),
   onError: (cb) => on(listeners.error, cb),
+  onWarning: () => () => {}, // the demo never fails to save history
   appInfo: async () => ({
     version: '0.2.1', website: 'https://gcetools.jordilopezr.com', donate: 'https://buymeacoffee.com/jordimlopezr',
     license: 'GPL-3.0', licenseUrl: 'https://www.gnu.org/licenses/gpl-3.0.html', releases: 'https://github.com/jordilopezr/gcetools/releases',
