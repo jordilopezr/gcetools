@@ -3,6 +3,7 @@ package export
 import (
 	"archive/zip"
 	"bytes"
+	"gcetools/internal/schema"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/health"
 	"gcetools/internal/model"
 
@@ -18,23 +18,23 @@ import (
 )
 
 func sample() *model.Inventory {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	now := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
-	inv.Sheet(collect.SInfo).Add(model.Row{
+	inv.Sheet(schema.SInfo).Add(model.Row{
 		"project": "p1", "name": "vm-1", "zone": "europe-west1-b", "status": "TERMINATED", "vcpu": int64(4),
 		"memoryGB": 16.0, "lastStop": now.Add(-60 * 24 * time.Hour), "externalIP": "34.1.2.3",
 		"serviceAccount": "123-compute@developer.gserviceaccount.com", "scopes": "cloud-platform",
 		"family": "n1", "secureBoot": false, "deletionProtection": false,
 	})
-	inv.Sheet(collect.SDisks).Add(model.Row{"project": "p1", "name": "orphan", "sizeGB": 500.0, "type": "pd-ssd", "orphan": true})
-	inv.Sheet(collect.SFirewall).Add(model.Row{"project": "p1", "name": "allow-ssh", "rules": "tcp:22", "openToInternet": true, "sourceRanges": "0.0.0.0/0"})
-	inv.Sheet(collect.SAddress).Add(model.Row{"project": "p1", "name": "ip", "status": "RESERVED", "type": "EXTERNAL"})
+	inv.Sheet(schema.SDisks).Add(model.Row{"project": "p1", "name": "orphan", "sizeGB": 500.0, "type": "pd-ssd", "orphan": true})
+	inv.Sheet(schema.SFirewall).Add(model.Row{"project": "p1", "name": "allow-ssh", "rules": "tcp:22", "openToInternet": true, "sourceRanges": "0.0.0.0/0"})
+	inv.Sheet(schema.SAddress).Add(model.Row{"project": "p1", "name": "ip", "status": "RESERVED", "type": "EXTERNAL"})
 	health.Evaluate(inv, health.DefaultOptions(), now)
 	return inv
 }
 
 func TestHealthFindings(t *testing.T) {
-	rows := sample().Sheet(collect.SHealth).Rows
+	rows := sample().Sheet(schema.SHealth).Rows
 	want := []string{"Disco huérfano", "SSH/RDP o todos los puertos abiertos a Internet", "VM con IP pública",
 		"IP externa reservada sin uso", "VM parada más de 30 días", "Usa la service account por defecto de Compute"}
 	got := map[string]string{}
@@ -65,7 +65,7 @@ func TestXLSX(t *testing.T) {
 	if n := len(f.GetSheetList()); n != len(inv.Sheets) {
 		t.Fatalf("sheets = %d, want %d", n, len(inv.Sheets))
 	}
-	rows, _ := f.GetRows(collect.SInfo)
+	rows, _ := f.GetRows(schema.SInfo)
 	if len(rows) != 2 || rows[0][0] != "Proyecto" || rows[1][1] != "vm-1" {
 		t.Fatalf("unexpected gInfo rows: %v", rows)
 	}
@@ -85,7 +85,7 @@ func TestCSVZip(t *testing.T) {
 	}
 	defer zr.Close()
 	for _, f := range zr.File {
-		if f.Name != collect.SDisks+".csv" {
+		if f.Name != schema.SDisks+".csv" {
 			continue
 		}
 		rc, _ := f.Open()
@@ -108,7 +108,7 @@ func TestXLSXLongPath(t *testing.T) {
 	if len(path) <= 207 {
 		t.Fatalf("test path too short: %d", len(path))
 	}
-	if _, err := Write(collect.NewInventory(), path, XLSX, ','); err != nil {
+	if _, err := Write(schema.NewInventory(), path, XLSX, ','); err != nil {
 		t.Fatalf("long path: %v", err)
 	}
 }

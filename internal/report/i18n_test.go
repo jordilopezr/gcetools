@@ -1,12 +1,12 @@
 package report
 
 import (
+	"gcetools/internal/schema"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/diff"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
@@ -36,11 +36,11 @@ func TestRenderEnglish(t *testing.T) {
 	i18n.SetLang("en")
 	defer i18n.SetLang("es")
 	inv := sample() // health rows keep the Spanish severities of an older scan
-	inv.Sheet(collect.SHealth).Add(model.Row{"severity": "High", "rule": "Orphaned disk", "project": "erp", "resource": "d2"})
-	inv.Sheet(collect.SCostReal).Add(model.Row{"project": "TOTAL", "net": 1500.25, "currency": "USD", "month": "202610"})
+	inv.Sheet(schema.SHealth).Add(model.Row{"severity": "High", "rule": "Orphaned disk", "project": "erp", "resource": "d2"})
+	inv.Sheet(schema.SCostReal).Add(model.Row{"project": "TOTAL", "net": 1500.25, "currency": "USD", "month": "202610"})
 	a := sample()
 	b := sample()
-	b.Sheet(collect.SInfo).Rows[0]["machineType"] = "n2-standard-16"
+	b.Sheet(schema.SInfo).Rows[0]["machineType"] = "n2-standard-16"
 	d := diff.Compare(diff.Input{Inv: a, Label: "a"}, diff.Input{Inv: b, Label: "b"})
 	out, err := Render(inv, Options{Diff: d, DiffSince: a.Meta.StartedAt, Now: time.Date(2026, 11, 19, 8, 0, 0, 0, time.Local)})
 	if err != nil {

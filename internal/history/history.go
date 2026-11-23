@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gcetools/internal/health"
 	"math"
 	"os"
 	"path/filepath"
@@ -95,50 +96,44 @@ func Summarize(inv *model.Inventory) Summary {
 	m := inv.Meta
 	s := Summary{StartedAt: m.StartedAt, Identity: m.Identity, Version: m.Version, Projects: m.Projects,
 		ProjectsOK: m.ProjectsOK, Cancelled: m.Cancelled, Currency: m.Currency}
-	rows := func(name string) []model.Row {
-		if sh := inv.Sheet(name); sh != nil {
-			return sh.Rows
-		}
-		return nil
-	}
-	for _, r := range rows("gInfo") {
+	for _, r := range inv.Rows("gInfo") {
 		s.VMs++
 		if r["status"] == "RUNNING" {
 			s.Running++
 		}
-		s.VCPU += num(r["vcpu"])
-		s.MemoryGB += num(r["memoryGB"])
+		s.VCPU += model.Num(r["vcpu"])
+		s.MemoryGB += model.Num(r["memoryGB"])
 	}
-	for _, r := range rows("gDisks") {
+	for _, r := range inv.Rows("gDisks") {
 		s.Disks++
-		s.DiskGB += num(r["sizeGB"])
+		s.DiskGB += model.Num(r["sizeGB"])
 		if r["orphan"] == true {
 			s.Orphans++
 		}
 	}
 	// Sum the projects: gCost only has a TOTAL row when several were scanned.
-	for _, r := range rows("gCost") {
+	for _, r := range inv.Rows("gCost") {
 		if r["project"] != "TOTAL" {
-			s.CostList += num(r["total"])
+			s.CostList += model.Num(r["total"])
 		}
 	}
-	for _, r := range rows("gCostReal") {
+	for _, r := range inv.Rows("gCostReal") {
 		if r["project"] == "TOTAL" {
-			s.CostReal = num(r["net"])
+			s.CostReal = model.Num(r["net"])
 		}
 	}
-	for _, r := range rows("gRecommend") {
-		if v := num(r["savingsMonthly"]); v > 0 {
+	for _, r := range inv.Rows("gRecommend") {
+		if v := model.Num(r["savingsMonthly"]); v > 0 {
 			s.Savings += v
 		}
 	}
-	for _, r := range rows("gHealth") {
-		switch r["severity"] { // Spanish or English, depending on the scan's language
-		case "Alta", "High":
+	for _, r := range inv.Rows("gHealth") {
+		switch health.Level(r.Str("severity")) { // either language
+		case health.High:
 			s.High++
-		case "Media", "Medium":
+		case health.Medium:
 			s.Medium++
-		case "Baja", "Low":
+		case health.Low:
 			s.Low++
 		}
 	}
@@ -375,17 +370,5 @@ func sortNewestFirst(s []Summary) {
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
-
-func num(v any) float64 {
-	switch x := v.(type) {
-	case float64:
-		return x
-	case int64:
-		return float64(x)
-	case int:
-		return float64(x)
-	}
-	return 0
-}
 
 func round2(f float64) float64 { return math.Round(f*100) / 100 }

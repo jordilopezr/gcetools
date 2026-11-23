@@ -1,13 +1,13 @@
 package pricing
 
 import (
+	"gcetools/internal/schema"
 	"math"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -21,16 +21,6 @@ func regionOf(loc string) string {
 	return loc
 }
 
-func str(r model.Row, k string) string { s, _ := r[k].(string); return s }
-func num(r model.Row, k string) float64 {
-	switch v := r[k].(type) {
-	case float64:
-		return v
-	case int64:
-		return float64(v)
-	}
-	return 0
-}
 func money(f float64) float64 { return math.Round(f*100) / 100 }
 
 type projectCost struct {
@@ -47,12 +37,6 @@ type Result struct {
 func Apply(inv *model.Inventory, x *Index) Result {
 	unpriced := map[string]bool{}
 	miss := func(what string) { unpriced[what] = true }
-	sheet := func(n string) []model.Row {
-		if s := inv.Sheet(n); s != nil {
-			return s.Rows
-		}
-		return nil
-	}
 	pc := map[string]*projectCost{}
 	proj := func(p string) *projectCost {
 		if pc[p] == nil {
@@ -63,30 +47,30 @@ func Apply(inv *model.Inventory, x *Index) Result {
 
 	// Persistent disks
 	diskCost := map[string]float64{} // project/location/name
-	for _, r := range sheet(collect.SDisks) {
-		loc := str(r, "location")
-		cost, ok := x.Disk(regionOf(loc), str(r, "type"), str(r, "replicaZones") != "", num(r, "sizeGB"),
-			int64(num(r, "iops")), int64(num(r, "throughput")))
+	for _, r := range inv.Rows(schema.SDisks) {
+		loc := r.Str("location")
+		cost, ok := x.Disk(regionOf(loc), r.Str("type"), r.Str("replicaZones") != "", r.Float("sizeGB"),
+			int64(r.Float("iops")), int64(r.Float("throughput")))
 		if !ok {
-			miss(i18n.Tf("disco %s", str(r, "type")))
+			miss(i18n.Tf("disco %s", r.Str("type")))
 			continue
 		}
 		r["costMonthly"] = money(cost)
-		diskCost[str(r, "project")+"/"+loc+"/"+str(r, "name")] = cost
-		proj(str(r, "project")).disks += cost
+		diskCost[r.Str("project")+"/"+loc+"/"+r.Str("name")] = cost
+		proj(r.Str("project")).disks += cost
 	}
 
 	// Per-VM disks (persistent from gDisks, local SSD priced here)
 	type vmKey struct{ project, zone, name string }
 	vmDisks := map[vmKey]float64{}
 	vmMachine := map[vmKey]string{}
-	for _, r := range sheet(collect.SInfo) {
-		vmMachine[vmKey{str(r, "project"), str(r, "zone"), str(r, "name")}] = str(r, "machineType")
+	for _, r := range inv.Rows(schema.SInfo) {
+		vmMachine[vmKey{r.Str("project"), r.Str("zone"), r.Str("name")}] = r.Str("machineType")
 	}
-	for _, r := range sheet(collect.SDisk) {
-		k := vmKey{str(r, "project"), str(r, "zone"), str(r, "vm")}
-		if str(r, "type") == "local-ssd" {
-			if c, ok := x.LocalSSD(regionOf(k.zone), vmMachine[k], num(r, "sizeGB")); ok {
+	for _, r := range inv.Rows(schema.SDisk) {
+		k := vmKey{r.Str("project"), r.Str("zone"), r.Str("vm")}
+		if r.Str("type") == "local-ssd" {
+			if c, ok := x.LocalSSD(regionOf(k.zone), vmMachine[k], r.Float("sizeGB")); ok {
 				vmDisks[k] += c
 				proj(k.project).disks += c
 			} else {
@@ -94,34 +78,34 @@ func Apply(inv *model.Inventory, x *Index) Result {
 			}
 			continue
 		}
-		c, ok := diskCost[k.project+"/"+k.zone+"/"+str(r, "disk")]
+		c, ok := diskCost[k.project+"/"+k.zone+"/"+r.Str("disk")]
 		if !ok {
-			c = diskCost[k.project+"/"+regionOf(k.zone)+"/"+str(r, "disk")]
+			c = diskCost[k.project+"/"+regionOf(k.zone)+"/"+r.Str("disk")]
 		}
 		vmDisks[k] += c
 	}
 
 	// Licenses per VM
 	vmLic := map[vmKey][]string{}
-	for _, r := range sheet(collect.SLicense) {
-		k := vmKey{str(r, "project"), str(r, "zone"), str(r, "vm")}
-		vmLic[k] = append(vmLic[k], str(r, "license"))
+	for _, r := range inv.Rows(schema.SLicense) {
+		k := vmKey{r.Str("project"), r.Str("zone"), r.Str("vm")}
+		vmLic[k] = append(vmLic[k], r.Str("license"))
 	}
 
 	// VMs
-	for _, r := range sheet(collect.SInfo) {
-		k := vmKey{str(r, "project"), str(r, "zone"), str(r, "name")}
+	for _, r := range inv.Rows(schema.SInfo) {
+		k := vmKey{r.Str("project"), r.Str("zone"), r.Str("name")}
 		region := regionOf(k.zone)
-		spot := str(r, "provisioning") == "SPOT" || str(r, "provisioning") == "PREEMPTIBLE"
-		vcpu := int64(num(r, "vcpu"))
+		spot := r.Str("provisioning") == "SPOT" || r.Str("provisioning") == "PREEMPTIBLE"
+		vcpu := int64(r.Float("vcpu"))
 		var notes []string
 
-		compute, ok := x.Machine(region, str(r, "machineType"), vcpu, num(r, "memoryGB"), spot)
+		compute, ok := x.Machine(region, r.Str("machineType"), vcpu, r.Float("memoryGB"), spot)
 		if !ok {
 			notes = append(notes, i18n.T("machine type sin tarifa"))
-			miss("machine type " + str(r, "machineType"))
+			miss("machine type " + r.Str("machineType"))
 		}
-		for _, g := range strings.Split(str(r, "gpus"), "; ") {
+		for _, g := range strings.Split(r.Str("gpus"), "; ") {
 			if g == "" {
 				continue
 			}
@@ -141,7 +125,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 				continue
 			}
 			seen[l] = true
-			c, ok := x.License(l, vcpu, num(r, "memoryGB"))
+			c, ok := x.License(l, vcpu, r.Float("memoryGB"))
 			if !ok {
 				notes = append(notes, i18n.Tf("licencia %s sin tarifa", l))
 				miss(i18n.Tf("licencia %s", l))
@@ -150,7 +134,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 		}
 		disks := vmDisks[k]
 		total := disks
-		if str(r, "status") == "RUNNING" {
+		if r.Str("status") == "RUNNING" {
 			total += compute + lic
 			p := proj(k.project)
 			p.running++
@@ -163,31 +147,31 @@ func Apply(inv *model.Inventory, x *Index) Result {
 	}
 
 	// Snapshots, images, IPs
-	for _, r := range sheet(collect.SSnapshot) {
-		loc := strings.Split(str(r, "locations"), "; ")[0]
-		if c, ok := x.Snapshot(loc, str(r, "type") == "ARCHIVE", num(r, "storageGB")); ok {
+	for _, r := range inv.Rows(schema.SSnapshot) {
+		loc := strings.Split(r.Str("locations"), "; ")[0]
+		if c, ok := x.Snapshot(loc, r.Str("type") == "ARCHIVE", r.Float("storageGB")); ok {
 			r["costMonthly"] = money(c)
-			proj(str(r, "project")).snaps += c
+			proj(r.Str("project")).snaps += c
 		} else if loc != "" {
 			miss(i18n.Tf("snapshots en %s", loc))
 		}
 	}
-	for _, r := range sheet(collect.SImage) {
-		loc := strings.Split(str(r, "locations"), "; ")[0]
-		if c, ok := x.Image(loc, str(r, "kind") == "Machine image", num(r, "storageGB")); ok {
+	for _, r := range inv.Rows(schema.SImage) {
+		loc := strings.Split(r.Str("locations"), "; ")[0]
+		if c, ok := x.Image(loc, r.Str("kind") == "Machine image", r.Float("storageGB")); ok {
 			r["costMonthly"] = money(c)
-			proj(str(r, "project")).images += c
+			proj(r.Str("project")).images += c
 		} else if loc != "" {
 			miss(i18n.Tf("imágenes en %s", loc))
 		}
 	}
-	for _, r := range sheet(collect.SAddress) {
-		if str(r, "status") != "RESERVED" || str(r, "type") != "EXTERNAL" || str(r, "location") == "global" {
+	for _, r := range inv.Rows(schema.SAddress) {
+		if r.Str("status") != "RESERVED" || r.Str("type") != "EXTERNAL" || r.Str("location") == "global" {
 			continue
 		}
-		if c, ok := x.StaticIP(str(r, "location")); ok {
+		if c, ok := x.StaticIP(r.Str("location")); ok {
 			r["costMonthly"] = money(c)
-			proj(str(r, "project")).ips += c
+			proj(r.Str("project")).ips += c
 		}
 	}
 
@@ -197,7 +181,7 @@ func Apply(inv *model.Inventory, x *Index) Result {
 		projects = append(projects, p)
 	}
 	sort.Strings(projects)
-	out := inv.Sheet(collect.SCost)
+	out := inv.Sheet(schema.SCost)
 	var all projectCost
 	for _, p := range projects {
 		c := pc[p]
@@ -213,8 +197,8 @@ func Apply(inv *model.Inventory, x *Index) Result {
 	if len(projects) > 1 {
 		out.Add(costRow("TOTAL", &all, x.Currency))
 	}
-	for _, r := range sheet(collect.SProject) {
-		if c := pc[str(r, "projectId")]; c != nil {
+	for _, r := range inv.Rows(schema.SProject) {
+		if c := pc[r.Str("projectId")]; c != nil {
 			r["costMonthly"] = money(c.compute + c.licenses + c.disks + c.snaps + c.images + c.ips)
 		}
 	}

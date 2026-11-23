@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gcetools/internal/schema"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"gcetools/internal/auth"
-	"gcetools/internal/collect"
 	"gcetools/internal/core"
 	"gcetools/internal/diff"
 	"gcetools/internal/export"
@@ -33,6 +33,7 @@ import (
 // a TypeScript function in frontend/wailsjs/go/main/App.
 type App struct {
 	ctx context.Context
+	ui  uiRuntime
 
 	mu          sync.Mutex
 	keyJSON     []byte             // service account key, memory only
@@ -43,6 +44,7 @@ type App struct {
 	inv         *model.Inventory
 	cancel      context.CancelFunc          // running scan
 	scanGen     uint64                      // bumped by every scan start, Connect and Disconnect
+	scans       sync.WaitGroup              // running scan goroutines (tests wait on it)
 	diff        *model.Inventory            // last comparison
 	snaps       map[string]*model.Inventory // snapshots loaded for comparison, by path
 	snapOrder   []string                    // paths in a.snaps, oldest first
@@ -56,7 +58,7 @@ func NewApp() *App {
 	return &App{projects: map[string]core.Project{}, snaps: map[string]*model.Inventory{}}
 }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) { a.ctx, a.ui = ctx, wailsUI{ctx} }
 
 func (a *App) shutdown(ctx context.Context) {
 	a.mu.Lock()
@@ -86,7 +88,7 @@ func (a *App) DetectADC() ADCStatus {
 // PickServiceAccountKey opens a file dialog, validates the key and keeps it
 // in memory. Only the public identity is returned to the UI.
 func (a *App) PickServiceAccountKey() (*auth.KeyInfo, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := a.ui.OpenFile(runtime.OpenDialogOptions{
 		Title:   i18n.T("Selecciona la clave JSON de la service account"),
 		Filters: []runtime.FileFilter{{DisplayName: i18n.T("Clave JSON (*.json)"), Pattern: "*.json"}},
 	})
@@ -193,7 +195,9 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 	gen := a.scanGen
 	a.mu.Unlock()
 
+	a.scans.Add(1)
 	go func() {
+		defer a.scans.Done()
 		defer func() {
 			a.mu.Lock()
 			if a.scanGen == gen {
@@ -219,7 +223,7 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 				return // superseded: the UI already left the scan page
 			}
 			last = time.Now()
-			runtime.EventsEmit(a.ctx, "scan:progress", p)
+			a.ui.Emit("scan:progress", p)
 		})
 		a.mu.Lock()
 		if a.scanGen != gen {
@@ -229,17 +233,17 @@ func (a *App) StartScan(projectIDs []string, opt core.ScanOptions) error {
 		}
 		if err != nil {
 			a.mu.Unlock()
-			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
+			a.ui.Emit("scan:error", err.Error())
 			return
 		}
 		a.inv = inv
 		a.mu.Unlock()
 		if opt.SaveHistory {
 			if _, err := history.Save(inv, opt.Profile); err != nil {
-				runtime.EventsEmit(a.ctx, "scan:warning", i18n.Tf("No se pudo guardar en el historial: %v", err))
+				a.ui.Emit("scan:warning", i18n.Tf("No se pudo guardar en el historial: %v", err))
 			}
 		}
-		runtime.EventsEmit(a.ctx, "scan:done", inv.Meta)
+		a.ui.Emit("scan:done", inv.Meta)
 	}()
 	return nil
 }
@@ -271,7 +275,7 @@ func (a *App) InventorySummary() *view.Summary {
 	if a.inv == nil {
 		return nil
 	}
-	collect.Relabel(a.inv)
+	schema.Relabel(a.inv)
 	s := view.Summarize(a.inv)
 	return &s
 }
@@ -297,7 +301,7 @@ func (a *App) SheetRows(name string, hideManaged bool) ([]model.Row, error) {
 func (a *App) Export(format string, csvSep string) (string, error) {
 	a.mu.Lock()
 	inv := a.inv
-	collect.Relabel(inv)
+	schema.Relabel(inv)
 	a.mu.Unlock()
 	if inv == nil {
 		return "", errors.New(i18n.T("no hay inventario que exportar"))
@@ -322,7 +326,7 @@ func (a *App) save(inv *model.Inventory, title, name, format, csvSep string) (st
 	if ext == "" {
 		return "", errors.New(i18n.T("formato no soportado"))
 	}
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+	path, err := a.ui.SaveFile(runtime.SaveDialogOptions{
 		Title:           title,
 		DefaultFilename: name + "." + ext,
 		Filters:         []runtime.FileFilter{{DisplayName: ext, Pattern: "*." + ext}},
@@ -384,7 +388,7 @@ const CurrentInventory = "current"
 
 // PickSnapshot opens a file dialog and loads a JSON snapshot.
 func (a *App) PickSnapshot() (*SnapshotInfo, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := a.ui.OpenFile(runtime.OpenDialogOptions{
 		Title:   i18n.T("Elegir snapshot JSON de gceTools"),
 		Filters: []runtime.FileFilter{{DisplayName: i18n.T("Snapshot JSON (*.json)"), Pattern: "*.json"}},
 	})
@@ -529,7 +533,7 @@ func (a *App) OpenHistory(id string) (*view.Summary, error) {
 	if err != nil {
 		return nil, err
 	}
-	collect.Relabel(inv)
+	schema.Relabel(inv)
 	a.mu.Lock()
 	a.inv = inv
 	a.mu.Unlock()
@@ -572,7 +576,7 @@ func (a *App) ExportReport() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+	path, err := a.ui.SaveFile(runtime.SaveDialogOptions{
 		Title:           i18n.T("Guardar informe ejecutivo"),
 		DefaultFilename: i18n.Tf("gcetools-informe-%s.html", inv.Meta.StartedAt.Format("20060102-1504")),
 		Filters:         []runtime.FileFilter{{DisplayName: "HTML", Pattern: "*.html"}},
@@ -607,7 +611,7 @@ func (a *App) OAuthStatus() auth.OAuthStatus { return auth.GetOAuthStatus() }
 // OAuthPickClient loads the organization's "Desktop app" client JSON into
 // the OS keyring.
 func (a *App) OAuthPickClient() (auth.OAuthStatus, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := a.ui.OpenFile(runtime.OpenDialogOptions{
 		Title:   i18n.T("Cliente OAuth de tu organización (client_secret_….json)"),
 		Filters: []runtime.FileFilter{{DisplayName: "JSON (*.json)", Pattern: "*.json"}},
 	})
@@ -640,7 +644,7 @@ func (a *App) OAuthLogin() (auth.OAuthStatus, error) {
 		a.loginCancel = nil
 		a.mu.Unlock()
 	}()
-	if _, err := auth.Login(ctx, func(u string) { runtime.BrowserOpenURL(a.ctx, u) }); err != nil {
+	if _, err := auth.Login(ctx, func(u string) { a.ui.OpenURL(u) }); err != nil {
 		return auth.GetOAuthStatus(), err
 	}
 	return auth.GetOAuthStatus(), nil

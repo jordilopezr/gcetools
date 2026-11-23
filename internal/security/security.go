@@ -11,11 +11,11 @@ package security
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"slices"
 	"strconv"
 	"strings"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -52,29 +52,23 @@ type protoPorts struct {
 // exposed VM count of gProject. Inventories without gSecurity (scanned with
 // older versions) are left untouched.
 func Evaluate(inv *model.Inventory) {
-	sec := inv.Sheet(collect.SSecurity)
+	sec := inv.Sheet(schema.SSecurity)
 	if sec == nil {
 		return
-	}
-	rows := func(name string) []model.Row {
-		if s := inv.Sheet(name); s != nil {
-			return s.Rows
-		}
-		return nil
 	}
 
 	// Firewall rules that let traffic in from anywhere, by host project/VPC.
 	byNet := map[string][]rule{}
 	known := map[string]bool{} // projects whose firewall rules were read
-	for _, r := range rows(collect.SFirewall) {
-		p := str(r, "project")
+	for _, r := range inv.Rows(schema.SFirewall) {
+		p := r.Str("project")
 		known[p] = true
-		if str(r, "direction") != "INGRESS" || boolean(r, "disabled") || !fromAnywhere(str(r, "sourceRanges")) {
+		if r.Str("direction") != "INGRESS" || r.Bool("disabled") || !fromAnywhere(r.Str("sourceRanges")) {
 			continue
 		}
-		fr := rule{project: p, name: str(r, "name"), priority: integer(r, "priority"),
-			deny: strings.EqualFold(str(r, "action"), "DENY"), protos: parseRules(str(r, "rules"))}
-		for _, t := range split(str(r, "targets")) {
+		fr := rule{project: p, name: r.Str("name"), priority: r.Int("priority"),
+			deny: strings.EqualFold(r.Str("action"), "DENY"), protos: parseRules(r.Str("rules"))}
+		for _, t := range split(r.Str("targets")) {
 			if allInstances(t) {
 				fr.allTargets = true
 			} else {
@@ -84,12 +78,12 @@ func Evaluate(inv *model.Inventory) {
 		if len(fr.targets) == 0 {
 			fr.allTargets = true
 		}
-		k := p + "/" + str(r, "network")
+		k := p + "/" + r.Str("network")
 		byNet[k] = append(byNet[k], fr)
 	}
-	for _, r := range rows(collect.SProject) {
-		if strings.HasPrefix(str(r, "scanStatus"), "OK") {
-			known[str(r, "projectId")] = true
+	for _, r := range inv.Rows(schema.SProject) {
+		if schema.ScanOK(r.Str("scanStatus")) {
+			known[r.Str("projectId")] = true
 		}
 	}
 
@@ -98,27 +92,27 @@ func Evaluate(inv *model.Inventory) {
 		sa   string
 	}
 	vms := map[string]vmInfo{}
-	for _, r := range rows(collect.SInfo) {
-		vms[str(r, "project")+"/"+str(r, "zone")+"/"+str(r, "name")] = vmInfo{split(str(r, "tags")), str(r, "serviceAccount")}
+	for _, r := range inv.Rows(schema.SInfo) {
+		vms[r.Str("project")+"/"+r.Str("zone")+"/"+r.Str("name")] = vmInfo{split(r.Str("tags")), r.Str("serviceAccount")}
 	}
 	type nic struct{ network, host string }
 	nics := map[string][]nic{} // VM -> NICs with an external IP
-	for _, r := range rows(collect.SNetwork) {
-		if str(r, "externalIP") == "" {
+	for _, r := range inv.Rows(schema.SNetwork) {
+		if r.Str("externalIP") == "" {
 			continue
 		}
-		k := str(r, "project") + "/" + str(r, "zone") + "/" + str(r, "vm")
-		host := str(r, "networkProject")
+		k := r.Str("project") + "/" + r.Str("zone") + "/" + r.Str("vm")
+		host := r.Str("networkProject")
 		if host == "" {
-			host = str(r, "project")
+			host = r.Str("project")
 		}
-		nics[k] = append(nics[k], nic{str(r, "network"), host})
+		nics[k] = append(nics[k], nic{r.Str("network"), host})
 	}
 
 	exposed := map[string]int64{}
 	for _, r := range sec.Rows {
-		p := str(r, "project")
-		k := p + "/" + str(r, "zone") + "/" + str(r, "vm")
+		p := r.Str("project")
+		k := p + "/" + r.Str("zone") + "/" + r.Str("vm")
 		vm := vms[k]
 		open := map[int]bool{}
 		var by []string
@@ -170,8 +164,8 @@ func Evaluate(inv *model.Inventory) {
 		}
 		r["issues"] = Issues(r)
 	}
-	for _, r := range rows(collect.SProject) {
-		r["exposedVMs"] = exposed[str(r, "projectId")]
+	for _, r := range inv.Rows(schema.SProject) {
+		r["exposedVMs"] = exposed[r.Str("projectId")]
 	}
 }
 
@@ -179,17 +173,17 @@ func Evaluate(inv *model.Inventory) {
 // forwarding are not counted for VMs managed by GKE, Dataproc, Dataflow,
 // Batch or a MIG: those services set them on purpose.
 func Issues(r model.Row) int64 {
-	managed := str(r, "managedBy") != ""
+	managed := r.Str("managedBy") != ""
 	n := int64(0)
 	for _, bad := range []bool{
-		boolean(r, "internetExposed"),
-		boolean(r, "defaultSA"),
-		!managed && !boolean(r, "osLogin"),
-		boolean(r, "projectSSHKeys"),
-		boolean(r, "serialPort"),
-		!managed && boolean(r, "ipForward"),
-		!boolean(r, "secureBoot"),
-		!boolean(r, "vtpm") || !boolean(r, "integrityMonitoring"),
+		r.Bool("internetExposed"),
+		r.Bool("defaultSA"),
+		!managed && !r.Bool("osLogin"),
+		r.Bool("projectSSHKeys"),
+		r.Bool("serialPort"),
+		!managed && r.Bool("ipForward"),
+		!r.Bool("secureBoot"),
+		!r.Bool("vtpm") || !r.Bool("integrityMonitoring"),
 	} {
 		if bad {
 			n++
@@ -307,24 +301,4 @@ func split(s string) []string {
 		}
 	}
 	return out
-}
-
-func str(r model.Row, k string) string {
-	s, _ := r[k].(string)
-	return s
-}
-
-func boolean(r model.Row, k string) bool {
-	b, _ := r[k].(bool)
-	return b
-}
-
-func integer(r model.Row, k string) int64 {
-	switch v := r[k].(type) {
-	case int64:
-		return v
-	case float64:
-		return int64(v)
-	}
-	return 0
 }

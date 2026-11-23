@@ -10,6 +10,7 @@ package diff
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"math"
 	"regexp"
 	"slices"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/health"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
@@ -47,48 +47,48 @@ type spec struct {
 // gInfo, and gQuota, gPerf, gRecommend, gCost, gErrors and gMetaData change
 // on every scan, so they are not compared row by row.
 var specs = []spec{
-	{sheet: collect.SInfo, keys: []string{"project", "zone", "name"}, project: "project", loc: "zone",
+	{sheet: schema.SInfo, keys: []string{"project", "zone", "name"}, project: "project", loc: "zone",
 		summary: []string{"machineType", "status", "os", "externalIP"},
 		ignore:  []string{"lastStart", "lastStop", "cpuPlatform", "costNote", "costReal"}, collector: "instances"},
-	{sheet: collect.SDisks, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
+	{sheet: schema.SDisks, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
 		summary: []string{"type", "sizeGB", "users"}, ignore: []string{"lastAttach", "lastDetach", "costReal"}, collector: "disks"},
-	{sheet: collect.SDisk, keys: []string{"project", "zone", "vm", "deviceName"}, project: "project", loc: "zone",
+	{sheet: schema.SDisk, keys: []string{"project", "zone", "vm", "deviceName"}, project: "project", loc: "zone",
 		summary: []string{"disk", "type", "sizeGB"}, collector: "instances"},
-	{sheet: collect.SNetwork, keys: []string{"project", "zone", "vm", "nic"}, project: "project", loc: "zone",
+	{sheet: schema.SNetwork, keys: []string{"project", "zone", "vm", "nic"}, project: "project", loc: "zone",
 		summary: []string{"network", "internalIP", "externalIP"}, collector: "instances"},
-	{sheet: collect.SSnapshot, keys: []string{"project", "name"}, project: "project",
+	{sheet: schema.SSnapshot, keys: []string{"project", "name"}, project: "project",
 		summary: []string{"sourceDisk", "storageGB"}, ignore: []string{"ageDays"}, collector: "snapshots",
 		// scheduled snapshots rotate every day: comparing them is pure noise
 		skip: func(r model.Row) bool { return truthy(r["autoCreated"]) }},
-	{sheet: collect.SImage, keys: []string{"project", "kind", "name"}, project: "project",
+	{sheet: schema.SImage, keys: []string{"project", "kind", "name"}, project: "project",
 		summary: []string{"family", "status", "deprecated"}, ignore: []string{"ageDays"}, collector: "images"},
-	{sheet: collect.SLicense, keys: []string{"project", "zone", "vm", "disk", "license"}, project: "project", loc: "zone",
+	{sheet: schema.SLicense, keys: []string{"project", "zone", "vm", "disk", "license"}, project: "project", loc: "zone",
 		summary: []string{"category"}, collector: "instances"},
-	{sheet: collect.SMIG, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
+	{sheet: schema.SMIG, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
 		summary: []string{"template", "targetSize", "autoscaling"}, collector: "migs"},
-	{sheet: collect.STemplate, keys: []string{"project", "name"}, project: "project",
+	{sheet: schema.STemplate, keys: []string{"project", "name"}, project: "project",
 		summary: []string{"machineType", "image"}, collector: "templates"},
-	{sheet: collect.SReserv, keys: []string{"project", "zone", "name"}, project: "project", loc: "zone",
+	{sheet: schema.SReserv, keys: []string{"project", "zone", "name"}, project: "project", loc: "zone",
 		summary: []string{"machineType", "count"}, ignore: []string{"inUse", "unusedPct"}, collector: "reservations"},
-	{sheet: collect.SCommit, keys: []string{"project", "region", "name"}, project: "project", loc: "region",
+	{sheet: schema.SCommit, keys: []string{"project", "region", "name"}, project: "project", loc: "region",
 		summary: []string{"plan", "type", "end"}, ignore: []string{"daysLeft"}, collector: "commitments"},
-	{sheet: collect.SSole, keys: []string{"project", "zone", "node"}, project: "project", loc: "zone",
+	{sheet: schema.SSole, keys: []string{"project", "zone", "node"}, project: "project", loc: "zone",
 		summary: []string{"nodeGroup", "nodeType"}, ignore: []string{"instances", "vms"}, collector: "soletenant"},
-	{sheet: collect.SVPC, keys: []string{"project", "name"}, project: "project",
+	{sheet: schema.SVPC, keys: []string{"project", "name"}, project: "project",
 		summary: []string{"mode", "routingMode"}, collector: "networks"},
-	{sheet: collect.SSubnet, keys: []string{"project", "region", "name"}, project: "project", loc: "region",
+	{sheet: schema.SSubnet, keys: []string{"project", "region", "name"}, project: "project", loc: "region",
 		summary: []string{"network", "cidr"}, collector: "subnets"},
-	{sheet: collect.SFirewall, keys: []string{"project", "name"}, project: "project", loc: "network",
+	{sheet: schema.SFirewall, keys: []string{"project", "name"}, project: "project", loc: "network",
 		summary: []string{"direction", "action", "rules", "sourceRanges", "targets"}, collector: "firewalls"},
-	{sheet: collect.SAddress, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
+	{sheet: schema.SAddress, keys: []string{"project", "location", "name"}, project: "project", loc: "location",
 		summary: []string{"address", "type", "status"}, collector: "addresses"},
-	{sheet: collect.STools, keys: []string{"project", "zone", "vm"}, project: "project", loc: "zone",
+	{sheet: schema.STools, keys: []string{"project", "zone", "vm"}, project: "project", loc: "zone",
 		summary: []string{"os", "version"}, ignore: []string{"updated"}, collector: "osconfig"},
-	{sheet: collect.SProject, keys: []string{"projectId"}, project: "projectId",
+	{sheet: schema.SProject, keys: []string{"projectId"}, project: "projectId",
 		summary: []string{"name", "parent", "vms"}, ignore: []string{"scanStatus"}},
-	{sheet: collect.SSecurity, keys: []string{"project", "zone", "vm"}, project: "project", loc: "zone",
+	{sheet: schema.SSecurity, keys: []string{"project", "zone", "vm"}, project: "project", loc: "zone",
 		summary: []string{"internetExposed", "exposedPorts", "issues"}, ignore: []string{"status", "notes"}, collector: "*"},
-	{sheet: collect.SHealth, keys: []string{"rule", "project", "resource", "location"}, project: "project", loc: "location",
+	{sheet: schema.SHealth, keys: []string{"rule", "project", "resource", "location"}, project: "project", loc: "location",
 		summary: []string{"severity", "detail"}, ignore: []string{"detail"}, collector: "*"},
 }
 
@@ -142,16 +142,15 @@ type coverage struct {
 
 func newCoverage(inv *model.Inventory) coverage {
 	cv := coverage{scanned: map[string]bool{}, listed: map[string]bool{}, failures: map[string][]string{}}
-	ps := inv.Sheet(collect.SProject)
+	ps := inv.Sheet(schema.SProject)
 	if ps == nil || len(ps.Rows) == 0 {
 		cv.all = true
 	} else {
 		for _, r := range ps.Rows {
-			id := str(r, "projectId")
+			id := r.Str("projectId")
 			cv.listed[id] = true
-			st := str(r, "scanStatus")
-			// Statuses are written in the language of the scan.
-			if strings.HasPrefix(st, "OK") || strings.HasPrefix(st, "Parcial") || strings.HasPrefix(st, "Partial") {
+			st := r.Str("scanStatus")
+			if schema.ScanComparable(st) {
 				cv.scanned[id] = true
 			}
 		}
@@ -206,7 +205,7 @@ func Compare(a, b Input) *model.Inventory {
 		}
 		// gHealth findings are matched by rule ID: the title is translated and
 		// embeds thresholds. Scans from before ruleId existed use the title.
-		byRuleID := sp.sheet == collect.SHealth && hasColumn(sa, "ruleId") && hasColumn(sb, "ruleId")
+		byRuleID := sp.sheet == schema.SHealth && hasColumn(sa, "ruleId") && hasColumn(sb, "ruleId")
 		index := func(s *model.Sheet) (map[string]model.Row, []string) {
 			m, order, seen := map[string]model.Row{}, []string{}, map[string]int{}
 			for _, r := range s.Rows {
@@ -217,9 +216,9 @@ func Compare(a, b Input) *model.Inventory {
 				for i, k := range sp.keys {
 					parts[i] = norm(colOf[k], r[k])
 					if byRuleID && k == "rule" {
-						parts[i] = str(r, "ruleId")
+						parts[i] = r.Str("ruleId")
 					}
-					if sp.sheet == collect.SHealth && k == "resource" && reSnapCount.MatchString(parts[i]) {
+					if sp.sheet == schema.SHealth && k == "resource" && reSnapCount.MatchString(parts[i]) {
 						parts[i] = "snapshots" // aggregated finding: the count is not identity
 					}
 				}
@@ -441,27 +440,27 @@ func Compare(a, b Input) *model.Inventory {
 
 func addedReason(sheet string, r model.Row) string {
 	switch sheet {
-	case collect.SInfo:
-		if str(r, "externalIP") != "" {
+	case schema.SInfo:
+		if r.Str("externalIP") != "" {
 			return i18n.T("VM nueva con IP pública")
 		}
-	case collect.SFirewall:
-		if truthy(r["openToInternet"]) && !strings.EqualFold(str(r, "action"), "deny") {
+	case schema.SFirewall:
+		if truthy(r["openToInternet"]) && !strings.EqualFold(r.Str("action"), "deny") {
 			return i18n.T("Regla nueva abierta a Internet")
 		}
-	case collect.SSecurity:
+	case schema.SSecurity:
 		if truthy(r["internetExposed"]) {
 			return i18n.T("VM nueva expuesta a Internet")
 		}
-	case collect.SDisks:
+	case schema.SDisks:
 		if truthy(r["orphan"]) {
 			return i18n.T("Disco huérfano nuevo")
 		}
-	case collect.SHealth:
-		if health.Level(str(r, "severity")) == health.High {
+	case schema.SHealth:
+		if health.Level(r.Str("severity")) == health.High {
 			return i18n.T("Hallazgo nuevo de severidad alta")
 		}
-	case collect.SCommit:
+	case schema.SCommit:
 		return i18n.T("Commitment (CUD) nuevo")
 	}
 	return ""
@@ -472,7 +471,7 @@ func addedReason(sheet string, r model.Row) string {
 func changedReason(sheet, field, before, after string, r model.Row) string {
 	yes := i18n.T("Sí")
 	switch sheet {
-	case collect.SInfo:
+	case schema.SInfo:
 		switch field {
 		case "machineType":
 			return i18n.T("Cambio de tamaño de la VM")
@@ -489,18 +488,18 @@ func changedReason(sheet, field, before, after string, r model.Row) string {
 				return i18n.T("Deletion protection desactivada")
 			}
 		}
-	case collect.SNetwork:
+	case schema.SNetwork:
 		if field == "externalIP" && before == "" {
 			return i18n.T("IP pública añadida")
 		}
-	case collect.SFirewall:
+	case schema.SFirewall:
 		if field == "openToInternet" && after == yes {
 			return i18n.T("Regla abierta a Internet")
 		}
 		if truthy(r["openToInternet"]) && slices.Contains([]string{"rules", "sourceRanges", "targets", "disabled", "action"}, field) {
 			return i18n.T("Cambio en una regla abierta a Internet")
 		}
-	case collect.SSecurity:
+	case schema.SSecurity:
 		switch field {
 		case "internetExposed":
 			if after == yes {
@@ -515,15 +514,15 @@ func changedReason(sheet, field, before, after string, r model.Row) string {
 				return i18n.T("Acceso a la VM ampliado")
 			}
 		}
-	case collect.SDisks:
+	case schema.SDisks:
 		if field == "orphan" && after == yes {
 			return i18n.T("Disco que se quedó huérfano")
 		}
-	case collect.SHealth:
+	case schema.SHealth:
 		if field == "severity" && health.Level(after) == health.High {
 			return i18n.T("Hallazgo que pasa a severidad alta")
 		}
-	case collect.SCommit:
+	case schema.SCommit:
 		if field == "status" {
 			return i18n.T("Commitment cambia de estado")
 		}
@@ -532,14 +531,14 @@ func changedReason(sheet, field, before, after string, r model.Row) string {
 }
 
 func totalCost(inv *model.Inventory) float64 {
-	s := inv.Sheet(collect.SCost)
+	s := inv.Sheet(schema.SCost)
 	if s == nil {
 		return 0
 	}
 	t := 0.0
 	for _, r := range s.Rows {
-		if str(r, "project") != "TOTAL" {
-			t += number(r["total"])
+		if r.Str("project") != "TOTAL" {
+			t += model.Num(r["total"])
 		}
 	}
 	return t
@@ -589,24 +588,9 @@ func hasColumn(s *model.Sheet, key string) bool {
 	return slices.ContainsFunc(s.Columns, func(c model.Column) bool { return c.Key == key })
 }
 
-func str(r model.Row, k string) string {
-	s, _ := r[k].(string)
-	return s
-}
-
 func truthy(v any) bool {
 	b, _ := v.(bool)
 	return b
-}
-
-func number(v any) float64 {
-	switch x := v.(type) {
-	case float64:
-		return x
-	case int64:
-		return float64(x)
-	}
-	return 0
 }
 
 // Display returns res with its sheet names in the current language, for the

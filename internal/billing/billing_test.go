@@ -3,13 +3,13 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"gcetools/internal/schema"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
@@ -93,23 +93,23 @@ func TestLoadAndApply(t *testing.T) {
 		t.Errorf("maximumBytesBilled = %v", f.queries[1]["maximumBytesBilled"])
 	}
 
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	inv.Meta.Currency = "EUR"
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "erp", "name": "app-1", "id": "111"})
-	inv.Sheet(collect.SDisks).Add(model.Row{"project": "erp", "name": "app-1-data"})
-	inv.Sheet(collect.SCost).Add(model.Row{"project": "erp", "total": 120.0})
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "erp", "name": "app-1", "id": "111"})
+	inv.Sheet(schema.SDisks).Add(model.Row{"project": "erp", "name": "app-1-data"})
+	inv.Sheet(schema.SCost).Add(model.Row{"project": "erp", "total": 120.0})
 	res := Apply(inv, d)
 
-	if v := inv.Sheet(collect.SInfo).Rows[0]["costReal"]; v != 70.0 {
+	if v := inv.Sheet(schema.SInfo).Rows[0]["costReal"]; v != 70.0 {
 		t.Errorf("VM costReal = %v, want 70 (100.5 - 30.5)", v)
 	}
-	if v := inv.Sheet(collect.SDisks).Rows[0]["costReal"]; v != 20.0 {
+	if v := inv.Sheet(schema.SDisks).Rows[0]["costReal"]; v != 20.0 {
 		t.Errorf("disk costReal = %v", v)
 	}
 	if res.Net != 107 || res.Attributed != 90 {
 		t.Errorf("result = %+v", res)
 	}
-	rows := inv.Sheet(collect.SCostReal).Rows
+	rows := inv.Sheet(schema.SCostReal).Rows
 	if len(rows) != 3 || rows[2]["project"] != "TOTAL" {
 		t.Fatalf("gCostReal = %v", rows)
 	}

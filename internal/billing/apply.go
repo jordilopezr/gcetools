@@ -1,11 +1,11 @@
 package billing
 
 import (
+	"gcetools/internal/schema"
 	"math"
 	"sort"
 	"strings"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
@@ -47,7 +47,7 @@ func Apply(inv *model.Inventory, d *Data) Result {
 		res.Attributed += v
 	}
 	if d.Detailed {
-		if s := inv.Sheet(collect.SInfo); s != nil {
+		if s := inv.Sheet(schema.SInfo); s != nil {
 			for _, r := range s.Rows {
 				p, _ := r["project"].(string)
 				id, _ := r["id"].(string)
@@ -62,7 +62,7 @@ func Apply(inv *model.Inventory, d *Data) Result {
 				}
 			}
 		}
-		if s := inv.Sheet(collect.SDisks); s != nil {
+		if s := inv.Sheet(schema.SDisks); s != nil {
 			for _, r := range s.Rows {
 				p, _ := r["project"].(string)
 				name, _ := r["name"].(string)
@@ -79,7 +79,7 @@ func Apply(inv *model.Inventory, d *Data) Result {
 
 	estimate := map[string]float64{}
 	sameCurrency := inv.Meta.Currency != "" && strings.EqualFold(inv.Meta.Currency, d.Currency)
-	if s := inv.Sheet(collect.SCost); s != nil && sameCurrency {
+	if s := inv.Sheet(schema.SCost); s != nil && sameCurrency {
 		for _, r := range s.Rows {
 			p, _ := r["project"].(string)
 			if t, ok := r["total"].(float64); ok {
@@ -87,7 +87,7 @@ func Apply(inv *model.Inventory, d *Data) Result {
 			}
 		}
 	}
-	out := inv.Sheet(collect.SCostReal)
+	out := inv.Sheet(schema.SCostReal)
 	if out == nil {
 		return res
 	}

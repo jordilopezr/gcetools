@@ -1,30 +1,30 @@
 package report
 
 import (
+	"gcetools/internal/schema"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/diff"
 	"gcetools/internal/model"
 )
 
 func sample() *model.Inventory {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	inv.Meta = model.Meta{Tool: "gceTools", Version: "0.6.0", Identity: "ana@example.com", Projects: 3, ProjectsOK: 2,
 		Currency: "USD", StartedAt: time.Date(2026, 11, 18, 9, 30, 0, 0, time.Local)}
 	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
-	add(collect.SInfo, model.Row{"project": "erp", "name": "app", "status": "RUNNING", "vcpu": int64(8), "memoryGB": 32.0})
-	add(collect.SInfo, model.Row{"project": "erp", "name": "old", "status": "TERMINATED", "vcpu": int64(2), "memoryGB": 8.0})
-	add(collect.SDisks, model.Row{"project": "erp", "name": "d1", "sizeGB": 2048.0, "orphan": true})
-	add(collect.SCost, model.Row{"project": "erp", "total": 1234.5, "vmsRunning": int64(1)})
-	add(collect.SCost, model.Row{"project": "TOTAL", "total": 1234.5})
-	add(collect.SHealth, model.Row{"severity": "Alta", "rule": "Disco huérfano", "project": "erp", "resource": "d1", "detail": "<script>alert(1)</script>"})
-	add(collect.SHealth, model.Row{"severity": "Baja", "rule": "VM sin labels", "project": "erp", "resource": "app"})
-	add(collect.SProject, model.Row{"projectId": "erp", "scanStatus": "OK"})
-	add(collect.SProject, model.Row{"projectId": "qa", "scanStatus": "Sin permisos"})
-	add(collect.SRecomm, model.Row{"savingsMonthly": 99.9, "currency": "USD"})
+	add(schema.SInfo, model.Row{"project": "erp", "name": "app", "status": "RUNNING", "vcpu": int64(8), "memoryGB": 32.0})
+	add(schema.SInfo, model.Row{"project": "erp", "name": "old", "status": "TERMINATED", "vcpu": int64(2), "memoryGB": 8.0})
+	add(schema.SDisks, model.Row{"project": "erp", "name": "d1", "sizeGB": 2048.0, "orphan": true})
+	add(schema.SCost, model.Row{"project": "erp", "total": 1234.5, "vmsRunning": int64(1)})
+	add(schema.SCost, model.Row{"project": "TOTAL", "total": 1234.5})
+	add(schema.SHealth, model.Row{"severity": "Alta", "rule": "Disco huérfano", "project": "erp", "resource": "d1", "detail": "<script>alert(1)</script>"})
+	add(schema.SHealth, model.Row{"severity": "Baja", "rule": "VM sin labels", "project": "erp", "resource": "app"})
+	add(schema.SProject, model.Row{"projectId": "erp", "scanStatus": "OK"})
+	add(schema.SProject, model.Row{"projectId": "qa", "scanStatus": "Sin permisos"})
+	add(schema.SRecomm, model.Row{"savingsMonthly": 99.9, "currency": "USD"})
 	return inv
 }
 
@@ -56,8 +56,8 @@ func TestRender(t *testing.T) {
 
 func TestRenderWithDiff(t *testing.T) {
 	a, b := sample(), sample()
-	b.Sheet(collect.SInfo).Rows[0]["machineType"] = "n2-standard-16"
-	a.Sheet(collect.SInfo).Rows[0]["machineType"] = "n2-standard-8"
+	b.Sheet(schema.SInfo).Rows[0]["machineType"] = "n2-standard-16"
+	a.Sheet(schema.SInfo).Rows[0]["machineType"] = "n2-standard-8"
 	d := diff.Compare(diff.Input{Inv: a, Label: "a"}, diff.Input{Inv: b, Label: "b"})
 	out, err := Render(b, Options{Diff: d, DiffSince: a.Meta.StartedAt})
 	if err != nil {
@@ -86,7 +86,7 @@ func TestGroup(t *testing.T) {
 // With a single project gCost has no TOTAL row: the report sums projects.
 func TestSingleProjectCost(t *testing.T) {
 	inv := sample()
-	s := inv.Sheet(collect.SCost)
+	s := inv.Sheet(schema.SCost)
 	s.Rows = s.Rows[:1] // drop TOTAL
 	out, err := Render(inv, Options{})
 	if err != nil {

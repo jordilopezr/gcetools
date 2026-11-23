@@ -1,12 +1,12 @@
 package history
 
 import (
+	"gcetools/internal/schema"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
@@ -20,18 +20,18 @@ func store(t *testing.T) string {
 }
 
 func inventory(at time.Time, vms int) *model.Inventory {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	inv.Meta = model.Meta{Tool: "gceTools", Version: "0.6.0", StartedAt: at, Projects: 2, ProjectsOK: 2, Currency: "USD"}
 	for i := 0; i < vms; i++ {
-		inv.Sheet(collect.SInfo).Add(model.Row{"name": "vm", "status": "RUNNING", "vcpu": int64(2), "memoryGB": 8.0})
+		inv.Sheet(schema.SInfo).Add(model.Row{"name": "vm", "status": "RUNNING", "vcpu": int64(2), "memoryGB": 8.0})
 	}
-	inv.Sheet(collect.SDisks).Add(model.Row{"sizeGB": 100.0, "orphan": true})
+	inv.Sheet(schema.SDisks).Add(model.Row{"sizeGB": 100.0, "orphan": true})
 	// CostList sums the projects; the TOTAL row (only with several projects) is skipped.
-	inv.Sheet(collect.SCost).Add(model.Row{"project": "p1", "total": 100.456})
-	inv.Sheet(collect.SCost).Add(model.Row{"project": "p2", "total": 23.0})
-	inv.Sheet(collect.SCost).Add(model.Row{"project": "TOTAL", "total": 123.456})
-	inv.Sheet(collect.SHealth).Add(model.Row{"severity": "Alta"})
-	inv.Sheet(collect.SHealth).Add(model.Row{"severity": "Baja"})
+	inv.Sheet(schema.SCost).Add(model.Row{"project": "p1", "total": 100.456})
+	inv.Sheet(schema.SCost).Add(model.Row{"project": "p2", "total": 23.0})
+	inv.Sheet(schema.SCost).Add(model.Row{"project": "TOTAL", "total": 123.456})
+	inv.Sheet(schema.SHealth).Add(model.Row{"severity": "Alta"})
+	inv.Sheet(schema.SHealth).Add(model.Row{"severity": "Baja"})
 	return inv
 }
 
@@ -60,7 +60,7 @@ func TestSaveListLoadDelete(t *testing.T) {
 		t.Fatalf("list = %+v %v", all, err)
 	}
 	inv, err := Load(s1.ID)
-	if err != nil || len(inv.Sheet(collect.SInfo).Rows) != 3 {
+	if err != nil || len(inv.Sheet(schema.SInfo).Rows) != 3 {
 		t.Fatalf("load: %v", err)
 	}
 	if p, ok := Previous(s3.StartedAt); !ok || !p.StartedAt.Equal(t0) {

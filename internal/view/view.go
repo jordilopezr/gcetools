@@ -5,9 +5,9 @@
 package view
 
 import (
-	"gcetools/internal/collect"
 	"gcetools/internal/history"
 	"gcetools/internal/model"
+	"gcetools/internal/schema"
 )
 
 // SheetInfo describes a sheet without its rows.
@@ -61,18 +61,18 @@ var serviceManaged = map[string]bool{"GKE": true, "Dataproc": true, "Dataflow": 
 
 // vmColumn is the column holding the VM name in each per-VM sheet.
 var vmColumn = map[string]string{
-	collect.SInfo: "name", collect.SCPU: "name", collect.SMemory: "name", collect.SDisk: "vm",
-	collect.SNetwork: "vm", collect.SPerf: "vm", collect.STools: "vm", collect.SLicense: "vm",
-	collect.SHealth: "resource", collect.SSecurity: "vm",
+	schema.SInfo: "name", schema.SCPU: "name", schema.SMemory: "name", schema.SDisk: "vm",
+	schema.SNetwork: "vm", schema.SPerf: "vm", schema.STools: "vm", schema.SLicense: "vm",
+	schema.SHealth: "resource", schema.SSecurity: "vm",
 }
 
 // order is the tab order of the inventory page; other sheets go last.
 var order = []string{
-	collect.SInfo, collect.SHealth, collect.SSecurity, collect.SCost, collect.SCostReal, collect.SRecomm,
-	collect.SPerf, collect.STools, collect.SDisks, collect.SDisk, collect.SNetwork, collect.SSnapshot,
-	collect.SImage, collect.SCPU, collect.SMemory, collect.SLicense, collect.SMIG, collect.STemplate,
-	collect.SReserv, collect.SCommit, collect.SSole, collect.SQuota, collect.SVPC, collect.SSubnet,
-	collect.SFirewall, collect.SAddress, collect.SProject, collect.SErrors, collect.SMeta,
+	schema.SInfo, schema.SHealth, schema.SSecurity, schema.SCost, schema.SCostReal, schema.SRecomm,
+	schema.SPerf, schema.STools, schema.SDisks, schema.SDisk, schema.SNetwork, schema.SSnapshot,
+	schema.SImage, schema.SCPU, schema.SMemory, schema.SLicense, schema.SMIG, schema.STemplate,
+	schema.SReserv, schema.SCommit, schema.SSole, schema.SQuota, schema.SVPC, schema.SSubnet,
+	schema.SFirewall, schema.SAddress, schema.SProject, schema.SErrors, schema.SMeta,
 }
 
 // Summarize builds the summary of inv.
@@ -91,7 +91,7 @@ func Summarize(inv *model.Inventory) Summary {
 	h := history.Summarize(inv)
 	st := Stats{VMs: h.VMs, Running: h.Running, VCPU: h.VCPU, MemoryGB: h.MemoryGB, DiskGB: h.DiskGB,
 		Orphans: h.Orphans, High: h.High, CostList: h.CostList}
-	if s := inv.Sheet(collect.SSecurity); s != nil {
+	if s := inv.Sheet(schema.SSecurity); s != nil {
 		st.HasSecurity = true
 		for _, r := range s.Rows {
 			if r["internetExposed"] == true {
@@ -99,12 +99,12 @@ func Summarize(inv *model.Inventory) Summary {
 			}
 		}
 	}
-	if s := inv.Sheet(collect.SCostReal); s != nil && len(s.Rows) > 0 {
+	if s := inv.Sheet(schema.SCostReal); s != nil && len(s.Rows) > 0 {
 		st.HasCostReal, st.CostReal = true, h.CostReal
 		st.CostRealMonth, _ = s.Rows[0]["month"].(string)
 		st.CostRealCurrency, _ = s.Rows[0]["currency"].(string)
 	}
-	if s := inv.Sheet(collect.SRecomm); s != nil && len(s.Rows) > 0 {
+	if s := inv.Sheet(schema.SRecomm); s != nil && len(s.Rows) > 0 {
 		st.HasSavings, st.Savings, st.SavingsCurrency = true, h.Savings, "USD"
 		for _, r := range s.Rows {
 			if c, _ := r["currency"].(string); c != "" {
@@ -137,7 +137,7 @@ func Rows(inv *model.Inventory, name string, hideManaged bool) []model.Row {
 
 func managedVMs(inv *model.Inventory) map[string]bool {
 	out := map[string]bool{}
-	if s := inv.Sheet(collect.SInfo); s != nil {
+	if s := inv.Sheet(schema.SInfo); s != nil {
 		for _, r := range s.Rows {
 			if by, _ := r["managedBy"].(string); serviceManaged[by] {
 				out[key(r, "name")] = true

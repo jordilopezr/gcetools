@@ -1,10 +1,10 @@
 package health
 
 import (
+	"gcetools/internal/schema"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -23,8 +23,8 @@ func TestFirewallOpenSeverity(t *testing.T) {
 		"tcp:443":       Medium,
 	}
 	for rules, want := range cases {
-		inv := collect.NewInventory()
-		inv.Sheet(collect.SFirewall).Add(model.Row{"project": "p", "name": "fw", "network": "n", "rules": rules,
+		inv := schema.NewInventory()
+		inv.Sheet(schema.SFirewall).Add(model.Row{"project": "p", "name": "fw", "network": "n", "rules": rules,
 			"openToInternet": true, "sourceRanges": "0.0.0.0/0"})
 		Evaluate(inv, DefaultOptions(), time.Now())
 		var r model.Row

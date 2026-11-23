@@ -5,6 +5,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"gcetools/internal/schema"
 	"math"
 	"net/http"
 	"sort"
@@ -32,7 +33,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.9.2"
+var Version = "0.9.3"
 
 type Engine struct {
 	Session *auth.Session
@@ -158,7 +159,7 @@ func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, 
 		return nil, err
 	}
 
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	inv.Meta = model.Meta{
 		Tool: "gceTools", Version: Version, Identity: e.Session.Identity,
 		AuthMethod: string(e.Session.Method), StartedAt: time.Now(), Projects: len(projects),
@@ -222,16 +223,14 @@ feed:
 }
 
 func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Project, stats map[string]collect.Stats, opt ScanOptions) {
-	ps := inv.Sheet(collect.SProject)
+	ps := inv.Sheet(schema.SProject)
 	for _, p := range projects {
 		st, scanned := stats[p.ID]
 		status := st.Status
 		if !scanned {
 			status = i18n.T("No escaneado")
 		}
-		// Also "OK (sin osconfig)" / "OK (without osconfig)": optional modules do
-		// not make a project fail. Statuses start with "OK" in every language.
-		if strings.HasPrefix(status, "OK") {
+		if schema.ScanOK(status) { // optional modules do not make a project fail
 			inv.Meta.ProjectsOK++
 		}
 		lbl := make([]string, 0, len(p.Labels))
@@ -282,14 +281,14 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 	security.Evaluate(inv)
 	hres := health.Evaluate(inv, opt.Health, inv.Meta.FinishedAt)
 
-	es := inv.Sheet(collect.SErrors)
+	es := inv.Sheet(schema.SErrors)
 	for _, er := range inv.Errors {
 		es.Add(model.Row{"project": er.Project, "collector": er.Collector, "kind": string(er.Kind), "message": er.Message})
 	}
 
 	inv.Meta.Errors = len(inv.Errors)
 	m := inv.Meta
-	meta := inv.Sheet(collect.SMeta)
+	meta := inv.Sheet(schema.SMeta)
 	for _, kv := range [][2]string{
 		{i18n.T("Herramienta"), m.Tool + " " + m.Version},
 		{i18n.T("Identidad"), m.Identity},
@@ -315,10 +314,17 @@ func (e *Engine) finish(ctx context.Context, inv *model.Inventory, projects []Pr
 	}
 }
 
+// computeEndpoint overrides the Compute API endpoint in tests.
+var computeEndpoint string
+
 func (e *Engine) services(ctx context.Context, m Modules) (collect.Services, error) {
 	var s collect.Services
 	var err error
-	if s.Compute, err = compute.NewService(ctx, option.WithHTTPClient(e.Client)); err != nil {
+	copts := []option.ClientOption{option.WithHTTPClient(e.Client)}
+	if computeEndpoint != "" {
+		copts = append(copts, option.WithEndpoint(computeEndpoint))
+	}
+	if s.Compute, err = compute.NewService(ctx, copts...); err != nil {
 		return s, err
 	}
 	s.MetricsDays = m.MetricsDays

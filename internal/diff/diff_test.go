@@ -1,12 +1,12 @@
 package diff
 
 import (
+	"gcetools/internal/schema"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/export"
 	"gcetools/internal/model"
 )
@@ -14,21 +14,21 @@ import (
 var created = time.Date(2026, 1, 10, 9, 30, 0, 0, time.UTC)
 
 func baseInventory() *model.Inventory {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	inv.Meta = model.Meta{Tool: "gceTools", Version: "0.3.0", Currency: "USD", StartedAt: created}
 	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
 	for _, p := range []string{"p1", "p2"} {
-		add(collect.SProject, model.Row{"projectId": p, "scanStatus": "OK", "vms": int64(2)})
+		add(schema.SProject, model.Row{"projectId": p, "scanStatus": "OK", "vms": int64(2)})
 	}
-	add(collect.SInfo, model.Row{"project": "p1", "zone": "z", "name": "app", "machineType": "e2-standard-2",
+	add(schema.SInfo, model.Row{"project": "p1", "zone": "z", "name": "app", "machineType": "e2-standard-2",
 		"vcpu": int64(2), "memoryGB": 8.0, "status": "RUNNING", "created": created, "lastStart": created,
 		"secureBoot": true, "costMonthly": 50.0})
-	add(collect.SInfo, model.Row{"project": "p1", "zone": "z", "name": "old", "machineType": "n1-standard-1", "status": "TERMINATED"})
-	add(collect.SInfo, model.Row{"project": "p2", "zone": "z", "name": "db", "machineType": "n2-standard-4", "status": "RUNNING"})
-	add(collect.SFirewall, model.Row{"project": "p1", "name": "allow-internal", "network": "default", "rules": "tcp:80",
+	add(schema.SInfo, model.Row{"project": "p1", "zone": "z", "name": "old", "machineType": "n1-standard-1", "status": "TERMINATED"})
+	add(schema.SInfo, model.Row{"project": "p2", "zone": "z", "name": "db", "machineType": "n2-standard-4", "status": "RUNNING"})
+	add(schema.SFirewall, model.Row{"project": "p1", "name": "allow-internal", "network": "default", "rules": "tcp:80",
 		"sourceRanges": "10.0.0.0/8", "openToInternet": false})
-	add(collect.SSnapshot, model.Row{"project": "p1", "name": "sched-1", "autoCreated": true, "ageDays": int64(1)})
-	add(collect.SCost, model.Row{"project": "p1", "total": 50.0})
+	add(schema.SSnapshot, model.Row{"project": "p1", "name": "sched-1", "autoCreated": true, "ageDays": int64(1)})
+	add(schema.SCost, model.Row{"project": "p1", "total": 50.0})
 	return inv
 }
 
@@ -61,18 +61,18 @@ func TestIdenticalSnapshotsHaveNoChanges(t *testing.T) {
 func TestCompare(t *testing.T) {
 	a := roundTrip(t, baseInventory())
 	b := baseInventory()
-	info := b.Sheet(collect.SInfo)
+	info := b.Sheet(schema.SInfo)
 	info.Rows[0]["machineType"] = "e2-standard-4" // resize: relevant
 	info.Rows[0]["lastStart"] = time.Now()        // volatile: ignored
 	info.Rows[0]["costMonthly"] = 100.0           // same currency: compared
 	info.Rows = without(info.Rows, "old")         // deleted
 	info.Rows = append(info.Rows, model.Row{"project": "p1", "zone": "z", "name": "new", "externalIP": "34.1.2.3"})
-	b.Sheet(collect.SFirewall).Rows[0]["openToInternet"] = true
-	b.Sheet(collect.SFirewall).Rows[0]["sourceRanges"] = "0.0.0.0/0"
-	b.Sheet(collect.SSnapshot).Rows[0]["name"] = "sched-2" // scheduled rotation: ignored
+	b.Sheet(schema.SFirewall).Rows[0]["openToInternet"] = true
+	b.Sheet(schema.SFirewall).Rows[0]["sourceRanges"] = "0.0.0.0/0"
+	b.Sheet(schema.SSnapshot).Rows[0]["name"] = "sched-2" // scheduled rotation: ignored
 	b.Errors = append(b.Errors, model.ScanError{Project: "p2", Collector: "instances", Kind: model.ErrPermission})
 	info.Rows = without(info.Rows, "db") // p2 instances unreadable in b: must not be a deletion
-	b.Sheet(collect.SCost).Rows[0]["total"] = 100.0
+	b.Sheet(schema.SCost).Rows[0]["total"] = 100.0
 
 	res := Compare(Input{a, "a.json"}, Input{b, "b.json"})
 
@@ -122,7 +122,7 @@ func TestCompare(t *testing.T) {
 func TestCostsIgnoredWithDifferentCurrency(t *testing.T) {
 	a, b := baseInventory(), baseInventory()
 	b.Meta.Currency = "EUR"
-	b.Sheet(collect.SInfo).Rows[0]["costMonthly"] = 46.0
+	b.Sheet(schema.SInfo).Rows[0]["costMonthly"] = 46.0
 	res := Compare(Input{a, "a"}, Input{b, "b"})
 	if n := len(rowsOf(res, SChanged)); n != 0 {
 		t.Errorf("money columns must be skipped across currencies: %v", rowsOf(res, SChanged))
@@ -143,14 +143,14 @@ func without(rows []model.Row, name string) []model.Row {
 // language) in the title does not turn every finding into removed + added.
 func TestHealthMatchedByRuleID(t *testing.T) {
 	before, after := baseInventory(), baseInventory()
-	before.Sheet(collect.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM parada más de 30 días",
+	before.Sheet(schema.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM parada más de 30 días",
 		"project": "p1", "resource": "old", "location": "z"})
-	after.Sheet(collect.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM stopped for more than 60 days",
+	after.Sheet(schema.SHealth).Add(model.Row{"severity": "Media", "ruleId": "stopped-vm", "rule": "VM stopped for more than 60 days",
 		"project": "p1", "resource": "old", "location": "z"})
 	res := Compare(Input{Inv: roundTrip(t, before), Label: "a"}, Input{Inv: roundTrip(t, after), Label: "b"})
 	for _, sheet := range []string{SAdded, SRemoved} {
 		for _, r := range rowsOf(res, sheet) {
-			if r["sheet"] == collect.SHealth {
+			if r["sheet"] == schema.SHealth {
 				t.Errorf("%s: unexpected gHealth row %v", sheet, r)
 			}
 		}

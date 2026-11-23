@@ -43,15 +43,14 @@ function scan(code) {
   let i = 0
   const readTemplate = (start, from) => {
     // reads a template chunk from `from` until ` or ${
-    let j = from, parts = ''
+    let j = from
     while (j < code.length && code[j] !== '`' && !(code[j] === '$' && code[j + 1] === '{')) {
       if (code[j] === '\\') j++
       j++
     }
-    parts = code.slice(from, j)
+    const parts = code.slice(from, j)
     return { end: j, parts, start }
   }
-  let tpl = null // current template literal being collected
   while (i < code.length) {
     const c = code[i], d = code[i + 1]
     if (c === '/' && d === '/') { const e = code.indexOf('\n', i); const end = e < 0 ? code.length : e; blank(i, end); i = end; continue }
@@ -64,17 +63,18 @@ function scan(code) {
     }
     if (c === '`' || (c === '}' && stack.length && stack[stack.length - 1].depth === 0)) {
       let start = i
+      let tpl // current template literal being collected
       if (c === '}') { const top = stack.pop(); tpl = top.tpl; start = tpl.start } else { tpl = { start: i, raw: '', dynamic: false } }
       const r = readTemplate(start, i + 1)
       tpl.raw += r.parts
       blank(i + 1, r.end)
       if (code[r.end] === '`') {
         strings.push({ start: tpl.start, end: r.end + 1, quote: '`', raw: tpl.raw, dynamic: tpl.dynamic })
-        tpl = null; i = r.end + 1; continue
+        i = r.end + 1; continue
       }
       // ${ … }: back to code until the matching }
       tpl.dynamic = true; tpl.raw += '${}'
-      stack.push({ depth: 0, tpl }); tpl = null
+      stack.push({ depth: 0, tpl })
       i = r.end + 2; continue
     }
     if (stack.length) {

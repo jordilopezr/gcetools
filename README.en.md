@@ -268,7 +268,9 @@ wails dev -tags webkit2_41                 # app with hot reload
 wails build -tags webkit2_41               # binary in build/bin/ (Linux)
 wails build -platform windows/amd64        # on Windows
 wails build -platform darwin/universal     # on macOS
-go test ./...                              # backend tests
+go test -tags webkit2_41 ./...             # backend tests
+golangci-lint run ./...                    # lint (settings in .golangci.yml)
+npm --prefix frontend run lint             # frontend ESLint
 ```
 
 To work on the UI only, without Wails or credentials:
@@ -331,7 +333,9 @@ For reference, a scan requests about 2 Monitoring series per VM (CPU and RAM): w
 main.go, app.go           Wails startup + methods exposed to the frontend
 internal/auth             ADC / JSON key / impersonation / Sign in with Google
 internal/core             Project discovery, concurrent scan, rate-limited HTTP with retries
-internal/collect          One collector per resource type (aggregatedList or Cloud Asset Inventory) + tab schema
+internal/collect          One collector per resource type (aggregatedList or Cloud Asset Inventory)
+internal/schema           Tabs: names, titles, columns and order
+internal/model            Inventory, sheets and rows, with typed accessors (Row.Str, Row.Float…)
 internal/health           gHealth rules
 internal/security         gSecurity Internet exposure
 internal/diff             Comparison of two inventories (additions, removals and changes)
@@ -342,13 +346,15 @@ internal/profile          Saved scan profiles
 internal/billing          Actual cost from the Cloud Billing export to BigQuery
 internal/history          Local scan history
 internal/report           Executive report in HTML
+internal/view             Inventory summary and single tabs for the UI
+internal/osopen           Open URLs and files with the system application
 internal/i18n             Translations (the Spanish text is the key; English in en_*.go)
 frontend/                 React + TS, Material 3 tokens, AG Grid
 build/                    Packaging: Linux (nfpm, AppImage), Windows (NSIS) and the macOS DMG background
 assets/brand/             Visual identity: master SVGs, per-platform icons, favicon and web assets
 ```
 
-To add a tab: define the sheet in `internal/collect/schema.go`, write its collector and register it in `Project()` (collect.go). The UI and the exporters show it with no further changes.
+To add a tab: define the sheet in `internal/schema/schema.go`, write its collector and register it in `Project()` (collect.go). The UI and the exporters show it with no further changes.
 
 To translate: wrap the text with `i18n.T("…")` or `i18n.Tf("…", args)` in Go and with `t('…')` in the frontend, and add the English version to `internal/i18n/en_*.go` or `frontend/src/lib/i18n.en.ts`. `go test ./internal/i18n` and `npm --prefix frontend run check:i18n` fail when one is missing.
 

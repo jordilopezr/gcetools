@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"gcetools/internal/schema"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ var neutralTitles = map[string]bool{
 }
 
 func TestSchemaTranslated(t *testing.T) {
-	for _, s := range NewInventory().Sheets {
+	for _, s := range schema.NewInventory().Sheets {
 		for _, txt := range []string{s.Title, s.Description} {
 			if !i18n.Has(txt) && !neutralTitles[txt] {
 				t.Errorf("%s: no English for %q", s.Name, txt)
@@ -48,19 +49,19 @@ func TestSchemaTranslated(t *testing.T) {
 }
 
 func TestEnglishInventory(t *testing.T) {
-	es := NewInventory()
+	es := schema.NewInventory()
 	i18n.SetLang("en")
 	defer i18n.SetLang("es")
 
-	inv := NewInventory()
-	info := inv.Sheet(SInfo)
-	if info.Title != "Instances" || info.Columns[0].Title != "Project" || inv.Sheet(SDisks).Title != "All disks" ||
-		inv.Sheet(SHealth).Title != "Health" || !strings.Contains(info.Description, "equivalent to vInfo") {
+	inv := schema.NewInventory()
+	info := inv.Sheet(schema.SInfo)
+	if info.Title != "Instances" || info.Columns[0].Title != "Project" || inv.Sheet(schema.SDisks).Title != "All disks" ||
+		inv.Sheet(schema.SHealth).Title != "Health" || !strings.Contains(info.Description, "equivalent to vInfo") {
 		t.Errorf("English schema: %q %q %q", info.Title, info.Columns[0].Title, info.Description)
 	}
-	Relabel(es)
-	if es.Sheet(SInfo).Title != "Instances" || es.Sheet(SInfo).Columns[0].Title != "Project" {
-		t.Error("Relabel must bring a Spanish inventory to English")
+	schema.Relabel(es)
+	if es.Sheet(schema.SInfo).Title != "Instances" || es.Sheet(schema.SInfo).Columns[0].Title != "Project" {
+		t.Error("schema.Relabel must bring a Spanish inventory to English")
 	}
 	// core counts successful projects with strings.HasPrefix(status, "OK").
 	if s := i18n.Tf("OK (sin %s)", "osconfig"); !strings.HasPrefix(s, "OK") || s == "OK (sin osconfig)" {

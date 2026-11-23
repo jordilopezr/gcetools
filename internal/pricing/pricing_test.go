@@ -1,11 +1,11 @@
 package pricing
 
 import (
+	"gcetools/internal/schema"
 	"math"
 	"os"
 	"testing"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
@@ -148,28 +148,28 @@ func TestLicenses(t *testing.T) {
 }
 
 func TestApply(t *testing.T) {
-	inv := collect.NewInventory()
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": R + "-a", "status": "RUNNING",
+	inv := schema.NewInventory()
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": R + "-a", "status": "RUNNING",
 		"machineType": "n2-standard-16", "vcpu": int64(16), "memoryGB": 64.0, "provisioning": "STANDARD"})
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "off", "zone": R + "-a", "status": "TERMINATED",
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "off", "zone": R + "-a", "status": "TERMINATED",
 		"machineType": "n2-standard-16", "vcpu": int64(16), "memoryGB": 64.0, "provisioning": "STANDARD"})
-	inv.Sheet(collect.SDisks).Add(model.Row{"project": "p", "name": "vm", "location": R + "-a", "type": "pd-balanced", "sizeGB": 100.0})
-	inv.Sheet(collect.SDisks).Add(model.Row{"project": "p", "name": "off", "location": R + "-a", "type": "pd-balanced", "sizeGB": 50.0})
-	inv.Sheet(collect.SDisk).Add(model.Row{"project": "p", "vm": "vm", "zone": R + "-a", "disk": "vm", "type": "pd-balanced", "sizeGB": 100.0})
-	inv.Sheet(collect.SDisk).Add(model.Row{"project": "p", "vm": "off", "zone": R + "-a", "disk": "off", "type": "pd-balanced", "sizeGB": 50.0})
-	inv.Sheet(collect.SLicense).Add(model.Row{"project": "p", "vm": "vm", "zone": R + "-a", "license": "windows-server-2022-dc"})
+	inv.Sheet(schema.SDisks).Add(model.Row{"project": "p", "name": "vm", "location": R + "-a", "type": "pd-balanced", "sizeGB": 100.0})
+	inv.Sheet(schema.SDisks).Add(model.Row{"project": "p", "name": "off", "location": R + "-a", "type": "pd-balanced", "sizeGB": 50.0})
+	inv.Sheet(schema.SDisk).Add(model.Row{"project": "p", "vm": "vm", "zone": R + "-a", "disk": "vm", "type": "pd-balanced", "sizeGB": 100.0})
+	inv.Sheet(schema.SDisk).Add(model.Row{"project": "p", "vm": "off", "zone": R + "-a", "disk": "off", "type": "pd-balanced", "sizeGB": 50.0})
+	inv.Sheet(schema.SLicense).Add(model.Row{"project": "p", "vm": "vm", "zone": R + "-a", "license": "windows-server-2022-dc"})
 
 	res := Apply(inv, fakeIndex())
 	if len(res.Unpriced) != 0 {
 		t.Errorf("unpriced: %v", res.Unpriced)
 	}
-	vm, off := inv.Sheet(collect.SInfo).Rows[0], inv.Sheet(collect.SInfo).Rows[1]
+	vm, off := inv.Sheet(schema.SInfo).Rows[0], inv.Sheet(schema.SInfo).Rows[1]
 	compute := (16*0.045204 + 64*0.006059) * 730
 	lic := 16 * 0.046 * 730
 	near(t, "running total", vm["costMonthly"].(float64), compute+lic+14.3)
 	near(t, "stopped total (disks only)", off["costMonthly"].(float64), 7.15)
 	near(t, "stopped compute shown", off["costCompute"].(float64), compute)
-	sum := inv.Sheet(collect.SCost).Rows
+	sum := inv.Sheet(schema.SCost).Rows
 	if len(sum) != 1 {
 		t.Fatalf("gCost rows = %v", sum)
 	}

@@ -1,0 +1,35 @@
+version: "2"
+
+run:
+  build-tags: [webkit2_41]
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - bodyclose
+    - nilerr
+    - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        # best-effort cleanup on error paths and response bodies being discarded
+        - (*os.File).Close
+        - (io.ReadCloser).Close
+        - os.Remove
+        - io.Copy
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [errcheck]
+
+formatters:
+  enable:
+    - gofmt

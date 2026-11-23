@@ -1,17 +1,17 @@
 package health
 
 import (
+	"gcetools/internal/schema"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
-func findings(inv *model.Inventory) []model.Row { return inv.Sheet(collect.SHealth).Rows }
+func findings(inv *model.Inventory) []model.Row { return inv.Sheet(schema.SHealth).Rows }
 
 func has(rows []model.Row, rule, resource string) (model.Row, bool) {
 	for _, r := range rows {
@@ -23,15 +23,15 @@ func has(rows []model.Row, rule, resource string) (model.Row, bool) {
 }
 
 func TestDisksWithoutSchedule(t *testing.T) {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
-	add(collect.SInfo, model.Row{"project": "p", "name": "db", "zone": "z", "status": "RUNNING", "secureBoot": true, "labels": "a=b", "deletionProtection": true})
-	add(collect.SInfo, model.Row{"project": "p", "name": "web-1", "zone": "z", "status": "RUNNING", "mig": "web"})
-	add(collect.SDisks, model.Row{"project": "p", "name": "db-boot", "location": "z", "users": "db", "snapshotSchedule": "daily"})
-	add(collect.SDisks, model.Row{"project": "p", "name": "db-data", "location": "z", "users": "db"})
-	add(collect.SDisks, model.Row{"project": "p", "name": "db-logs", "location": "z", "users": "db"})
-	add(collect.SDisks, model.Row{"project": "p", "name": "web-1", "location": "z", "users": "web-1"})
-	add(collect.SDisks, model.Row{"project": "p", "name": "old", "location": "z", "orphan": true, "sizeGB": 10.0})
+	add(schema.SInfo, model.Row{"project": "p", "name": "db", "zone": "z", "status": "RUNNING", "secureBoot": true, "labels": "a=b", "deletionProtection": true})
+	add(schema.SInfo, model.Row{"project": "p", "name": "web-1", "zone": "z", "status": "RUNNING", "mig": "web"})
+	add(schema.SDisks, model.Row{"project": "p", "name": "db-boot", "location": "z", "users": "db", "snapshotSchedule": "daily"})
+	add(schema.SDisks, model.Row{"project": "p", "name": "db-data", "location": "z", "users": "db"})
+	add(schema.SDisks, model.Row{"project": "p", "name": "db-logs", "location": "z", "users": "db"})
+	add(schema.SDisks, model.Row{"project": "p", "name": "web-1", "location": "z", "users": "web-1"})
+	add(schema.SDisks, model.Row{"project": "p", "name": "old", "location": "z", "orphan": true, "sizeGB": 10.0})
 
 	Evaluate(inv, DefaultOptions(), time.Now())
 	rows := findings(inv)
@@ -57,18 +57,18 @@ func TestDisksWithoutSchedule(t *testing.T) {
 }
 
 func TestTemplateImages(t *testing.T) {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
-	add(collect.SImage, model.Row{"project": "img", "name": "golden-v1", "kind": "Image", "deprecated": "DEPRECATED", "ageDays": int64(30)})
-	add(collect.SImage, model.Row{"project": "img", "name": "golden-v0", "kind": "Image", "deprecated": "OBSOLETE", "ageDays": int64(400)})
-	add(collect.SImage, model.Row{"project": "p", "name": "base", "kind": "Image", "ageDays": int64(365)})
-	add(collect.SImage, model.Row{"project": "p", "name": "fresh", "kind": "Image", "ageDays": int64(10)})
-	add(collect.STemplate, model.Row{"project": "p", "name": "t-dep", "image": "golden-v1", "imageProject": "img"})
-	add(collect.STemplate, model.Row{"project": "p", "name": "t-obs", "image": "golden-v0", "imageProject": "img"})
-	add(collect.STemplate, model.Row{"project": "p", "name": "t-old", "image": "base", "imageProject": "p"})
-	add(collect.STemplate, model.Row{"project": "p", "name": "t-fresh", "image": "fresh", "imageProject": "p"})
-	add(collect.STemplate, model.Row{"project": "p", "name": "t-public", "image": "family/debian-12", "imageProject": "debian-cloud"})
-	add(collect.SMIG, model.Row{"project": "p", "name": "web", "template": "t-obs"})
+	add(schema.SImage, model.Row{"project": "img", "name": "golden-v1", "kind": "Image", "deprecated": "DEPRECATED", "ageDays": int64(30)})
+	add(schema.SImage, model.Row{"project": "img", "name": "golden-v0", "kind": "Image", "deprecated": "OBSOLETE", "ageDays": int64(400)})
+	add(schema.SImage, model.Row{"project": "p", "name": "base", "kind": "Image", "ageDays": int64(365)})
+	add(schema.SImage, model.Row{"project": "p", "name": "fresh", "kind": "Image", "ageDays": int64(10)})
+	add(schema.STemplate, model.Row{"project": "p", "name": "t-dep", "image": "golden-v1", "imageProject": "img"})
+	add(schema.STemplate, model.Row{"project": "p", "name": "t-obs", "image": "golden-v0", "imageProject": "img"})
+	add(schema.STemplate, model.Row{"project": "p", "name": "t-old", "image": "base", "imageProject": "p"})
+	add(schema.STemplate, model.Row{"project": "p", "name": "t-fresh", "image": "fresh", "imageProject": "p"})
+	add(schema.STemplate, model.Row{"project": "p", "name": "t-public", "image": "family/debian-12", "imageProject": "debian-cloud"})
+	add(schema.SMIG, model.Row{"project": "p", "name": "web", "template": "t-obs"})
 
 	Evaluate(inv, DefaultOptions(), time.Now())
 	rows := findings(inv)
@@ -91,8 +91,8 @@ func TestTemplateImages(t *testing.T) {
 }
 
 func TestSeverityOrder(t *testing.T) {
-	inv := collect.NewInventory()
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": "z", "status": "RUNNING",
+	inv := schema.NewInventory()
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": "z", "status": "RUNNING",
 		"serviceAccount": "1-compute@developer.gserviceaccount.com", "scopes": "cloud-platform"})
 	Evaluate(inv, DefaultOptions(), time.Now())
 	rows := findings(inv)
@@ -132,10 +132,10 @@ func TestRulesCatalog(t *testing.T) {
 
 func TestDisabledAndExceptions(t *testing.T) {
 	build := func() *model.Inventory {
-		inv := collect.NewInventory()
+		inv := schema.NewInventory()
 		add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
-		add(collect.SProject, model.Row{"projectId": "veeam", "labels": "gcetools-ignore=snapshot-schedule"})
-		add(collect.SProject, model.Row{"projectId": "p"})
+		add(schema.SProject, model.Row{"projectId": "veeam", "labels": "gcetools-ignore=snapshot-schedule"})
+		add(schema.SProject, model.Row{"projectId": "p"})
 		for _, vm := range []struct{ p, n, labels string }{
 			{"p", "plain", "app=x"},
 			{"p", "ignored-one", "app=x; gcetools-ignore=public-ip"},
@@ -143,9 +143,9 @@ func TestDisabledAndExceptions(t *testing.T) {
 			{"p", "ignored-all", "gcetools-ignore=all"},
 			{"veeam", "proxy", "app=veeam"},
 		} {
-			add(collect.SInfo, model.Row{"project": vm.p, "name": vm.n, "zone": "z", "status": "RUNNING", "externalIP": "1.2.3.4",
+			add(schema.SInfo, model.Row{"project": vm.p, "name": vm.n, "zone": "z", "status": "RUNNING", "externalIP": "1.2.3.4",
 				"secureBoot": true, "deletionProtection": true, "labels": vm.labels})
-			add(collect.SDisks, model.Row{"project": vm.p, "name": vm.n + "-boot", "location": "z", "users": vm.n})
+			add(schema.SDisks, model.Row{"project": vm.p, "name": vm.n + "-boot", "location": "z", "users": vm.n})
 		}
 		return inv
 	}
@@ -189,16 +189,16 @@ func TestDisabledAndExceptions(t *testing.T) {
 }
 
 func TestThresholds(t *testing.T) {
-	inv := collect.NewInventory()
-	inv.Sheet(collect.SPerf).Add(model.Row{"project": "p", "vm": "a", "zone": "z", "status": "RUNNING", "samples": 500.0,
+	inv := schema.NewInventory()
+	inv.Sheet(schema.SPerf).Add(model.Row{"project": "p", "vm": "a", "zone": "z", "status": "RUNNING", "samples": 500.0,
 		"cpuP95": 15.0, "opsAgent": true})
-	inv.Sheet(collect.SQuota).Add(model.Row{"project": "p", "metric": "CPUS", "region": "r", "usagePct": 70.0})
+	inv.Sheet(schema.SQuota).Add(model.Row{"project": "p", "metric": "CPUS", "region": "r", "usagePct": 70.0})
 
 	Evaluate(inv, DefaultOptions(), time.Now())
 	if len(findings(inv)) != 0 {
 		t.Fatalf("defaults should not fire: %v", findings(inv))
 	}
-	inv.Sheet(collect.SHealth).Rows = nil
+	inv.Sheet(schema.SHealth).Rows = nil
 	opt := Options{CPULowPct: 20, QuotaPct: 60} // zero fields fall back to defaults
 	Evaluate(inv, opt, time.Now())
 	if _, ok := has(findings(inv), "VM infrautilizada (CPU p95 < 20%)", "a"); !ok {
@@ -210,13 +210,13 @@ func TestThresholds(t *testing.T) {
 }
 
 func TestManagedVMsSkipPerVMRules(t *testing.T) {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	old := time.Now().Add(-90 * 24 * time.Hour)
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "gke-node", "zone": "z", "status": "TERMINATED", "lastStop": old,
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "gke-node", "zone": "z", "status": "TERMINATED", "lastStop": old,
 		"managedBy": "GKE", "labels": "goog-gke-node=", "externalIP": "34.1.1.1", "secureBoot": true})
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "pet", "zone": "z", "status": "TERMINATED", "lastStop": old,
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "pet", "zone": "z", "status": "TERMINATED", "lastStop": old,
 		"labels": "a=b", "secureBoot": true})
-	inv.Sheet(collect.SPerf).Add(model.Row{"project": "p", "vm": "gke-node", "zone": "z", "status": "RUNNING", "samples": int64(500), "cpuP95": 50.0})
+	inv.Sheet(schema.SPerf).Add(model.Row{"project": "p", "vm": "gke-node", "zone": "z", "status": "RUNNING", "samples": int64(500), "cpuP95": 50.0})
 	Evaluate(inv, DefaultOptions(), time.Now())
 	ids := map[string]bool{}
 	for _, r := range findings(inv) {
@@ -238,14 +238,14 @@ func TestManagedVMsSkipPerVMRules(t *testing.T) {
 }
 
 func TestSecurityRules(t *testing.T) {
-	inv := collect.NewInventory()
+	inv := schema.NewInventory()
 	add := func(s string, r model.Row) { inv.Sheet(s).Add(r) }
-	add(collect.SInfo, model.Row{"project": "p", "name": "web", "zone": "z"})
-	add(collect.SInfo, model.Row{"project": "p", "name": "node", "zone": "z", "managedBy": "GKE"})
-	add(collect.SSecurity, model.Row{"project": "p", "vm": "web", "zone": "z", "internetExposed": true,
+	add(schema.SInfo, model.Row{"project": "p", "name": "web", "zone": "z"})
+	add(schema.SInfo, model.Row{"project": "p", "name": "node", "zone": "z", "managedBy": "GKE"})
+	add(schema.SSecurity, model.Row{"project": "p", "vm": "web", "zone": "z", "internetExposed": true,
 		"exposedPorts": "22 (SSH)", "externalIP": "34.0.0.1", "exposingRules": "allow-ssh", "projectSSHKeys": true,
 		"serialPort": true, "osLogin": false, "ipForward": true, "vtpm": true, "integrityMonitoring": false})
-	add(collect.SSecurity, model.Row{"project": "p", "vm": "node", "zone": "z", "managedBy": "GKE",
+	add(schema.SSecurity, model.Row{"project": "p", "vm": "node", "zone": "z", "managedBy": "GKE",
 		"osLogin": false, "ipForward": true, "vtpm": true, "integrityMonitoring": true})
 	Evaluate(inv, DefaultOptions(), time.Now())
 	rows := findings(inv)

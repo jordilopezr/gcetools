@@ -1,9 +1,9 @@
 package diff
 
 import (
+	"gcetools/internal/schema"
 	"testing"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -29,11 +29,11 @@ func TestEnglishReasons(t *testing.T) {
 	i18n.SetLang("en")
 	defer i18n.SetLang("es")
 	a, b := baseInventory(), baseInventory()
-	b.Sheet(collect.SInfo).Rows[0]["machineType"] = "e2-standard-4"
-	b.Sheet(collect.SFirewall).Rows[0]["openToInternet"] = true
-	b.Sheet(collect.SProject).Rows[1]["scanStatus"] = "Partial (2 errors)"
+	b.Sheet(schema.SInfo).Rows[0]["machineType"] = "e2-standard-4"
+	b.Sheet(schema.SFirewall).Rows[0]["openToInternet"] = true
+	b.Sheet(schema.SProject).Rows[1]["scanStatus"] = "Partial (2 errors)"
 	// A Spanish scan compared with an English one: severities still match.
-	b.Sheet(collect.SHealth).Add(model.Row{"severity": "High", "rule": "Orphaned disk", "project": "p1", "resource": "d"})
+	b.Sheet(schema.SHealth).Add(model.Row{"severity": "High", "rule": "Orphaned disk", "project": "p1", "resource": "d"})
 	res := Compare(Input{a, "a"}, Input{b, "b"})
 
 	if s := res.Sheet(SChanged); s.Title != "Changes" || s.Columns[0].Title != "Relevant" {

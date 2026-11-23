@@ -1,9 +1,9 @@
 package security
 
 import (
+	"gcetools/internal/schema"
 	"testing"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 )
 
@@ -11,13 +11,13 @@ import (
 // external IP, network host project, tags, SA) and the given firewall rows.
 func inv(t *testing.T, fws []model.Row, vms ...model.Row) *model.Inventory {
 	t.Helper()
-	in := collect.NewInventory()
+	in := schema.NewInventory()
 	for _, v := range vms {
 		p, z, n := v["project"].(string), "z1", v["vm"].(string)
-		in.Sheet(collect.SInfo).Add(model.Row{"project": p, "zone": z, "name": n, "tags": v["tags"], "serviceAccount": v["sa"]})
-		in.Sheet(collect.SNetwork).Add(model.Row{"project": p, "zone": z, "vm": n, "network": "net",
+		in.Sheet(schema.SInfo).Add(model.Row{"project": p, "zone": z, "name": n, "tags": v["tags"], "serviceAccount": v["sa"]})
+		in.Sheet(schema.SNetwork).Add(model.Row{"project": p, "zone": z, "vm": n, "network": "net",
 			"networkProject": v["host"], "externalIP": v["ip"]})
-		in.Sheet(collect.SSecurity).Add(model.Row{"project": p, "zone": z, "vm": n, "externalIP": v["ip"],
+		in.Sheet(schema.SSecurity).Add(model.Row{"project": p, "zone": z, "vm": n, "externalIP": v["ip"],
 			"osLogin": true, "secureBoot": true, "vtpm": true, "integrityMonitoring": true})
 	}
 	for _, f := range fws {
@@ -26,13 +26,13 @@ func inv(t *testing.T, fws []model.Row, vms ...model.Row) *model.Inventory {
 		for k, v := range f {
 			row[k] = v
 		}
-		in.Sheet(collect.SFirewall).Add(row)
+		in.Sheet(schema.SFirewall).Add(row)
 	}
-	in.Sheet(collect.SProject).Add(model.Row{"projectId": "p1", "scanStatus": "OK"})
+	in.Sheet(schema.SProject).Add(model.Row{"projectId": "p1", "scanStatus": "OK"})
 	return in
 }
 
-func sec(in *model.Inventory, i int) model.Row { return in.Sheet(collect.SSecurity).Rows[i] }
+func sec(in *model.Inventory, i int) model.Row { return in.Sheet(schema.SSecurity).Rows[i] }
 
 func TestExposure(t *testing.T) {
 	in := inv(t, []model.Row{
@@ -64,7 +64,7 @@ func TestExposure(t *testing.T) {
 			t.Errorf("%s: ports %q rules %q exposed %v", r["vm"], r["exposedPorts"], r["exposingRules"], r["internetExposed"])
 		}
 	}
-	if n := in.Sheet(collect.SProject).Rows[0]["exposedVMs"]; n != int64(2) {
+	if n := in.Sheet(schema.SProject).Rows[0]["exposedVMs"]; n != int64(2) {
 		t.Errorf("exposedVMs = %v", n)
 	}
 	if n := sec(in, 0)["issues"]; n != int64(1) {

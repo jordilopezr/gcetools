@@ -2,6 +2,7 @@ package collect
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"strings"
 	"time"
 
@@ -56,7 +57,7 @@ func (c *collector) addImage(im *compute.Image) {
 	if src == "" {
 		src = last(im.SourceSnapshot)
 	}
-	c.add(SImage, model.Row{
+	c.add(schema.SImage, model.Row{
 		"project": c.project, "name": im.Name, "kind": "Image", "family": im.Family, "status": im.Status,
 		"deprecated": dep, "diskSizeGB": float64(im.DiskSizeGb),
 		"storageGB": round2(float64(im.ArchiveSizeBytes) / (1 << 30)), "created": ts(im.CreationTimestamp),
@@ -66,7 +67,7 @@ func (c *collector) addImage(im *compute.Image) {
 }
 
 func (c *collector) addMachineImage(mi *compute.MachineImage) {
-	c.add(SImage, model.Row{
+	c.add(schema.SImage, model.Row{
 		"project": c.project, "name": mi.Name, "kind": "Machine image", "status": mi.Status,
 		"storageGB": round2(float64(mi.TotalStorageBytes) / (1 << 30)), "created": ts(mi.CreationTimestamp),
 		"ageDays": c.ageDays(mi.CreationTimestamp), "source": last(mi.SourceInstance),
@@ -108,7 +109,7 @@ func (c *collector) collectReservations() error {
 							row["localSsdGB"] = float64(ssd)
 						}
 					}
-					c.add(SReserv, row)
+					c.add(schema.SReserv, row)
 				}
 			}
 			return nil
@@ -144,7 +145,7 @@ func (c *collector) collectCommitments() error {
 						}
 					}
 					row["other"] = strings.Join(other, "; ")
-					c.add(SCommit, row)
+					c.add(schema.SCommit, row)
 				}
 			}
 			return nil
@@ -179,7 +180,7 @@ func (c *collector) collectSoleTenant() error {
 		err := c.svc.NodeGroups.ListNodes(c.project, gr.zone, gr.name).Context(c.ctx).
 			Pages(c.ctx, func(page *compute.NodeGroupsListNodes) error {
 				for _, n := range page.Items {
-					c.add(SSole, model.Row{
+					c.add(schema.SSole, model.Row{
 						"project": c.project, "nodeGroup": gr.name, "zone": gr.zone,
 						"nodeTemplate": last(gr.g.NodeTemplate), "node": n.Name, "nodeType": n.NodeType,
 						"status": n.Status, "vms": int64(len(n.Instances)), "instances": joinLast(n.Instances),
@@ -209,7 +210,7 @@ func (c *collector) collectQuotas() error {
 				if q.Limit > 0 {
 					pct = round2(q.Usage * 100 / q.Limit)
 				}
-				c.add(SQuota, model.Row{
+				c.add(schema.SQuota, model.Row{
 					"project": c.project, "region": r.Name, "metric": q.Metric,
 					"usage": q.Usage, "limit": q.Limit, "usagePct": pct,
 				})

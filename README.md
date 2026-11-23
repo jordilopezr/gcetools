@@ -268,7 +268,9 @@ wails dev -tags webkit2_41                 # app con recarga en caliente
 wails build -tags webkit2_41               # binario en build/bin/ (Linux)
 wails build -platform windows/amd64        # en Windows
 wails build -platform darwin/universal     # en macOS
-go test ./...                              # tests del backend
+go test -tags webkit2_41 ./...             # tests del backend
+golangci-lint run ./...                    # lint (configuración en .golangci.yml)
+npm --prefix frontend run lint             # ESLint de la interfaz
 ```
 
 Para trabajar solo en la interfaz, sin Wails ni credenciales:
@@ -331,7 +333,9 @@ Como referencia, un escaneo pide unas 2 series de Monitoring por VM (CPU y RAM):
 main.go, app.go           Arranque de Wails + métodos expuestos al frontend
 internal/auth             ADC / clave JSON / impersonación / inicio de sesión con Google
 internal/core             Descubrimiento de proyectos, escaneo concurrente, HTTP con rate-limit y reintentos
-internal/collect          Un colector por tipo de recurso (aggregatedList o Cloud Asset Inventory) + esquema de pestañas
+internal/collect          Un colector por tipo de recurso (aggregatedList o Cloud Asset Inventory)
+internal/schema           Pestañas: nombres, títulos, columnas y orden
+internal/model            Inventario, hojas y filas, con accesores tipados (Row.Str, Row.Float…)
 internal/i18n             Traducciones (el texto en español es la clave; inglés en en_*.go)
 internal/health           Reglas de gHealth
 internal/security         Exposición a Internet de gSecurity
@@ -343,12 +347,14 @@ internal/profile          Perfiles de escaneo guardados
 internal/billing          Coste real desde la exportación de facturación a BigQuery
 internal/history          Historial local de escaneos
 internal/report           Informe ejecutivo en HTML
+internal/view             Resumen del inventario y pestañas sueltas para la interfaz
+internal/osopen           Abrir URLs y archivos con la aplicación del sistema
 frontend/                 React + TS, tokens Material 3, AG Grid
 build/                    Empaquetado: Linux (nfpm, AppImage), Windows (NSIS) y fondo del DMG de macOS
 assets/brand/             Identidad visual: SVG maestros, iconos por plataforma, favicon y recursos web
 ```
 
-Para añadir una pestaña: define la hoja en `internal/collect/schema.go`, escribe su colector y regístralo en `Project()` (collect.go). La UI y los exportadores la muestran sin más cambios.
+Para añadir una pestaña: define la hoja en `internal/schema/schema.go`, escribe su colector y regístralo en `Project()` (collect.go). La UI y los exportadores la muestran sin más cambios.
 
 Para traducir: envuelve el texto con `i18n.T("…")` o `i18n.Tf("…", args)` en Go y con `t('…')` en el frontend, y añade la versión en inglés a `internal/i18n/en_*.go` o a `frontend/src/lib/i18n.en.ts`. `go test ./internal/i18n` y `npm --prefix frontend run check:i18n` fallan si falta alguna.
 

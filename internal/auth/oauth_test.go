@@ -103,11 +103,15 @@ func TestLoginFlow(t *testing.T) {
 			t.Errorf("consent URL = %s", consent)
 		}
 		go func() {
-			bad, _ := http.Get(q.Get("redirect_uri") + "?state=forged&code=evil")
-			if bad != nil && bad.StatusCode != 400 {
-				t.Errorf("forged state accepted: %d", bad.StatusCode)
+			if bad, err := http.Get(q.Get("redirect_uri") + "?state=forged&code=evil"); err == nil {
+				if bad.StatusCode != 400 {
+					t.Errorf("forged state accepted: %d", bad.StatusCode)
+				}
+				bad.Body.Close()
 			}
-			http.Get(q.Get("redirect_uri") + "?state=" + q.Get("state") + "&code=the-code")
+			if ok, err := http.Get(q.Get("redirect_uri") + "?state=" + q.Get("state") + "&code=the-code"); err == nil {
+				ok.Body.Close()
+			}
 		}()
 	}
 	account, err := Login(context.Background(), browser)

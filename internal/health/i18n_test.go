@@ -1,11 +1,11 @@
 package health
 
 import (
+	"gcetools/internal/schema"
 	"strings"
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -42,9 +42,9 @@ func TestLevel(t *testing.T) {
 func TestEnglishFindings(t *testing.T) {
 	i18n.SetLang("en")
 	defer i18n.SetLang("es")
-	inv := collect.NewInventory()
-	inv.Sheet(collect.SDisks).Add(model.Row{"project": "p", "name": "d1", "location": "z", "orphan": true, "sizeGB": 10.0, "type": "pd-ssd"})
-	inv.Sheet(collect.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": "z", "status": "RUNNING", "secureBoot": true,
+	inv := schema.NewInventory()
+	inv.Sheet(schema.SDisks).Add(model.Row{"project": "p", "name": "d1", "location": "z", "orphan": true, "sizeGB": 10.0, "type": "pd-ssd"})
+	inv.Sheet(schema.SInfo).Add(model.Row{"project": "p", "name": "vm", "zone": "z", "status": "RUNNING", "secureBoot": true,
 		"labels": "a=b", "deletionProtection": true, "externalIP": "34.1.2.3"})
 	Evaluate(inv, DefaultOptions(), time.Now())
 	rows := findings(inv)

@@ -2,6 +2,7 @@ package collect
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"slices"
 	"strings"
 
@@ -38,7 +39,7 @@ func (c *collector) addNetwork(n *compute.Network) {
 	for _, p := range n.Peerings {
 		peers = append(peers, fmt.Sprintf("%s → %s/%s (%s)", p.Name, projectOf(p.Network), last(p.Network), p.State))
 	}
-	c.add(SVPC, model.Row{
+	c.add(schema.SVPC, model.Row{
 		"project": c.project, "name": n.Name, "mode": mode, "routingMode": routing, "mtu": n.Mtu,
 		"subnets": int64(len(n.Subnetworks)), "peerings": strings.Join(peers, "; "),
 		"created": ts(n.CreationTimestamp), "description": n.Description,
@@ -69,7 +70,7 @@ func (c *collector) addSubnet(s *compute.Subnetwork) {
 	if ipv6 == "" {
 		ipv6 = s.ExternalIpv6Prefix
 	}
-	c.add(SSubnet, model.Row{
+	c.add(schema.SSubnet, model.Row{
 		"project": c.project, "name": s.Name, "region": last(s.Region), "network": last(s.Network),
 		"cidr": s.IpCidrRange, "secondary": strings.Join(sec, "; "), "gateway": s.GatewayAddress,
 		"privateGoogleAccess": s.PrivateIpGoogleAccess,
@@ -108,7 +109,7 @@ func (c *collector) addFirewall(f *compute.Firewall) {
 	}
 	open := f.Direction == "INGRESS" && action == "ALLOW" && !f.Disabled &&
 		(slices.Contains(f.SourceRanges, "0.0.0.0/0") || slices.Contains(f.SourceRanges, "::/0"))
-	c.add(SFirewall, model.Row{
+	c.add(schema.SFirewall, model.Row{
 		"project": c.project, "name": f.Name, "network": last(f.Network), "direction": f.Direction,
 		"priority": f.Priority, "action": action, "rules": strings.Join(rules, "; "),
 		"sourceRanges": strings.Join(f.SourceRanges, "; "), "sourceTags": strings.Join(srcTags, "; "),
@@ -150,7 +151,7 @@ func (c *collector) addAddress(a *compute.Address) {
 	} else {
 		loc = "global"
 	}
-	c.add(SAddress, model.Row{
+	c.add(schema.SAddress, model.Row{
 		"project": c.project, "name": a.Name, "address": a.Address, "type": a.AddressType,
 		"location": loc, "status": a.Status, "users": joinLast(a.Users),
 		"networkTier": a.NetworkTier, "purpose": a.Purpose, "created": ts(a.CreationTimestamp),

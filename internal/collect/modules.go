@@ -2,6 +2,7 @@ package collect
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"math"
 	"slices"
 	"sort"
@@ -63,7 +64,7 @@ func (c *collector) collectOSInventory() error {
 						row["kernel"], row["architecture"] = o.KernelRelease, o.Architecture
 						row["hostname"], row["agentVersion"] = o.Hostname, o.OsconfigAgentVersion
 					}
-					c.add(STools, row)
+					c.add(schema.STools, row)
 				}
 				return nil
 			})
@@ -120,7 +121,7 @@ func (c *collector) collectMetrics() error {
 		if a, ok := mem[id]; ok && a.hours > 0 {
 			row["memAvg"], row["memP95"], row["memMax"] = round1(a.mean), round1(a.p95), round1(a.max)
 		}
-		c.add(SPerf, row)
+		c.add(schema.SPerf, row)
 	}
 	return nil
 }
@@ -313,7 +314,7 @@ func (c *collector) collectRecommendations() error {
 				Filter("stateInfo.state=ACTIVE").Context(c.ctx).
 				Pages(c.ctx, func(page *recommender.GoogleCloudRecommenderV1ListRecommendationsResponse) error {
 					for _, r := range page.Recommendations {
-						c.add(SRecomm, c.recommendationRow(r, t.loc, t.rec))
+						c.add(schema.SRecomm, c.recommendationRow(r, t.loc, t.rec))
 					}
 					return nil
 				})

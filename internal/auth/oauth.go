@@ -145,7 +145,7 @@ func load() (stored, error) {
 	}
 	var s stored
 	if err := json.Unmarshal([]byte(v), &s); err != nil {
-		return stored{}, nil // unreadable (older format): start over
+		return stored{}, nil //nolint:nilerr // unreadable (older format): start over
 	}
 	return s, nil
 }
@@ -266,7 +266,7 @@ func Login(ctx context.Context, open func(url string)) (account string, err erro
 		default:
 		}
 	})}
-	go srv.Serve(ln)
+	go func() { _ = srv.Serve(ln) }() // returns ErrServerClosed on Close
 	defer srv.Close()
 
 	open(cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier),

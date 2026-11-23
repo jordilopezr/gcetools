@@ -2,6 +2,7 @@ package export
 
 import (
 	"archive/zip"
+	"gcetools/internal/schema"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"gcetools/internal/collect"
 	"gcetools/internal/model"
 
 	"github.com/xuri/excelize/v2"
@@ -18,14 +18,14 @@ import (
 
 // Text that a spreadsheet would run as a formula is neutralized in CSV.
 func TestCSVFormulaInjection(t *testing.T) {
-	inv := collect.NewInventory()
-	inv.Sheet(collect.SVPC).Add(model.Row{"project": "p1", "name": "net", "description": `=HYPERLINK("http://x","clic")`})
-	inv.Sheet(collect.SVPC).Add(model.Row{"project": "p1", "name": "@SUM(A1)", "description": "-2+3"})
+	inv := schema.NewInventory()
+	inv.Sheet(schema.SVPC).Add(model.Row{"project": "p1", "name": "net", "description": `=HYPERLINK("http://x","clic")`})
+	inv.Sheet(schema.SVPC).Add(model.Row{"project": "p1", "name": "@SUM(A1)", "description": "-2+3"})
 	path, err := Write(inv, filepath.Join(t.TempDir(), "inv.zip"), CSV, ',')
 	if err != nil {
 		t.Fatal(err)
 	}
-	csv := readZipFile(t, path, collect.SVPC+".csv")
+	csv := readZipFile(t, path, schema.SVPC+".csv")
 	for _, bad := range []string{`,=HYPERLINK`, `,@SUM`, `,-2+3`, `"=HYPERLINK`} {
 		if strings.Contains(csv, bad) {
 			t.Errorf("unescaped formula %q in %q", bad, csv)
@@ -61,20 +61,20 @@ func TestXLSXDatesAfterJSONRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	rows, err := f.GetRows(collect.SInfo)
+	rows, err := f.GetRows(schema.SInfo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	col := -1
 	for i, h := range rows[0] {
-		if h == inv.Sheet(collect.SInfo).Columns[colIndex(inv.Sheet(collect.SInfo), "lastStop")].Title {
+		if h == inv.Sheet(schema.SInfo).Columns[colIndex(inv.Sheet(schema.SInfo), "lastStop")].Title {
 			col = i
 		}
 	}
 	if col < 0 || col >= len(rows[1]) || rows[1][col] == "" {
 		t.Fatalf("lastStop is blank after the JSON round trip: %v", rows[1])
 	}
-	if _, ok := inv.Sheet(collect.SInfo).Rows[0]["lastStop"].(time.Time); !ok {
+	if _, ok := inv.Sheet(schema.SInfo).Rows[0]["lastStop"].(time.Time); !ok {
 		t.Errorf("lastStop not restored as time.Time")
 	}
 }
@@ -138,7 +138,7 @@ func readZipFile(t *testing.T, path, name string) string {
 // and repeated column titles do not break the table.
 func TestXLSXFiltersAndUniqueHeaders(t *testing.T) {
 	inv := sample()
-	s := inv.Sheet(collect.SInfo)
+	s := inv.Sheet(schema.SInfo)
 	s.Columns = append(s.Columns, model.Column{Key: "dup", Title: s.Columns[0].Title, Type: model.TString})
 	path := filepath.Join(t.TempDir(), "inv.xlsx")
 	if _, err := Write(inv, path, XLSX, ','); err != nil {
@@ -155,7 +155,7 @@ func TestXLSXFiltersAndUniqueHeaders(t *testing.T) {
 			t.Errorf("%s: tables = %v, %v", sh.Name, tables, err)
 		}
 	}
-	hdr, _ := f.GetRows(collect.SInfo)
+	hdr, _ := f.GetRows(schema.SInfo)
 	last := hdr[0][len(hdr[0])-1]
 	if last != s.Columns[0].Title+" (2)" {
 		t.Errorf("duplicate title = %q", last)

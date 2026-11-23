@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"gcetools/internal/schema"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -137,12 +138,12 @@ func fakeServices(t *testing.T) Services {
 }
 
 func TestProjectCollect(t *testing.T) {
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	st := Project(context.Background(), fakeServices(t), "p1", inv, func(string) {})
 	if st.Status != "OK" || st.VMs != 1 || st.VCPU != 4 || st.Disks != 2 {
 		t.Fatalf("stats = %+v, errors = %v", st, inv.Errors)
 	}
-	vm := inv.Sheet(SInfo).Rows[0]
+	vm := inv.Sheet(schema.SInfo).Rows[0]
 	checks := map[string]any{
 		"vcpu": int64(4), "memoryGB": 16.0, "region": "europe-west1", "externalIP": "34.1.1.1",
 		"network": "shared", "os": "debian-12-bookworm", "image": "debian-12", "mig": "web-mig", "managedBy": "MIG", "labels": "env=prod",
@@ -153,11 +154,11 @@ func TestProjectCollect(t *testing.T) {
 			t.Errorf("gInfo[%s] = %#v, want %#v", k, vm[k], want)
 		}
 	}
-	if np := inv.Sheet(SNetwork).Rows[0]["networkProject"]; np != "host" {
+	if np := inv.Sheet(schema.SNetwork).Rows[0]["networkProject"]; np != "host" {
 		t.Errorf("networkProject = %v, want host (shared VPC)", np)
 	}
 	var orphan bool
-	for _, d := range inv.Sheet(SDisks).Rows {
+	for _, d := range inv.Sheet(schema.SDisks).Rows {
 		if d["name"] == "old" {
 			orphan = d["orphan"].(bool)
 		}
@@ -165,13 +166,13 @@ func TestProjectCollect(t *testing.T) {
 	if !orphan {
 		t.Error("disk 'old' should be orphan")
 	}
-	if fw := inv.Sheet(SFirewall).Rows[0]; fw["openToInternet"] != true || fw["rules"] != "tcp:22" {
+	if fw := inv.Sheet(schema.SFirewall).Rows[0]; fw["openToInternet"] != true || fw["rules"] != "tcp:22" {
 		t.Errorf("firewall row = %v", fw)
 	}
 	if st.SSHKeys != 2 || !st.SerialPort || st.OSLogin {
 		t.Errorf("project metadata stats = %+v", st)
 	}
-	sec := inv.Sheet(SSecurity).Rows[0]
+	sec := inv.Sheet(schema.SSecurity).Rows[0]
 	for k, want := range map[string]any{
 		"externalIP": "34.1.1.1", "defaultSA": true, "fullScope": true, "osLogin": false, "projectSSHKeys": true,
 		"instanceSSHKeys": false, "serialPort": true, "secureBoot": false, "diskEncryption": "Google", "managedBy": "MIG",
@@ -180,14 +181,14 @@ func TestProjectCollect(t *testing.T) {
 			t.Errorf("gSecurity[%s] = %#v, want %#v", k, sec[k], want)
 		}
 	}
-	lics := inv.Sheet(SLicense).Rows
+	lics := inv.Sheet(schema.SLicense).Rows
 	if len(lics) != 2 || lics[0]["category"] != "Herramienta" || lics[1]["category"] != "Debian" || lics[1]["licenseProject"] != "debian-cloud" {
 		t.Errorf("license rows = %v", lics)
 	}
 }
 
 func TestProjectAPIDisabled(t *testing.T) {
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	st := Project(context.Background(), fakeServices(t), "off", inv, func(string) {})
 	if st.Status != "Compute API deshabilitada" {
 		t.Fatalf("status = %q", st.Status)
@@ -198,21 +199,21 @@ func TestProjectAPIDisabled(t *testing.T) {
 }
 
 func TestOptionalModules(t *testing.T) {
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	Project(context.Background(), fakeServices(t), "p1", inv, func(string) {})
 
-	tools := inv.Sheet(STools).Rows
+	tools := inv.Sheet(schema.STools).Rows
 	if len(tools) != 1 || tools[0]["vm"] != "vm-1" || tools[0]["os"] != "Debian GNU/Linux 12 (bookworm)" {
 		t.Errorf("gTools = %v", tools)
 	}
-	perf := inv.Sheet(SPerf).Rows
+	perf := inv.Sheet(schema.SPerf).Rows
 	if len(perf) != 1 {
 		t.Fatalf("gPerf = %v", perf)
 	}
 	if p := perf[0]; p["cpuAvg"] != 4.3 || p["cpuP95"] != 2.0 || p["cpuMax"] != 50.0 || p["samples"] != int64(210) || p["opsAgent"] != false {
 		t.Errorf("gPerf row = %v", p)
 	}
-	rec := inv.Sheet(SRecomm).Rows
+	rec := inv.Sheet(schema.SRecomm).Rows
 	if len(rec) != 1 || rec[0]["savingsMonthly"] != 48.5 || rec[0]["resource"] != "vm-1" || rec[0]["recommender"] != "instance.MachineType" {
 		t.Errorf("gRecommend = %v", rec)
 	}
@@ -231,7 +232,7 @@ func TestOptionalModuleDisabledKeepsProjectOK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	st := Project(context.Background(), s, "p1", inv, func(string) {})
 	if st.Status != "OK (sin osconfig)" {
 		t.Fatalf("status = %q, errors = %+v", st.Status, inv.Errors)
@@ -285,7 +286,7 @@ func (s staticAssets) Project(context.Context, string) (Assets, error) { return 
 func TestFastModeMatchesComputeAPI(t *testing.T) {
 	svcs := fakeServices(t)
 	svcs.OSConfig, svcs.Monitoring, svcs.Recommender = nil, nil, nil
-	normal := NewInventory()
+	normal := schema.NewInventory()
 	Project(context.Background(), svcs, "p1", normal, func(string) {})
 
 	a := Assets{}
@@ -306,12 +307,12 @@ func TestFastModeMatchesComputeAPI(t *testing.T) {
 	a["GlobalAddress"] = []json.RawMessage{json.RawMessage(`{"name":"lb","address":"34.2.2.2","addressType":"EXTERNAL","status":"RESERVED"}`)}
 
 	svcs.Assets = staticAssets{a}
-	fast := NewInventory()
+	fast := schema.NewInventory()
 	st := Project(context.Background(), svcs, "p1", fast, func(string) {})
 	if st.Status != "OK" || st.VMs != 1 || st.Disks != 2 {
 		t.Fatalf("fast stats = %+v, errors = %v", st, fast.Errors)
 	}
-	for _, name := range []string{SInfo, SDisks, SDisk, SNetwork, SLicense, SFirewall, SCPU, SMemory, SSecurity} {
+	for _, name := range []string{schema.SInfo, schema.SDisks, schema.SDisk, schema.SNetwork, schema.SLicense, schema.SFirewall, schema.SCPU, schema.SMemory, schema.SSecurity} {
 		n, f := normal.Sheet(name).Rows, fast.Sheet(name).Rows
 		if len(n) != len(f) {
 			t.Errorf("%s: %d rows with the Compute API, %d in fast mode", name, len(n), len(f))
@@ -323,7 +324,7 @@ func TestFastModeMatchesComputeAPI(t *testing.T) {
 			}
 		}
 	}
-	if r := fast.Sheet(SAddress).Rows; len(r) != 1 || r[0]["location"] != "global" {
+	if r := fast.Sheet(schema.SAddress).Rows; len(r) != 1 || r[0]["location"] != "global" {
 		t.Errorf("global address = %v", r)
 	}
 }
@@ -337,7 +338,7 @@ func TestFastModeBadAsset(t *testing.T) {
 	}
 	a["Snapshot"] = []json.RawMessage{json.RawMessage(`{"name":`)}
 	svcs.Assets = staticAssets{a}
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	st := Project(context.Background(), svcs, "p1", inv, func(string) {})
 	if !strings.HasPrefix(st.Status, "Parcial") || len(inv.Errors) != 1 || inv.Errors[0].Collector != "snapshots" {
 		t.Errorf("status %q, errors %v", st.Status, inv.Errors)
@@ -345,11 +346,11 @@ func TestFastModeBadAsset(t *testing.T) {
 }
 
 func TestRelabel(t *testing.T) {
-	inv := NewInventory()
-	s := inv.Sheet(SInfo)
+	inv := schema.NewInventory()
+	s := inv.Sheet(schema.SInfo)
 	s.Title, s.Columns[0].Title = "Instances", "Project"
 	s.Columns = append(s.Columns, model.Column{Key: "legacy", Title: "Old column"})
-	Relabel(inv)
+	schema.Relabel(inv)
 	if s.Title != "Instancias" || s.Columns[0].Title != "Proyecto" || s.Columns[len(s.Columns)-1].Title != "Old column" {
 		t.Errorf("relabel: %q %q %q", s.Title, s.Columns[0].Title, s.Columns[len(s.Columns)-1].Title)
 	}
@@ -376,9 +377,9 @@ func TestInstanceMetadataOverrides(t *testing.T) {
 func TestMetricsFallbackToHourly(t *testing.T) {
 	monitoringRefusesWindow = true
 	defer func() { monitoringRefusesWindow = false }()
-	inv := NewInventory()
+	inv := schema.NewInventory()
 	Project(context.Background(), fakeServices(t), "p1", inv, func(string) {})
-	perf := inv.Sheet(SPerf).Rows
+	perf := inv.Sheet(schema.SPerf).Rows
 	if len(perf) != 1 {
 		t.Fatalf("gPerf = %v", perf)
 	}

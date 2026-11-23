@@ -1,6 +1,12 @@
-package collect
+// Package schema defines the inventory sheets: names, titles, columns and
+// their order. Collectors fill them; the analysis packages (health,
+// security, pricing, diff…) read them without depending on the Google API
+// clients in collect.
+package schema
 
 import (
+	"strings"
+
 	"gcetools/internal/i18n"
 	"gcetools/internal/model"
 )
@@ -307,4 +313,15 @@ func Relabel(inv *model.Inventory) {
 			}
 		}
 	}
+}
+
+// ScanOK reports whether a gProject scanStatus means the project was read
+// ("OK", or "OK (sin osconfig)" when only an optional module failed). Every
+// language keeps the "OK" prefix, so inventories in either language work.
+func ScanOK(status string) bool { return strings.HasPrefix(status, "OK") }
+
+// ScanComparable reports whether a project's data can be compared: read
+// completely or partially ("Parcial (2 errores)" / "Partial (2 errors)").
+func ScanComparable(status string) bool {
+	return ScanOK(status) || strings.HasPrefix(status, "Parcial") || strings.HasPrefix(status, "Partial")
 }

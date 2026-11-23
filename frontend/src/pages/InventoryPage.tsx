@@ -19,6 +19,7 @@ export default function InventoryPage({ inventory, notify }: Props) {
   })), [inventory, hide])
   // A new function (another inventory, or the managed filter toggled) makes
   // SheetBrowser drop the rows it had loaded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- inventory is listed on purpose, see above
   const loadRows = useCallback((name: string) => api.sheetRows(name, hide), [inventory, hide])
   const [exporting, setExporting] = useState(false)
 

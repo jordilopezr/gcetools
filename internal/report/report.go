@@ -6,6 +6,7 @@ package report
 import (
 	"bytes"
 	"embed"
+	"gcetools/internal/schema"
 	"html/template"
 	"math"
 	"sort"
@@ -100,31 +101,25 @@ func build(inv *model.Inventory, opt Options) Data {
 	d := Data{Generated: opt.Now.Format(dateTimeLayout()), Scanned: m.StartedAt.Local().Format(dateTimeLayout()),
 		Identity: m.Identity, Version: m.Version, Projects: m.Projects, ProjectsOK: m.ProjectsOK, Currency: m.Currency,
 		Website: opt.Website}
-	rows := func(name string) []model.Row {
-		if s := inv.Sheet(name); s != nil {
-			return s.Rows
-		}
-		return nil
-	}
 
 	var vms, running int
 	var vcpu, mem float64
-	for _, r := range rows("gInfo") {
+	for _, r := range inv.Rows("gInfo") {
 		vms++
 		if r["status"] == "RUNNING" {
 			running++
 		}
-		vcpu += num(r["vcpu"])
-		mem += num(r["memoryGB"])
+		vcpu += model.Num(r["vcpu"])
+		mem += model.Num(r["memoryGB"])
 	}
 	var disks, orphans int
 	var diskGB, orphanGB float64
-	for _, r := range rows("gDisks") {
+	for _, r := range inv.Rows("gDisks") {
 		disks++
-		diskGB += num(r["sizeGB"])
+		diskGB += model.Num(r["sizeGB"])
 		if r["orphan"] == true {
 			orphans++
-			orphanGB += num(r["sizeGB"])
+			orphanGB += model.Num(r["sizeGB"])
 		}
 	}
 	var listTotal, realTotal, savings float64
@@ -135,28 +130,28 @@ func build(inv *model.Inventory, opt Options) Data {
 		}
 		return byProject[p]
 	}
-	for _, r := range rows("gCost") {
-		p := str(r, "project")
+	for _, r := range inv.Rows("gCost") {
+		p := r.Str("project")
 		if p == "TOTAL" { // only present with several projects: sum them instead
 			continue
 		}
 		c := pc(p)
-		c.List = num(r["total"])
+		c.List = model.Num(r["total"])
 		listTotal += c.List
-		c.VMs = int(num(r["vmsRunning"]))
+		c.VMs = int(model.Num(r["vmsRunning"]))
 	}
-	for _, r := range rows("gCostReal") {
-		p := str(r, "project")
-		d.RealCurrency, d.RealMonth = str(r, "currency"), str(r, "month")
+	for _, r := range inv.Rows("gCostReal") {
+		p := r.Str("project")
+		d.RealCurrency, d.RealMonth = r.Str("currency"), r.Str("month")
 		if p == "TOTAL" {
-			realTotal = num(r["net"])
+			realTotal = model.Num(r["net"])
 			continue
 		}
 		c := pc(p)
-		c.Real, c.HasReal = num(r["net"]), true
+		c.Real, c.HasReal = model.Num(r["net"]), true
 	}
-	for _, r := range rows("gRecommend") {
-		if v := num(r["savingsMonthly"]); v > 0 {
+	for _, r := range inv.Rows("gRecommend") {
+		if v := model.Num(r["savingsMonthly"]); v > 0 {
 			savings += v
 		}
 	}
@@ -167,7 +162,7 @@ func build(inv *model.Inventory, opt Options) Data {
 		{Label: i18n.T("Discos"), Value: group(diskGB/1024, 1) + " TB", Sub: i18n.Tf("%s discos", group(float64(disks), 0))},
 		{Label: i18n.T("Discos huérfanos"), Value: group(float64(orphans), 0), Sub: i18n.Tf("%s GB sin VM", group(orphanGB, 0)), Alert: orphans > 0},
 	}
-	if sec := rows("gSecurity"); len(sec) > 0 { // absent in scans made before 0.8
+	if sec := inv.Rows("gSecurity"); len(sec) > 0 { // absent in scans made before 0.8
 		exposed := 0
 		for _, r := range sec {
 			if r["internetExposed"] == true {
@@ -185,8 +180,8 @@ func build(inv *model.Inventory, opt Options) Data {
 	}
 	if savings > 0 {
 		cur := m.Currency
-		for _, r := range rows("gRecommend") {
-			if c := str(r, "currency"); c != "" {
+		for _, r := range inv.Rows("gRecommend") {
+			if c := r.Str("currency"); c != "" {
 				cur = c
 				break
 			}
@@ -194,10 +189,10 @@ func build(inv *model.Inventory, opt Options) Data {
 		d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Ahorro posible/mes"), Value: group(savings, 0) + " " + cur, Sub: i18n.T("según Google Recommender")})
 	}
 
-	for _, r := range rows("gHealth") {
+	for _, r := range inv.Rows("gHealth") {
 		// The inventory may come from a scan in another language: compare
 		// internal severities.
-		level := health.Level(str(r, "severity"))
+		level := health.Level(r.Str("severity"))
 		switch level {
 		case health.High:
 			d.High++
@@ -208,7 +203,7 @@ func build(inv *model.Inventory, opt Options) Data {
 		}
 		d.FindingsTotal++
 		if len(d.Findings) < 10 && level != health.Low {
-			d.Findings = append(d.Findings, Finding{str(r, "severity"), level, str(r, "rule"), str(r, "project"), str(r, "resource"), str(r, "detail")})
+			d.Findings = append(d.Findings, Finding{r.Str("severity"), level, r.Str("rule"), r.Str("project"), r.Str("resource"), r.Str("detail")})
 		}
 	}
 	d.KPIs = append(d.KPIs, KPI{Label: i18n.T("Hallazgos altos"), Value: group(float64(d.High), 0),
@@ -226,10 +221,10 @@ func build(inv *model.Inventory, opt Options) Data {
 		d.Costs = d.Costs[:10]
 	}
 
-	for _, r := range rows("gProject") {
-		st := str(r, "scanStatus")
-		if !strings.HasPrefix(st, "OK") {
-			d.Failed = append(d.Failed, str(r, "projectId")+": "+st)
+	for _, r := range inv.Rows("gProject") {
+		st := r.Str("scanStatus")
+		if !schema.ScanOK(st) {
+			d.Failed = append(d.Failed, r.Str("projectId")+": "+st)
 		}
 	}
 
@@ -237,9 +232,9 @@ func build(inv *model.Inventory, opt Options) Data {
 		d.HasDiff = true
 		d.DiffSince = opt.DiffSince.Local().Format(dateLayout())
 		for _, r := range opt.Diff.Sheet("Resumen").Rows {
-			d.Added += int(num(r["added"]))
-			d.Removed += int(num(r["removed"]))
-			d.Modified += int(num(r["modified"]))
+			d.Added += int(model.Num(r["added"]))
+			d.Removed += int(model.Num(r["removed"]))
+			d.Modified += int(model.Num(r["modified"]))
 		}
 		for _, s := range []string{"Altas", "Cambios"} {
 			for _, r := range opt.Diff.Sheet(s).Rows {
@@ -248,16 +243,16 @@ func build(inv *model.Inventory, opt Options) Data {
 				}
 				what := ""
 				if s == "Cambios" {
-					what = str(r, "field") + ": " + str(r, "before") + " → " + str(r, "after")
+					what = r.Str("field") + ": " + r.Str("before") + " → " + r.Str("after")
 				}
-				d.Relevant = append(d.Relevant, Change{str(r, "reason"), str(r, "project"), str(r, "resource"), what})
+				d.Relevant = append(d.Relevant, Change{r.Str("reason"), r.Str("project"), r.Str("resource"), what})
 			}
 		}
 		for _, r := range opt.Diff.Sheet("Metadatos").Rows {
 			// The comparison is labelled in the current language; accept the
 			// Spanish source too.
-			if p := str(r, "property"); p == "Diferencia de coste/mes" || p == i18n.T("Diferencia de coste/mes") {
-				d.CostDelta = str(r, "value")
+			if p := r.Str("property"); p == "Diferencia de coste/mes" || p == i18n.T("Diferencia de coste/mes") {
+				d.CostDelta = r.Str("value")
 			}
 		}
 	}
@@ -337,18 +332,4 @@ func itoa(n int64) string {
 		n /= 10
 	}
 	return string(b)
-}
-
-func str(r model.Row, k string) string { s, _ := r[k].(string); return s }
-
-func num(v any) float64 {
-	switch x := v.(type) {
-	case float64:
-		return x
-	case int64:
-		return float64(x)
-	case int:
-		return float64(x)
-	}
-	return 0
 }

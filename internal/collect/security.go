@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"gcetools/internal/schema"
 	"slices"
 	"strings"
 
@@ -95,7 +96,7 @@ func (c *collector) addSecurity(in *compute.Instance, zone string, meta map[stri
 		secureBoot, vtpm, integrity = s.EnableSecureBoot, s.EnableVtpm, s.EnableIntegrityMonitoring
 	}
 	slices.Sort(encs)
-	c.add(SSecurity, model.Row{
+	c.add(schema.SSecurity, model.Row{
 		"project": c.project, "vm": in.Name, "zone": zone, "status": in.Status, "managedBy": mgd.service,
 		"externalIP": strings.Join(ext, "; "), "internetExposed": false, "exposedPorts": "", "exposingRules": "",
 		"serviceAccount": sa, "defaultSA": strings.HasSuffix(sa, "-compute@developer.gserviceaccount.com"),

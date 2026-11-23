@@ -2,6 +2,7 @@ package collect
 
 import (
 	"fmt"
+	"gcetools/internal/schema"
 	"strings"
 	"time"
 
@@ -42,7 +43,7 @@ func (c *collector) addDisk(d *compute.Disk) {
 	}
 	c.stats.Disks++
 	c.stats.DiskGB += float64(d.SizeGb)
-	c.add(SDisks, model.Row{
+	c.add(schema.SDisks, model.Row{
 		"project": c.project, "name": d.Name, "location": loc, "type": last(d.Type),
 		"sizeGB": float64(d.SizeGb), "status": d.Status, "users": joinLast(d.Users),
 		"orphan": len(d.Users) == 0, "created": ts(d.CreationTimestamp),
@@ -160,7 +161,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		for _, a := range nic.AliasIpRanges {
 			aliases = append(aliases, a.IpCidrRange)
 		}
-		c.add(SNetwork, model.Row{
+		c.add(schema.SNetwork, model.Row{
 			"project": c.project, "vm": in.Name, "zone": zone, "nic": nic.Name, "nicType": nic.NicType,
 			"network": last(nic.Network), "networkProject": projectOf(nic.Network), "subnet": last(nic.Subnetwork),
 			"internalIP": nic.NetworkIP, "aliasRanges": strings.Join(aliases, "; "), "externalIP": ext,
@@ -203,12 +204,12 @@ func (c *collector) addInstance(in *compute.Instance) {
 			}
 		}
 		for _, l := range ad.Licenses {
-			c.add(SLicense, model.Row{
+			c.add(schema.SLicense, model.Row{
 				"project": c.project, "vm": in.Name, "zone": zone, "disk": diskName,
 				"category": i18n.T(licenseCategory(last(l))), "license": last(l), "licenseProject": projectOf(l),
 			})
 		}
-		c.add(SDisk, model.Row{
+		c.add(schema.SDisk, model.Row{
 			"project": c.project, "vm": in.Name, "zone": zone, "deviceName": ad.DeviceName, "disk": diskName,
 			"boot": ad.Boot, "autoDelete": ad.AutoDelete, "mode": ad.Mode, "interface": ad.Interface,
 			"type": dtype, "sizeGB": size, "iops": iops, "throughput": thr, "encryption": enc,
@@ -249,7 +250,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		threads, visible, nested = f.ThreadsPerCore, f.VisibleCoreCount, f.EnableNestedVirtualization
 	}
 
-	c.add(SInfo, model.Row{
+	c.add(schema.SInfo, model.Row{
 		"project": c.project, "name": in.Name, "id": fmt.Sprint(in.Id), "zone": zone, "region": regionOfZone(zone),
 		"status": in.Status, "machineType": mtName, "family": family, "vcpu": vcpu, "memoryGB": memGB,
 		"cpuPlatform": in.CpuPlatform, "provisioning": provisioning, "onHostMaintenance": onHost,
@@ -263,7 +264,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 		"managedBy": mgd.service, "gkeCluster": mgd.cluster, "gkeNodePool": mgd.pool,
 		"hostname": in.Hostname, "selfLink": in.SelfLink,
 	})
-	c.add(SCPU, model.Row{
+	c.add(schema.SCPU, model.Row{
 		"project": c.project, "name": in.Name, "zone": zone, "machineType": mtName, "vcpu": vcpu,
 		"threadsPerCore": threads, "visibleCores": visible, "cpuPlatform": in.CpuPlatform,
 		"minCpuPlatform": in.MinCpuPlatform, "custom": custom, "sharedCore": sharedCore, "nestedVirt": nested,
@@ -273,7 +274,7 @@ func (c *collector) addInstance(in *compute.Instance) {
 	if vcpu > 0 {
 		perVCPU = round2(memGB / float64(vcpu))
 	}
-	c.add(SMemory, model.Row{
+	c.add(schema.SMemory, model.Row{
 		"project": c.project, "name": in.Name, "zone": zone, "machineType": mtName, "memoryGB": memGB,
 		"gbPerVcpu": perVCPU, "custom": custom, "extended": strings.HasSuffix(mtName, "-ext"),
 	})
@@ -298,7 +299,7 @@ func (c *collector) addSnapshot(s *compute.Snapshot) {
 	if t, ok := ts(s.CreationTimestamp).(time.Time); ok {
 		age = int64(c.now.Sub(t).Hours() / 24)
 	}
-	c.add(SSnapshot, model.Row{
+	c.add(schema.SSnapshot, model.Row{
 		"project": c.project, "name": s.Name, "sourceDisk": last(s.SourceDisk),
 		"diskSizeGB": float64(s.DiskSizeGb), "storageGB": round2(float64(s.StorageBytes) / (1 << 30)),
 		"status": s.Status, "created": ts(s.CreationTimestamp), "ageDays": age, "type": s.SnapshotType,
@@ -370,7 +371,7 @@ func (c *collector) addMIG(m *compute.InstanceGroupManager, autoscalers map[stri
 			row["cpuTarget"] = p.CpuUtilization.UtilizationTarget
 		}
 	}
-	c.add(SMIG, row)
+	c.add(schema.SMIG, row)
 }
 
 // ---------- instance templates ----------
@@ -414,7 +415,7 @@ func (c *collector) addTemplate(t *compute.InstanceTemplate) {
 			}
 		}
 	}
-	c.add(STemplate, row)
+	c.add(schema.STemplate, row)
 }
 
 // templateImage splits a template's source image into its name and project.
