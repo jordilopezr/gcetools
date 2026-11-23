@@ -60,7 +60,7 @@ func (c *collector) collectInstances() error {
 	if ok, err := each(c, "Instance", c.addInstance); ok {
 		return err
 	}
-	return c.svc.Instances.AggregatedList(c.project).Context(c.ctx).
+	return c.svc.Instances.AggregatedList(c.project).Fields(instanceFields).Context(c.ctx).
 		Pages(c.ctx, func(page *compute.InstanceAggregatedList) error {
 			for _, scoped := range page.Items {
 				for _, in := range scoped.Instances {
@@ -70,6 +70,19 @@ func (c *collector) collectInstances() error {
 			return nil
 		})
 }
+
+// instanceFields limits the instance listing to what addInstance and
+// addSecurity read. It leaves out, among others, the UEFI certificates of
+// each disk (shieldedInstanceInitialState, several KB per disk), resource
+// status and fingerprints. Metadata cannot be filtered by key, so GKE's
+// kube-env still comes along. Add a field here when a collector starts
+// reading it.
+const instanceFields = "nextPageToken,items/*/instances(" +
+	"name,id,zone,machineType,status,creationTimestamp,lastStartTimestamp,lastStopTimestamp," +
+	"cpuPlatform,minCpuPlatform,hostname,labels,metadata,tags,scheduling,serviceAccounts," +
+	"networkInterfaces,guestAccelerators,shieldedInstanceConfig,confidentialInstanceConfig," +
+	"advancedMachineFeatures,canIpForward,deletionProtection,selfLink," +
+	"disks(boot,deviceName,diskEncryptionKey,diskSizeGb,licenses,source,type,interface,autoDelete,mode))"
 
 // machineType resolves vCPU/RAM for a machine type, caching per zone.
 // Custom types are resolved too. A failed lookup is cached as nil.

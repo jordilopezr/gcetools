@@ -1,9 +1,10 @@
 // Tabs + search + AG Grid for any list of sheets. Used by the inventory and
-// by the comparison page (whose result is also a list of sheets).
+// by the comparison page (whose result is also a list of sheets). Sheets may
+// come without rows: then loadRows fetches the active one when it is opened.
 import { useEffect, useMemo, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef, ICellRendererParams } from 'ag-grid-community'
-import type { Column, Row, Sheet } from '../lib/api'
+import { errorText, type Column, type Row } from '../lib/api'
 import { gridTheme, Icon } from './ui'
 import { locale, sevKey, t } from '../lib/i18n'
 
@@ -50,14 +51,23 @@ function toColDef(c: Column): ColDef<Row> {
 
 const defaultColDef: ColDef<Row> = { sortable: true, filter: true, resizable: true }
 
+// A tab: rows are given, or loaded on demand (count is then the row count).
+export interface SheetView { name: string; title: string; description: string; columns: Column[]; count: number; rows?: Row[] }
+
 interface Props {
-  sheets: Sheet[]
+  sheets: SheetView[]
+  loadRows?: (name: string) => Promise<Row[]>
   emptyText?: string
 }
 
-export default function SheetBrowser({ sheets, emptyText = t('No se encontraron recursos de este tipo en los proyectos escaneados.') }: Props) {
+export default function SheetBrowser({ sheets, loadRows, emptyText = t('No se encontraron recursos de este tipo en los proyectos escaneados.') }: Props) {
   const [active, setActive] = useState(sheets[0]?.name ?? '')
   const [filter, setFilter] = useState('')
+  // Rows fetched with loadRows, by sheet. A new loadRows (another inventory,
+  // or hiding managed VMs) starts over.
+  const [loaded, setLoaded] = useState<Record<string, Row[]>>({})
+  const [loadError, setLoadError] = useState<string | null>(null)
+  useEffect(() => { setLoaded({}); setLoadError(null) }, [loadRows])
   // The grid searches every value of every row: wait until typing pauses.
   const [query, setQuery] = useState('')
   useEffect(() => {
@@ -66,6 +76,16 @@ export default function SheetBrowser({ sheets, emptyText = t('No se encontraron 
   }, [filter])
   const sheet = sheets.find(s => s.name === active) ?? sheets[0]
   const columnDefs = useMemo(() => sheet?.columns.map(toColDef) ?? [], [sheet])
+  const rows = sheet?.rows ?? (sheet ? loaded[sheet.name] : undefined)
+  useEffect(() => {
+    if (!sheet || sheet.rows || !loadRows || loaded[sheet.name]) return
+    let live = true
+    setLoadError(null)
+    loadRows(sheet.name)
+      .then(r => { if (live) setLoaded(l => ({ ...l, [sheet.name]: r })) })
+      .catch(e => { if (live) setLoadError(errorText(e)) })
+    return () => { live = false }
+  }, [sheet, loadRows, loaded])
 
   return <>
     <div className="sheet-tabs" role="tablist" aria-label={t('Pestañas')}>
@@ -73,7 +93,7 @@ export default function SheetBrowser({ sheets, emptyText = t('No se encontraron 
         <button key={s.name} role="tab" aria-selected={s.name === sheet?.name} title={s.description}
           className={`chip ${s.name === sheet?.name ? 'selected' : ''}`} onClick={() => setActive(s.name)}>
           {s.name === sheet?.name && <Icon name="check" size="sm" />}
-          {s.name}<span className="count">{s.rows.length}</span>
+          {s.name}<span className="count">{s.count}</span>
         </button>
       ))}
     </div>
@@ -92,14 +112,18 @@ export default function SheetBrowser({ sheets, emptyText = t('No se encontraron 
     </div>
 
     <div className="grid-wrap">
-      {sheet && sheet.rows.length === 0 && !filter ? (
+      {loadError ? (
+        <div className="empty"><Icon name="error" /><span className="title-m">{t('No se pudo cargar {0}', sheet?.name ?? '')}</span>
+          <span className="body-m">{loadError}</span></div>
+      ) : sheet && sheet.count === 0 && !filter ? (
         <div className="empty"><Icon name="inbox" /><span className="title-m">{t('Sin datos en {0}', sheet.name)}</span>
           <span className="body-m">{emptyText}</span></div>
       ) : (
         <AgGridReact<Row>
           key={sheet?.name}
           theme={gridTheme}
-          rowData={sheet?.rows ?? []}
+          rowData={rows ?? []}
+          loading={!rows}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           quickFilterText={query}

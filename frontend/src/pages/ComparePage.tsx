@@ -49,6 +49,7 @@ function SnapshotCard({ label, hint, snap, onPick, onCurrent, canCurrent, busy }
 export default function ComparePage({ state, setState, hasInventory, notify }: Props) {
   const [busy, setBusy] = useState(false)
   const { before, after, result } = state
+  const views = useMemo(() => result?.sheets.map(s => ({ ...s, count: s.rows.length })) ?? [], [result])
 
   const pick = async (side: 'before' | 'after') => {
     try {
@@ -142,7 +143,7 @@ export default function ComparePage({ state, setState, hasInventory, notify }: P
             <span className="body-m">{t('No hay diferencias en los recursos comparados. Revisa la pestaña Metadatos para ver qué se pudo comparar.')}</span>
           </div>
         )}
-        <SheetBrowser key={`${before?.path}|${after?.path}|${result.meta.finishedAt}`} sheets={result.sheets}
+        <SheetBrowser key={`${before?.path}|${after?.path}|${result.meta.finishedAt}`} sheets={views}
           emptyText={t('Sin diferencias de este tipo.')} />
       </>}
     </div>

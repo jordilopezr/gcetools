@@ -34,6 +34,7 @@ type Profile struct {
 
 	// How to scan.
 	Concurrency int            `json:"concurrency,omitempty"`
+	RPS         float64        `json:"rps,omitempty"` // requests per second per API
 	Modules     core.Modules   `json:"modules"`
 	Health      health.Options `json:"health"`
 

@@ -476,6 +476,7 @@ func init() {
 	add(map[string]string{
 		"moneda no válida: %q (usa un código ISO 4217, p. ej. EUR)": "invalid currency: %q (use an ISO 4217 code, e.g. EUR)",
 		"no existe el escaneo %s en el historial":                   "scan %s is not in the history",
+		"la pestaña %s no existe en este inventario":                "tab %s does not exist in this inventory",
 		"tu sesión de Google no incluye el permiso de lectura de Compute Engine. Cierra la sesión de Google, vuelve a iniciarla y acepta todos los permisos en la pantalla de consentimiento": "your Google session lacks the Compute Engine read permission. Sign out of Google, sign in again and accept all permissions on the consent screen",
 		" (el permiso concedido no cubre esta API: con inicio de sesión con Google, vuelve a iniciar sesión y acepta todos los permisos)":                                                     " (the granted permission does not cover this API: with Google sign-in, sign in again and accept all permissions)",
 		"no disponible con inicio de sesión con Google, clave o impersonación de service account: esta API solo acepta el permiso completo de Google Cloud. Usa gcloud (ADC) para incluirlo":  "not available with Google sign-in, service account key or impersonation: this API only accepts the full Google Cloud permission. Use gcloud (ADC) to include it",

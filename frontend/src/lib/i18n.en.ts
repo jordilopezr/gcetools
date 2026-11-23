@@ -310,4 +310,7 @@ export const en: Record<string, string> = {
   'página de precios de Monitoring': 'Monitoring pricing page',
   'Componentes de terceros': 'Third-party components',
   'Solo con gcloud (ADC)': 'Only with gcloud (ADC)',
+  'Peticiones/s': 'Requests/s',
+  'No se pudo cargar {0}': 'Could not load {0}',
+  'Peticiones por segundo a cada API de Google (Compute admite el triple). Bájalo si aparecen errores de cuota.': 'Requests per second to each Google API (Compute allows three times as many). Lower it if quota errors appear.',
 }

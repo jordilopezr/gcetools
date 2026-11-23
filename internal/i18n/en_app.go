@@ -156,7 +156,7 @@ Exempt a resource:          label gcetools-ignore=<id> (or gcetools-ignore-<id>=
 		"xlsx | csv | json (por defecto según la extensión)":                                                      "xlsx | csv | json (default: from the file extension)",
 		"separador CSV (usa ';' para Excel en español)":                                                           "CSV separator (use ';' for Excel in locales with decimal commas)",
 		"proyectos en paralelo":                                                                                   "projects scanned in parallel",
-		"peticiones por segundo máximas":                                                                          "maximum requests per second",
+		"peticiones por segundo a cada API (Compute admite el triple)":                                            "requests per second to each API (Compute allows three times as many)",
 		"módulos opcionales separados por comas (\"none\" para desactivarlos)":                                    "comma-separated optional modules (\"none\" to disable them)",
 		"días de métricas de Cloud Monitoring":                                                                    "days of Cloud Monitoring metrics",
 		"moneda de los costes estimados (USD, EUR, CLP…)":                                                         "currency of the estimated costs (USD, EUR, CLP…)",

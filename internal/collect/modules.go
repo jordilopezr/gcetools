@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gcetools/internal/model"
@@ -91,12 +92,12 @@ func (c *collector) collectMetrics() error {
 	if days <= 0 {
 		days = 30
 	}
-	cpu, err := c.series(`metric.type="compute.googleapis.com/instance/cpu/utilization" AND resource.type="gce_instance"`, days, 100)
+	cpu, err := c.aggregate(`metric.type="compute.googleapis.com/instance/cpu/utilization" AND resource.type="gce_instance"`, days, 100)
 	if err != nil {
 		return err
 	}
 	// Memory needs the Ops Agent; absence is normal, not an error.
-	mem, err := c.series(`metric.type="agent.googleapis.com/memory/percent_used" AND metric.labels.state="used" AND resource.type="gce_instance"`, days, 1)
+	mem, err := c.aggregate(`metric.type="agent.googleapis.com/memory/percent_used" AND metric.labels.state="used" AND resource.type="gce_instance"`, days, 1)
 	if err != nil && fatal(err) {
 		return err
 	}
@@ -110,18 +111,109 @@ func (c *collector) collectMetrics() error {
 		v := c.vms[id]
 		row := model.Row{
 			"project": c.project, "vm": v.name, "zone": v.zone, "status": v.status, "machineType": v.machineType,
-			"vcpu": v.vcpu, "memoryGB": v.memoryGB, "days": int64(days), "samples": int64(len(cpu[id])),
-			"opsAgent": len(mem[id]) > 0,
+			"vcpu": v.vcpu, "memoryGB": v.memoryGB, "days": int64(days), "samples": cpu[id].hours,
+			"opsAgent": mem[id].hours > 0,
 		}
-		if p := cpu[id]; len(p) > 0 {
-			row["cpuAvg"], row["cpuP95"], row["cpuMax"] = stats(p)
+		if a, ok := cpu[id]; ok && a.hours > 0 {
+			row["cpuAvg"], row["cpuP95"], row["cpuMax"] = round1(a.mean), round1(a.p95), round1(a.max)
 		}
-		if p := mem[id]; len(p) > 0 {
-			row["memAvg"], row["memP95"], row["memMax"] = stats(p)
+		if a, ok := mem[id]; ok && a.hours > 0 {
+			row["memAvg"], row["memP95"], row["memMax"] = round1(a.mean), round1(a.p95), round1(a.max)
 		}
 		c.add(SPerf, row)
 	}
 	return nil
+}
+
+// agg is one VM's statistics over the whole window.
+type agg struct {
+	mean, p95, max float64
+	hours          int64 // hours with data (samples / 60)
+}
+
+// samplePeriod is how often Compute (cpu/utilization) and the Ops Agent
+// (memory/percent_used) write a point.
+const samplePeriod = 60
+
+// aggregate asks Cloud Monitoring for the mean, 95th percentile, maximum
+// and sample count of each instance over the last days, as one point per
+// VM and statistic. Downloading the hourly series instead meant 720 points
+// per VM and metric (about 1.4 GB for 20,000 VMs). The percentile is taken
+// over the raw samples, not over hourly means.
+func (c *collector) aggregate(filter string, days int, scale float64) (map[string]agg, error) {
+	out, err := c.aggregateInAPI(filter, days, scale)
+	if err == nil || c.ctx.Err() != nil {
+		return out, err
+	}
+	if k, _ := Classify(err); k != model.ErrOther {
+		return out, err
+	}
+	// The API refused the long alignment (an invalid argument, not a
+	// permission problem): fall back to downloading hourly means.
+	series, err := c.series(filter, days, scale)
+	out = map[string]agg{}
+	for id, p := range series {
+		if len(p) > 0 {
+			mean, p95, mx := stats(p)
+			out[id] = agg{mean: mean, p95: p95, max: mx, hours: int64(len(p))}
+		}
+	}
+	return out, err
+}
+
+func (c *collector) aggregateInAPI(filter string, days int, scale float64) (map[string]agg, error) {
+	out := map[string]agg{}
+	end := c.now.UTC().Truncate(time.Minute)
+	window := time.Duration(days) * 24 * time.Hour
+	start := end.Add(-window)
+	for _, aligner := range []string{"ALIGN_MEAN", "ALIGN_PERCENTILE_95", "ALIGN_MAX", "ALIGN_COUNT"} {
+		err := c.svcs.Monitoring.Projects.TimeSeries.List("projects/"+c.project).Context(c.ctx).
+			Filter(filter).
+			IntervalStartTime(start.Format(time.RFC3339)).IntervalEndTime(end.Format(time.RFC3339)).
+			AggregationAlignmentPeriod(fmt.Sprintf("%ds", int64(window.Seconds()))).AggregationPerSeriesAligner(aligner).
+			Pages(c.ctx, func(page *monitoring.ListTimeSeriesResponse) error {
+				for _, s := range page.TimeSeries {
+					if s.Resource == nil {
+						continue
+					}
+					id := s.Resource.Labels["instance_id"]
+					a := out[id]
+					for _, p := range s.Points { // normally one; newest first
+						if p.Value == nil {
+							continue
+						}
+						switch aligner {
+						case "ALIGN_COUNT":
+							if p.Value.Int64Value != nil {
+								a.hours += *p.Value.Int64Value * samplePeriod / 3600
+							}
+						default:
+							if p.Value.DoubleValue == nil {
+								continue
+							}
+							v := *p.Value.DoubleValue * scale
+							switch aligner {
+							case "ALIGN_MEAN":
+								a.mean = v
+							case "ALIGN_PERCENTILE_95":
+								a.p95 = v
+							case "ALIGN_MAX":
+								a.max = max(a.max, v)
+							}
+						}
+						if aligner != "ALIGN_COUNT" && aligner != "ALIGN_MAX" {
+							break // newest point only
+						}
+					}
+					out[id] = a
+				}
+				return nil
+			})
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 // series returns hourly means per instance id over the last days, multiplied by scale.
@@ -195,26 +287,53 @@ func (c *collector) collectRecommendations() error {
 		targets = append(targets, target{"global", r})
 	}
 
-	var lastErr error
-	ok := 0
+	// About 30 small calls per project: run a few at a time.
+	const parallel = 4
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		lastErr  error
+		fatalErr error
+		ok       int
+	)
+	sem := make(chan struct{}, parallel)
 	for _, t := range targets {
-		parent := fmt.Sprintf("projects/%s/locations/%s/recommenders/%s", c.project, t.loc, t.rec)
-		err := c.svcs.Recommender.Projects.Locations.Recommenders.Recommendations.List(parent).
-			Filter("stateInfo.state=ACTIVE").Context(c.ctx).
-			Pages(c.ctx, func(page *recommender.GoogleCloudRecommenderV1ListRecommendationsResponse) error {
-				for _, r := range page.Recommendations {
-					c.add(SRecomm, c.recommendationRow(r, t.loc, t.rec))
-				}
-				return nil
-			})
-		if err != nil {
-			if fatal(err) {
-				return err
-			}
-			lastErr = err
-			continue
+		mu.Lock()
+		stop := fatalErr != nil
+		mu.Unlock()
+		if stop || c.ctx.Err() != nil {
+			break
 		}
-		ok++
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			parent := fmt.Sprintf("projects/%s/locations/%s/recommenders/%s", c.project, t.loc, t.rec)
+			err := c.svcs.Recommender.Projects.Locations.Recommenders.Recommendations.List(parent).
+				Filter("stateInfo.state=ACTIVE").Context(c.ctx).
+				Pages(c.ctx, func(page *recommender.GoogleCloudRecommenderV1ListRecommendationsResponse) error {
+					for _, r := range page.Recommendations {
+						c.add(SRecomm, c.recommendationRow(r, t.loc, t.rec))
+					}
+					return nil
+				})
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				ok++
+			case fatal(err):
+				if fatalErr == nil {
+					fatalErr = err
+				}
+			default:
+				lastErr = err
+			}
+		}()
+	}
+	wg.Wait()
+	if fatalErr != nil {
+		return fatalErr
 	}
 	if ok == 0 {
 		return lastErr

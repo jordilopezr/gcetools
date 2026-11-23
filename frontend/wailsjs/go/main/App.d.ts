@@ -5,6 +5,7 @@ import {update} from '../models';
 import {model} from '../models';
 import {core} from '../models';
 import {health} from '../models';
+import {view} from '../models';
 import {history} from '../models';
 import {profile} from '../models';
 import {auth} from '../models';
@@ -37,13 +38,13 @@ export function ExportDiff(arg1:string,arg2:string):Promise<string>;
 
 export function ExportReport():Promise<string>;
 
-export function GetInventory():Promise<model.Inventory>;
-
 export function HealthRules():Promise<Array<health.Rule>>;
 
 export function HistoryDir():Promise<string>;
 
 export function HistorySnapshot(arg1:string):Promise<main.SnapshotInfo>;
+
+export function InventorySummary():Promise<view.Summary>;
 
 export function ListHistory():Promise<Array<history.Summary>>;
 
@@ -63,7 +64,7 @@ export function OAuthStatus():Promise<auth.OAuthStatus>;
 
 export function OAuthUseBuiltin():Promise<auth.OAuthStatus>;
 
-export function OpenHistory(arg1:string):Promise<model.Inventory>;
+export function OpenHistory(arg1:string):Promise<view.Summary>;
 
 export function PickServiceAccountKey():Promise<auth.KeyInfo>;
 
@@ -72,6 +73,8 @@ export function PickSnapshot():Promise<main.SnapshotInfo>;
 export function SaveProfile(arg1:profile.Profile):Promise<void>;
 
 export function SetLanguage(arg1:string):Promise<void>;
+
+export function SheetRows(arg1:string,arg2:boolean):Promise<Array<model.Row>>;
 
 export function StartScan(arg1:Array<string>,arg2:core.ScanOptions):Promise<void>;
 

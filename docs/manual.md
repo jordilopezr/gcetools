@@ -213,7 +213,7 @@ Un perfil guarda una configuración de escaneo para repetirla con un clic (o con
 - el filtro, los proyectos seleccionados y el ámbito de detección;
 - los módulos, días de métricas, moneda, modo rápido y coste real;
 - las reglas de salud y sus umbrales;
-- el paralelismo y el método de autenticación (para el CLI).
+- el paralelismo, las peticiones por segundo y el método de autenticación (para el CLI).
 
 **Guardar perfil** pide un nombre; si ya existe, lo sobrescribe. El selector **Perfil** aplica uno guardado, y el icono de papelera lo elimina tras confirmar.
 
@@ -269,7 +269,8 @@ Detalle de cada regla en [Reglas de salud](#9-reglas-de-salud-ghealth).
 
 ### 6.8 Paralelismo y escaneo
 
-- **Paralelismo:** cuántos proyectos se leen a la vez (8 por defecto). Más paralelismo acaba antes, pero hace más peticiones por segundo. gceTools limita las peticiones (20 por segundo) y reintenta los errores temporales.
+- **Paralelismo:** cuántos proyectos se leen a la vez (8 por defecto). Más paralelismo acaba antes, pero hace más peticiones por segundo.
+- **Peticiones/s:** límite de peticiones por segundo a cada API de Google (20 por defecto). La Compute API admite el triple, porque su cuota se reparte entre los proyectos escaneados. Bájalo si en gErrors aparecen errores de cuota. gceTools reintenta los errores temporales. Dentro de cada proyecto, SO y agentes, métricas y recomendaciones se leen a la vez.
 - **Escanear (N):** empieza el escaneo de los N proyectos seleccionados.
 
 Durante el escaneo se ve:
@@ -493,7 +494,7 @@ CPU y memoria (Cloud Monitoring); la memoria requiere Ops Agent.
 
 Proyecto · VM · Zona · Estado · Machine type · vCPU · RAM (GB) · Días · CPU media (%) · CPU p95 (%) · CPU máx (%) · RAM media (%) · RAM p95 (%) · RAM máx (%) · Ops Agent · Muestras
 
-Los valores se calculan sobre muestras horarias del periodo elegido. **p95** es el valor por debajo del cual está el 95 % del tiempo: es mejor indicador que la media para dimensionar. **Muestras** es el número de horas con datos.
+Cloud Monitoring calcula los valores sobre todas las muestras del periodo elegido (una por minuto) y devuelve solo el resultado, así que el escaneo apenas transfiere datos aunque haya miles de VMs. **p95** es el valor por debajo del cual está el 95 % del tiempo: es mejor indicador que la media para dimensionar. **Muestras** es el número de horas con datos. Hasta la 0.9.1 el p95 se calculaba sobre medias horarias, que suavizan los picos; ahora sale algo más alto en VMs con picos cortos.
 
 #### gRecommend — Recomendaciones *(módulo Recomendaciones)*
 
@@ -847,7 +848,7 @@ gcetools-cli scan [opciones]
 | Opción | Descripción | Por defecto |
 |---|---|---|
 | `--concurrency` | Proyectos en paralelo | 8 |
-| `--rps` | Peticiones por segundo máximas | 20 |
+| `--rps` | Peticiones por segundo a cada API (Compute admite el triple) | 20 |
 
 **Ejemplos:**
 

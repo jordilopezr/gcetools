@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -14,16 +15,50 @@ import (
 // retryTransport rate-limits every request and retries idempotent GETs on
 // 429 / 5xx / network errors with exponential backoff and jitter. All calls
 // made by this tool are GETs, so retrying them is always safe.
+//
+// Each API host has its own limiter, so a slow module (Monitoring,
+// Recommender) does not hold back the Compute listings and the other way
+// round.
 type retryTransport struct {
 	base       http.RoundTripper
-	limiter    *rate.Limiter
+	limiters   *hostLimiters
 	maxRetries int
+}
+
+// computeFactor multiplies the rate for compute.googleapis.com: its read
+// quota is charged to each scanned project, and the scan reads several
+// projects at a time.
+const computeFactor = 3
+
+type hostLimiters struct {
+	rps float64
+	mu  sync.Mutex
+	m   map[string]*rate.Limiter
+}
+
+func newHostLimiters(rps float64) *hostLimiters {
+	return &hostLimiters{rps: rps, m: map[string]*rate.Limiter{}}
+}
+
+func (h *hostLimiters) get(host string) *rate.Limiter {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	l := h.m[host]
+	if l == nil {
+		r := h.rps
+		if host == "compute.googleapis.com" {
+			r *= computeFactor
+		}
+		l = rate.NewLimiter(rate.Limit(r), int(r)+1)
+		h.m[host] = l
+	}
+	return l
 }
 
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	for attempt := 0; ; attempt++ {
-		if err := t.limiter.Wait(ctx); err != nil {
+		if err := t.limiters.get(req.URL.Host).Wait(ctx); err != nil {
 			return nil, err
 		}
 		resp, err := t.base.RoundTrip(req)
@@ -56,7 +91,8 @@ func backoff(attempt int) time.Duration {
 	return d/2 + time.Duration(rand.Int64N(int64(d/2)+1))
 }
 
-// NewHTTPClient returns an authenticated client with rate limiting and retries.
+// NewHTTPClient returns an authenticated client with rate limiting (rps per
+// API, three times that for Compute) and retries.
 func NewHTTPClient(ts oauth2.TokenSource, rps float64) *http.Client {
 	if rps <= 0 {
 		rps = 20
@@ -67,7 +103,7 @@ func NewHTTPClient(ts oauth2.TokenSource, rps float64) *http.Client {
 			Source: ts,
 			Base: &retryTransport{
 				base:       http.DefaultTransport,
-				limiter:    rate.NewLimiter(rate.Limit(rps), int(rps)+1),
+				limiters:   newHostLimiters(rps),
 				maxRetries: 6,
 			},
 		},

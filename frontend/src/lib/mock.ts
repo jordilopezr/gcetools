@@ -1,5 +1,5 @@
 // Mock backend for UI work in a plain browser (no Wails, no GCP).
-import type { Api, Column, Footprint, HealthRule, HistoryEntry, OAuthStatus, Inventory, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
+import type { Api, Column, Footprint, HealthRule, HistoryEntry, OAuthStatus, Inventory, InventorySummary, Meta, Profile, Progress, Project, Row, Sheet, SnapshotInfo } from './api'
 
 const projects: Project[] = [
   ['acme-prod-erp', 'ERP producción', 'folders/1201'], ['acme-prod-web', 'Web producción', 'folders/1201'],
@@ -12,6 +12,41 @@ const projects: Project[] = [
 
 const col = (key: string, title: string, type: Column['type'] = 'string'): Column => ({ key, title, type })
 const pick = <T,>(a: T[], i: number) => a[i % a.length]
+
+// Same rules as the Go view package: tab order, per-VM sheets, figures.
+const sheetOrder = ['gInfo', 'gHealth', 'gSecurity', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
+const vmColumn: Record<string, string> = { gInfo: 'name', gCPU: 'name', gMemory: 'name', gDisk: 'vm', gNetwork: 'vm', gPerf: 'vm', gTools: 'vm', gLicense: 'vm', gHealth: 'resource', gSecurity: 'vm' }
+const managedKeys = (inv: Inventory) => new Set((inv.sheets.find(s => s.name === 'gInfo')?.rows ?? [])
+  .filter(r => ['GKE', 'Dataproc', 'Dataflow', 'Batch'].includes(String(r.managedBy ?? ''))).map(r => `${r.project}/${r.name}`))
+function visibleRows(inv: Inventory, s: Sheet, hide: boolean): Row[] {
+  const col = vmColumn[s.name], managed = managedKeys(inv)
+  return hide && col && managed.size ? s.rows.filter(r => !managed.has(`${r.project}/${r[col]}`)) : s.rows
+}
+function summarize(inv: Inventory): InventorySummary {
+  const rows = (n: string) => inv.sheets.find(s => s.name === n)?.rows ?? []
+  const rank = (n: string) => { const i = sheetOrder.indexOf(n); return i < 0 ? 99 : i }
+  const vms = rows('gInfo')
+  const sum = (rs: Row[], k: string) => rs.reduce((a, r) => a + (Number(r[k]) || 0), 0)
+  const real = rows('gCostReal'), recs = rows('gRecommend')
+  return {
+    meta: inv.meta, managed: managedKeys(inv).size,
+    sheets: [...inv.sheets].sort((a, b) => rank(a.name) - rank(b.name)).map(s => ({
+      name: s.name, title: s.title, description: s.description, columns: s.columns,
+      rows: s.rows.length, rowsUnmanaged: visibleRows(inv, s, true).length,
+    })),
+    stats: {
+      vms: vms.length, running: vms.filter(r => r.status === 'RUNNING').length, vcpu: sum(vms, 'vcpu'), memoryGB: sum(vms, 'memoryGB'),
+      diskGB: sum(rows('gDisks'), 'sizeGB'), orphans: rows('gDisks').filter(r => r.orphan === true).length,
+      high: rows('gHealth').filter(r => r.severity === 'Alta' || r.severity === 'High').length,
+      hasSecurity: inv.sheets.some(s => s.name === 'gSecurity'), exposed: rows('gSecurity').filter(r => r.internetExposed === true).length,
+      costList: sum(rows('gCost').filter(r => r.project !== 'TOTAL'), 'total'),
+      hasCostReal: real.length > 0, costReal: Number(real.find(r => r.project === 'TOTAL')?.net) || 0,
+      costRealMonth: String(real[0]?.month ?? ''), costRealCurrency: String(real[0]?.currency ?? ''),
+      hasSavings: recs.length > 0, savings: recs.reduce((a, r) => a + Math.max(0, Number(r.savingsMonthly) || 0), 0),
+      savingsCurrency: String(recs.find(r => r.currency)?.currency ?? 'USD'),
+    },
+  }
+}
 
 function buildInventory(ids: string[]): Inventory {
   const zones = ['europe-west1-b', 'europe-southwest1-a', 'us-central1-a', 'europe-west4-c']
@@ -237,7 +272,13 @@ export const mockApi: Api = {
     }, 120)
   },
   cancelScan: async () => { clearInterval(timer) },
-  getInventory: async () => inventory,
+  inventorySummary: async () => inventory && summarize(inventory),
+  sheetRows: async (name, hide) => {
+    const s = inventory?.sheets.find(x => x.name === name)
+    if (!inventory || !s) throw new Error(`la pestaña ${name} no existe en este inventario`)
+    await sleep(80)
+    return visibleRows(inventory, s, hide)
+  },
   exportInventory: async (f) => `/home/demo/gcetools-demo.${f === 'csv' ? 'zip' : f}`,
   onProgress: (cb) => on(listeners.progress, cb),
   onDone: (cb) => on(listeners.done, cb),
@@ -293,7 +334,7 @@ export const mockApi: Api = {
     const inv = buildInventory(projects.map(p => p.id))
     inv.meta = { ...inv.meta, startedAt: e.startedAt, finishedAt: e.startedAt }
     inventory = inv
-    return inv
+    return summarize(inv)
   },
   deleteHistory: async (id) => { historyEntries = historyEntries.filter(x => x.id !== id) },
   historySnapshot: async (id) => {

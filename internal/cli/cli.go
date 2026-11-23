@@ -59,7 +59,7 @@ func Run(args []string) int {
 	format := fs.String("format", "", i18n.T("xlsx | csv | json (por defecto según la extensión)"))
 	sep := fs.String("csv-sep", ",", i18n.T("separador CSV (usa ';' para Excel en español)"))
 	conc := fs.Int("concurrency", 8, i18n.T("proyectos en paralelo"))
-	rps := fs.Float64("rps", 20, i18n.T("peticiones por segundo máximas"))
+	rps := fs.Float64("rps", 20, i18n.T("peticiones por segundo a cada API (Compute admite el triple)"))
 	modules := fs.String("modules", "osconfig,monitoring,recommender,pricing", i18n.T("módulos opcionales separados por comas (\"none\" para desactivarlos)"))
 	metricsDays := fs.Int("metrics-days", 30, i18n.T("días de métricas de Cloud Monitoring"))
 	currency := fs.String("currency", "USD", i18n.T("moneda de los costes estimados (USD, EUR, CLP…)"))
@@ -107,6 +107,9 @@ func Run(args []string) int {
 		def("discover", disc, p.Discover)
 		if !set["concurrency"] && p.Concurrency > 0 {
 			*conc = p.Concurrency
+		}
+		if !set["rps"] && p.RPS > 0 {
+			*rps = p.RPS
 		}
 		fmt.Fprint(os.Stderr, i18n.Tf("Perfil: %s\n", p.Name))
 	}

@@ -125,6 +125,7 @@ export namespace core {
 	}
 	export class ScanOptions {
 	    concurrency: number;
+	    rps?: number;
 	    health: health.Options;
 	    modules: Modules;
 	    saveHistory: boolean;
@@ -137,6 +138,7 @@ export namespace core {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.concurrency = source["concurrency"];
+	        this.rps = source["rps"];
 	        this.health = this.convertValues(source["health"], health.Options);
 	        this.modules = this.convertValues(source["modules"], Modules);
 	        this.saveHistory = source["saveHistory"];
@@ -579,6 +581,7 @@ export namespace profile {
 	    projects?: string[];
 	    discover?: string;
 	    concurrency?: number;
+	    rps?: number;
 	    modules: core.Modules;
 	    health: health.Options;
 	    // Go type: time
@@ -598,6 +601,7 @@ export namespace profile {
 	        this.projects = source["projects"];
 	        this.discover = source["discover"];
 	        this.concurrency = source["concurrency"];
+	        this.rps = source["rps"];
 	        this.modules = this.convertValues(source["modules"], core.Modules);
 	        this.health = this.convertValues(source["health"], health.Options);
 	        this.updated = this.convertValues(source["updated"], null);
@@ -647,6 +651,131 @@ export namespace update {
 	        this.notes = source["notes"];
 	        this.published = source["published"];
 	    }
+	}
+
+}
+
+export namespace view {
+	
+	export class SheetInfo {
+	    name: string;
+	    title: string;
+	    description: string;
+	    columns: model.Column[];
+	    rows: number;
+	    rowsUnmanaged: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SheetInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.columns = this.convertValues(source["columns"], model.Column);
+	        this.rows = source["rows"];
+	        this.rowsUnmanaged = source["rowsUnmanaged"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Stats {
+	    vms: number;
+	    running: number;
+	    vcpu: number;
+	    memoryGB: number;
+	    diskGB: number;
+	    orphans: number;
+	    high: number;
+	    hasSecurity: boolean;
+	    exposed: number;
+	    costList: number;
+	    hasCostReal: boolean;
+	    costReal: number;
+	    costRealMonth: string;
+	    costRealCurrency: string;
+	    hasSavings: boolean;
+	    savings: number;
+	    savingsCurrency: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Stats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.vms = source["vms"];
+	        this.running = source["running"];
+	        this.vcpu = source["vcpu"];
+	        this.memoryGB = source["memoryGB"];
+	        this.diskGB = source["diskGB"];
+	        this.orphans = source["orphans"];
+	        this.high = source["high"];
+	        this.hasSecurity = source["hasSecurity"];
+	        this.exposed = source["exposed"];
+	        this.costList = source["costList"];
+	        this.hasCostReal = source["hasCostReal"];
+	        this.costReal = source["costReal"];
+	        this.costRealMonth = source["costRealMonth"];
+	        this.costRealCurrency = source["costRealCurrency"];
+	        this.hasSavings = source["hasSavings"];
+	        this.savings = source["savings"];
+	        this.savingsCurrency = source["savingsCurrency"];
+	    }
+	}
+	export class Summary {
+	    meta: model.Meta;
+	    sheets: SheetInfo[];
+	    stats: Stats;
+	    managed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.meta = this.convertValues(source["meta"], model.Meta);
+	        this.sheets = this.convertValues(source["sheets"], SheetInfo);
+	        this.stats = this.convertValues(source["stats"], Stats);
+	        this.managed = source["managed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

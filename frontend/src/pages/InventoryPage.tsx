@@ -1,64 +1,42 @@
-import { useMemo, useState } from 'react'
-import { api, errorText, type ExportFormat, type Inventory } from '../lib/api'
+import { useCallback, useMemo, useState } from 'react'
+import { api, errorText, type ExportFormat, type InventorySummary } from '../lib/api'
 import { Icon, Menu } from '../components/ui'
-import SheetBrowser, { fmtDate } from '../components/SheetBrowser'
-import { num, sevKey, t } from '../lib/i18n'
+import SheetBrowser, { fmtDate, type SheetView } from '../components/SheetBrowser'
+import { num, t } from '../lib/i18n'
 
-interface Props { inventory: Inventory; notify: (m: string) => void }
+interface Props { inventory: InventorySummary; notify: (m: string) => void }
 
-const primarySheets = ['gInfo', 'gHealth', 'gSecurity', 'gCost', 'gCostReal', 'gRecommend', 'gPerf', 'gTools', 'gDisks', 'gDisk', 'gNetwork', 'gSnapshot', 'gImage', 'gCPU', 'gMemory', 'gLicense', 'gMIG', 'gTemplate', 'gReservation', 'gCommitment', 'gSoleTenant', 'gQuota', 'gVPC', 'gSubnet', 'gFirewall', 'gAddress', 'gProject', 'gErrors', 'gMetaData']
-
-// VMs created by a Google service; MIG members are the user's own and stay visible.
-const serviceManaged = new Set(['GKE', 'Dataproc', 'Dataflow', 'Batch'])
-// Column holding the VM name in each per-VM sheet.
-const vmColumn: Record<string, string> = { gInfo: 'name', gCPU: 'name', gMemory: 'name', gDisk: 'vm', gNetwork: 'vm', gPerf: 'vm', gTools: 'vm', gLicense: 'vm', gHealth: 'resource', gSecurity: 'vm' }
 const HIDE_KEY = 'gcetools.hideManaged'
 
+// The page receives a summary; each tab's rows are fetched when it is opened
+// (see SheetBrowser), so a large inventory never crosses the bridge whole.
 export default function InventoryPage({ inventory, notify }: Props) {
   const [hideManaged, setHideManaged] = useState(() => { try { return localStorage.getItem(HIDE_KEY) === '1' } catch { return false } })
   const toggleManaged = (v: boolean) => { setHideManaged(v); try { localStorage.setItem(HIDE_KEY, v ? '1' : '0') } catch { /* ignore */ } }
-  const managed = useMemo(() => {
-    const vms = inventory.sheets.find(s => s.name === 'gInfo')?.rows ?? []
-    return new Set(vms.filter(r => serviceManaged.has(String(r.managedBy ?? ''))).map(r => `${r.project}/${r.name}`))
-  }, [inventory])
-  const sheets = useMemo(() => {
-    const order = (n: string) => { const i = primarySheets.indexOf(n); return i < 0 ? 99 : i }
-    const sorted = [...inventory.sheets].sort((a, b) => order(a.name) - order(b.name))
-    if (!hideManaged || managed.size === 0) return sorted
-    return sorted.map(s => {
-      const col = vmColumn[s.name]
-      return col ? { ...s, rows: s.rows.filter(r => !managed.has(`${r.project}/${r[col]}`)) } : s
-    })
-  }, [inventory, hideManaged, managed])
+  const hide = hideManaged && inventory.managed > 0
+  const sheets = useMemo<SheetView[]>(() => inventory.sheets.map(s => ({
+    name: s.name, title: s.title, description: s.description, columns: s.columns, count: hide ? s.rowsUnmanaged : s.rows,
+  })), [inventory, hide])
+  // A new function (another inventory, or the managed filter toggled) makes
+  // SheetBrowser drop the rows it had loaded.
+  const loadRows = useCallback((name: string) => api.sheetRows(name, hide), [inventory, hide])
   const [exporting, setExporting] = useState(false)
 
   const stats = useMemo(() => {
-    const rows = (n: string) => inventory.sheets.find(s => s.name === n)?.rows ?? []
-    const vms = rows('gInfo')
-    const sum = (k: string) => vms.reduce((a, r) => a + (Number(r[k]) || 0), 0)
+    const st = inventory.stats
+    const cur = inventory.meta.currency
     return [
-      { k: 'VMs', v: vms.length },
-      { k: t('Encendidas'), v: vms.filter(r => r.status === 'RUNNING').length },
-      { k: 'vCPU', v: sum('vcpu') },
-      { k: 'RAM (GB)', v: Math.round(sum('memoryGB')) },
-      { k: t('Disco total (GB)'), v: Math.round(rows('gDisks').reduce((a, r) => a + (Number(r.sizeGB) || 0), 0)) },
-      { k: t('Discos huérfanos'), v: rows('gDisks').filter(r => r.orphan === true).length, alert: true },
-      { k: t('Hallazgos altos'), v: rows('gHealth').filter(r => sevKey(r.severity) === 'Alta').length, alert: true },
-      ...(inventory.sheets.some(s => s.name === 'gSecurity') ? [{
-        k: t('Expuestas a Internet'), v: rows('gSecurity').filter(r => r.internetExposed === true).length, alert: true,
-      }] : []),
-      ...(inventory.meta.currency ? [{
-        k: t('Coste/mes lista ({0})', inventory.meta.currency),
-        v: Math.round(rows('gCost').filter(r => r.project !== 'TOTAL').reduce((a, r) => a + (Number(r.total) || 0), 0)),
-      }] : []),
-      ...(rows('gCostReal').length ? [{
-        k: t('Coste real/mes {0} ({1})', String(rows('gCostReal')[0]?.month ?? ''), String(rows('gCostReal')[0]?.currency ?? '')),
-        v: Math.round(Number(rows('gCostReal').find(r => r.project === 'TOTAL')?.net) || 0),
-      }] : []),
-      ...(rows('gRecommend').length ? [{
-        k: t('Ahorro estimado/mes ({0})', String(rows('gRecommend').find(r => r.currency)?.currency ?? 'USD')),
-        v: Math.round(rows('gRecommend').reduce((a, r) => a + Math.max(0, Number(r.savingsMonthly) || 0), 0)),
-      }] : []),
+      { k: 'VMs', v: st.vms },
+      { k: t('Encendidas'), v: st.running },
+      { k: 'vCPU', v: st.vcpu },
+      { k: 'RAM (GB)', v: Math.round(st.memoryGB) },
+      { k: t('Disco total (GB)'), v: Math.round(st.diskGB) },
+      { k: t('Discos huérfanos'), v: st.orphans, alert: true },
+      { k: t('Hallazgos altos'), v: st.high, alert: true },
+      ...(st.hasSecurity ? [{ k: t('Expuestas a Internet'), v: st.exposed, alert: true }] : []),
+      ...(cur ? [{ k: t('Coste/mes lista ({0})', cur), v: Math.round(st.costList) }] : []),
+      ...(st.hasCostReal ? [{ k: t('Coste real/mes {0} ({1})', st.costRealMonth, st.costRealCurrency), v: Math.round(st.costReal) }] : []),
+      ...(st.hasSavings ? [{ k: t('Ahorro estimado/mes ({0})', st.savingsCurrency), v: Math.round(st.savings) }] : []),
     ]
   }, [inventory])
 
@@ -114,15 +92,15 @@ export default function InventoryPage({ inventory, notify }: Props) {
         ))}
       </div>
 
-      {managed.size > 0 && (
+      {inventory.managed > 0 && (
         <label className="row body-m" style={{ gap: 10, cursor: 'pointer', alignSelf: 'flex-start' }}>
           <input type="checkbox" checked={hideManaged} onChange={e => toggleManaged(e.target.checked)}
             style={{ width: 18, height: 18, accentColor: 'var(--md-primary)' }} />
-          {t('Ocultar las {0} VMs gestionadas por GKE, Dataproc, Dataflow o Batch', num(managed.size))}
+          {t('Ocultar las {0} VMs gestionadas por GKE, Dataproc, Dataflow o Batch', num(inventory.managed))}
         </label>
       )}
 
-      <SheetBrowser key={m.startedAt} sheets={sheets} />
+      <SheetBrowser key={m.startedAt} sheets={sheets} loadRows={loadRows} />
     </div>
   )
 }

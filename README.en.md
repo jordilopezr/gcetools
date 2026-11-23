@@ -114,7 +114,7 @@ Every scan run from the app is saved automatically (you can turn it off in **His
 
 ### Profiles and discovery with Cloud Asset Inventory
 
-- **Profiles:** in Projects → **Save profile** you store the filter, selected projects, modules, currency, parallelism, discovery scope and authentication method. Apply them from the "Profile" selector or with `--profile`. They hold no secrets: for a service account key only the file path is saved. They live in `profiles.json` inside the user config folder (`~/.config/gcetools` on Linux, `%AppData%\gcetools` on Windows, `~/Library/Application Support/gcetools` on macOS), with 0600 permissions.
+- **Profiles:** in Projects → **Save profile** you store the filter, selected projects, modules, currency, parallelism, requests per second, discovery scope and authentication method. Apply them from the "Profile" selector or with `--profile`. They hold no secrets: for a service account key only the file path is saved. They live in `profiles.json` inside the user config folder (`~/.config/gcetools` on Linux, `%AppData%\gcetools` on Windows, `~/Library/Application Support/gcetools` on macOS), with 0600 permissions.
 - **Detect projects with Compute:** a single Cloud Asset Inventory search over an organization or folder (`organizations/123`, `folders/456`) returns which projects have VMs, disks, snapshots, images, templates, reservations or commitments, and selects only those. In organizations with hundreds or thousands of projects it avoids scanning those that don't use Compute Engine. It needs `roles/cloudasset.viewer` on that scope and the Cloud Asset API enabled in the quota project (or in the service account's project).
 
 ```bash

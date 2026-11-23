@@ -19,6 +19,20 @@ import (
 	recommender "google.golang.org/api/recommender/v1"
 )
 
+// monitoringRefusesWindow makes the fake reject window-long alignments, as
+// an API that does not accept them would, to exercise the hourly fallback.
+var monitoringRefusesWindow bool
+
+// cpuAggregate answers one aligner over the whole window with the values
+// the hourly series below would give: avg ~4.3, p95 2.0, max 50, 210 h.
+func cpuAggregate(aligner string) string {
+	v := map[string]string{
+		"ALIGN_MEAN": `{"doubleValue":0.0433}`, "ALIGN_PERCENTILE_95": `{"doubleValue":0.02}`,
+		"ALIGN_MAX": `{"doubleValue":0.5}`, "ALIGN_COUNT": `{"int64Value":"12600"}`,
+	}[aligner]
+	return `{"timeSeries":[{"resource":{"type":"gce_instance","labels":{"instance_id":"42"}},"points":[{"value":` + v + `}]}]}`
+}
+
 // hourly CPU points: 200 at 2% and 10 at 50% -> avg ~4.3, p95 2.0, max 50
 func cpuSeries() string {
 	pts := ""
@@ -77,8 +91,19 @@ func fakeServices(t *testing.T) Services {
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/v3/projects/p1/timeSeries") {
-			if strings.Contains(r.URL.Query().Get("filter"), "cpu/utilization") {
-				w.Write([]byte(cpuSeries()))
+			q := r.URL.Query()
+			hourly := q.Get("aggregation.alignmentPeriod") == "3600s"
+			if !hourly && monitoringRefusesWindow {
+				w.WriteHeader(400)
+				w.Write([]byte(`{"error":{"code":400,"message":"alignment period too long","status":"INVALID_ARGUMENT"}}`))
+				return
+			}
+			if strings.Contains(q.Get("filter"), "cpu/utilization") {
+				if hourly {
+					w.Write([]byte(cpuSeries()))
+				} else {
+					w.Write([]byte(cpuAggregate(q.Get("aggregation.perSeriesAligner"))))
+				}
 			} else {
 				w.Write([]byte(`{}`)) // no Ops Agent memory series
 			}
@@ -184,7 +209,7 @@ func TestOptionalModules(t *testing.T) {
 	if len(perf) != 1 {
 		t.Fatalf("gPerf = %v", perf)
 	}
-	if p := perf[0]; p["cpuP95"] != 2.0 || p["cpuMax"] != 50.0 || p["samples"] != int64(210) || p["opsAgent"] != false {
+	if p := perf[0]; p["cpuAvg"] != 4.3 || p["cpuP95"] != 2.0 || p["cpuMax"] != 50.0 || p["samples"] != int64(210) || p["opsAgent"] != false {
 		t.Errorf("gPerf row = %v", p)
 	}
 	rec := inv.Sheet(SRecomm).Rows
@@ -343,5 +368,26 @@ func TestInstanceMetadataOverrides(t *testing.T) {
 	}
 	if countKeys(map[string]string{"ssh-keys": "a:x\n\nb:y\n", "sshKeys": "c:z"}) != 3 {
 		t.Error("countKeys")
+	}
+}
+
+// If Monitoring rejects the window-long alignment, the hourly series are
+// downloaded instead and give the same statistics.
+func TestMetricsFallbackToHourly(t *testing.T) {
+	monitoringRefusesWindow = true
+	defer func() { monitoringRefusesWindow = false }()
+	inv := NewInventory()
+	Project(context.Background(), fakeServices(t), "p1", inv, func(string) {})
+	perf := inv.Sheet(SPerf).Rows
+	if len(perf) != 1 {
+		t.Fatalf("gPerf = %v", perf)
+	}
+	if p := perf[0]; p["cpuAvg"] != 4.3 || p["cpuP95"] != 2.0 || p["cpuMax"] != 50.0 || p["samples"] != int64(210) {
+		t.Errorf("gPerf row = %v", p)
+	}
+	for _, e := range inv.Errors {
+		if e.Collector == "monitoring" {
+			t.Errorf("unexpected error %v", e)
+		}
 	}
 }

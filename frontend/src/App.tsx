@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, CURRENT, errorText, type AboutInfo, type Inventory, type Progress, type SessionInfo } from './lib/api'
+import { api, CURRENT, errorText, type AboutInfo, type InventorySummary, type Progress, type SessionInfo } from './lib/api'
 import { Icon, Snackbar, Menu } from './components/ui'
 import appIcon from './assets/gcetools-icon-small.svg' // simplified variant for small sizes
 import ConnectPage from './pages/ConnectPage'
@@ -30,7 +30,7 @@ function loadTheme(): Theme {
 export default function App() {
   const [page, setPage] = useState<Page>('connect')
   const [session, setSession] = useState<SessionInfo | null>(null)
-  const [inventory, setInventory] = useState<Inventory | null>(null)
+  const [inventory, setInventory] = useState<InventorySummary | null>(null)
   const [scan, setScan] = useState<ScanState>({ running: false, progress: null, log: [] })
   const [snack, setSnack] = useState<string | null>(null)
   const [theme, setTheme] = useState<Theme>(loadTheme)
@@ -45,7 +45,7 @@ export default function App() {
   const setLang = async (l: Lang) => {
     storeLang(l)
     try { await api.setLanguage(l) } catch { /* older backend: UI only */ }
-    if (inventory) { try { setInventory(await api.getInventory() ?? inventory) } catch { /* keep */ } }
+    if (inventory) { try { setInventory(await api.inventorySummary() ?? inventory) } catch { /* keep */ } }
     setLangState(l)
   }
   useEffect(() => { api.setLanguage(getLang()).catch(() => { /* older backend */ }) }, [])
@@ -93,7 +93,7 @@ export default function App() {
       // a comparison against the previous in-memory inventory is now stale
       setCompare(c => c.after?.path === CURRENT ? { ...c, after: null, result: null } : c)
       try {
-        setInventory(await api.getInventory())
+        setInventory(await api.inventorySummary())
         setPage('inventory')
         const done = meta.cancelled ? t('Escaneo cancelado: se muestran resultados parciales') : t('Escaneo completado')
         setSnack(scanWarning.current ? `${done}. ${scanWarning.current}` : done)

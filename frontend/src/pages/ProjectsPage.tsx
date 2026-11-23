@@ -36,6 +36,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
   const [manual, setManual] = useState('')
   const [selected, setSelected] = useState<string[]>([])
   const [concurrency, setConcurrency] = useState(8)
+  const [rps, setRps] = useState(20)
   const [modules, setModules] = useState<Modules>({ osconfig: true, monitoring: true, recommender: true, metricsDays: 30, pricing: true, currency: 'USD' })
   const toggle = (k: 'osconfig' | 'monitoring' | 'recommender' | 'pricing') => setModules(m => ({ ...m, [k]: !m[k] }))
   // These APIs only accept the full cloud-platform scope, which only gcloud
@@ -120,7 +121,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     const p = profiles.find(x => x.name === name)
     if (!p) return
     const q = p.query ?? ''
-    setQuery(q); setModules(p.modules); setConcurrency(p.concurrency || 8)
+    setQuery(q); setModules(p.modules); setConcurrency(p.concurrency || 8); setRps(p.rps || 20)
     setHealth({ ...defaultHealth, ...p.health, disabled: p.health?.disabled ?? [] }); setFootprint(null)
     if (p.discover) setScope(p.discover)
     const ids = p.projects ?? []
@@ -139,7 +140,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
     const sameAsDiscovery = withCompute && JSON.stringify([...selected].sort()) === JSON.stringify(withCompute)
     const p: Profile = {
       name: name.trim(), query, projects: selected.length === projects.length || sameAsDiscovery ? [] : selected,
-      discover: footprint ? scope.trim() : '', concurrency, modules, health,
+      discover: footprint ? scope.trim() : '', concurrency, rps, modules, health,
       auth: session.method, impersonate: session.method === 'impersonate' ? session.identity : '',
     }
     try {
@@ -169,7 +170,7 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
       onScanStart()
       const sc = scope.trim()
       const fastScope = modules.fast && /^(organizations|folders)\/\d+$/.test(sc) ? sc : ''
-      await api.startScan(selected, { concurrency, health, modules: { ...modules, fastScope }, saveHistory: loadSaveHistory(), profile: profileName })
+      await api.startScan(selected, { concurrency, rps, health, modules: { ...modules, fastScope }, saveHistory: loadSaveHistory(), profile: profileName })
     } catch (e) { notify(errorText(e)) }
   }
 
@@ -411,6 +412,13 @@ export default function ProjectsPage({ session, scan, onScanStart, notify }: Pro
           {t('Paralelismo')}
           <select value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} style={selectStyle}>
             {[2, 4, 8, 16, 32].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <label className="row body-m" style={{ gap: 8 }}
+          title={t('Peticiones por segundo a cada API de Google (Compute admite el triple). Bájalo si aparecen errores de cuota.')}>
+          {t('Peticiones/s')}
+          <select value={rps} onChange={e => setRps(Number(e.target.value))} style={selectStyle}>
+            {[5, 10, 20, 40, 80].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <button className="btn filled" disabled={selected.length === 0 || scan.running} onClick={start}>

@@ -15,6 +15,16 @@ export interface Meta {
   startedAt: string; finishedAt: string; projects: number; projectsOk: number; errors: number; cancelled: boolean; currency?: string
 }
 export interface Inventory { meta: Meta; sheets: Sheet[]; errors: ScanError[] }
+// The inventory page gets a summary first and then one sheet at a time: a
+// large inventory sent whole is hundreds of MB through the Wails bridge.
+export interface SheetInfo { name: string; title: string; description: string; columns: Column[]; rows: number; rowsUnmanaged: number }
+export interface InventoryStats {
+  vms: number; running: number; vcpu: number; memoryGB: number; diskGB: number; orphans: number; high: number
+  hasSecurity: boolean; exposed: number; costList: number
+  hasCostReal: boolean; costReal: number; costRealMonth: string; costRealCurrency: string
+  hasSavings: boolean; savings: number; savingsCurrency: string
+}
+export interface InventorySummary { meta: Meta; sheets: SheetInfo[]; stats: InventoryStats; managed: number }
 export interface Project {
   id: string; number: string; name: string; parent: string; state: string; created: string
   labels: Record<string, string> | null
@@ -36,7 +46,7 @@ export interface HealthOptions {
   disabled: string[]
 }
 export interface HealthRule { id: string; title: string; category: string; severity: string; param?: string; labels: string }
-export interface ScanOptions { concurrency: number; health: HealthOptions; modules: Modules; saveHistory?: boolean; profile?: string }
+export interface ScanOptions { concurrency: number; rps?: number; health: HealthOptions; modules: Modules; saveHistory?: boolean; profile?: string }
 export interface HistoryEntry {
   id: string; startedAt: string; identity: string; version: string; profile: string
   projects: number; projectsOk: number; cancelled: boolean
@@ -48,7 +58,7 @@ export interface Footprint { projectId: string; number: string; vms: number; run
 export interface Profile {
   name: string; auth?: string; keyPath?: string; impersonate?: string
   query?: string; projects?: string[]; discover?: string
-  concurrency?: number; modules: Modules; health: HealthOptions; updated?: string
+  concurrency?: number; rps?: number; modules: Modules; health: HealthOptions; updated?: string
 }
 export interface AboutInfo { version: string; website: string; donate: string; license: string; licenseUrl: string; releases: string }
 export interface UpdateInfo { current: string; latest: string; available: boolean; url: string; notes: string; published: string }
@@ -68,7 +78,8 @@ export interface Api {
   listProjects(query: string): Promise<Project[]>
   startScan(ids: string[], opt: ScanOptions): Promise<void>
   cancelScan(): Promise<void>
-  getInventory(): Promise<Inventory | null>
+  inventorySummary(): Promise<InventorySummary | null>
+  sheetRows(name: string, hideManaged: boolean): Promise<Row[]>
   exportInventory(format: ExportFormat, csvSep: string): Promise<string>
   onProgress(cb: (p: Progress) => void): () => void
   onDone(cb: (m: Meta) => void): () => void
@@ -87,7 +98,7 @@ export interface Api {
   discover(scope: string): Promise<Footprint[]>
   healthRules(): Promise<HealthRule[]>
   listHistory(): Promise<HistoryEntry[]>
-  openHistory(id: string): Promise<Inventory>
+  openHistory(id: string): Promise<InventorySummary>
   deleteHistory(id: string): Promise<void>
   historySnapshot(id: string): Promise<SnapshotInfo>
   historyDir(): Promise<string>
@@ -125,7 +136,8 @@ const wailsApi: Api = {
   listProjects: async (q) => (await App.ListProjects(q)) ?? [],
   startScan: (ids, opt) => App.StartScan(ids, opt as never),
   cancelScan: () => App.CancelScan(),
-  getInventory: async () => ((await App.GetInventory()) as unknown as Inventory) ?? null,
+  inventorySummary: async () => ((await App.InventorySummary()) as unknown as InventorySummary) ?? null,
+  sheetRows: async (name, hide) => ((await App.SheetRows(name, hide)) as unknown as Row[]) ?? [],
   exportInventory: (f, sep) => App.Export(f, sep),
   onProgress: (cb) => EventsOn('scan:progress', cb),
   onDone: (cb) => EventsOn('scan:done', cb),
@@ -144,7 +156,7 @@ const wailsApi: Api = {
   discover: async (scope) => ((await App.Discover(scope)) as unknown as Footprint[]) ?? [],
   healthRules: async () => ((await App.HealthRules()) as unknown as HealthRule[]) ?? [],
   listHistory: async () => ((await App.ListHistory()) as unknown as HistoryEntry[]) ?? [],
-  openHistory: async (id) => (await App.OpenHistory(id)) as unknown as Inventory,
+  openHistory: async (id) => (await App.OpenHistory(id)) as unknown as InventorySummary,
   deleteHistory: (id) => App.DeleteHistory(id),
   historySnapshot: async (id) => (await App.HistorySnapshot(id)) as unknown as SnapshotInfo,
   historyDir: () => App.HistoryDir(),

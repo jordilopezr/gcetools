@@ -174,7 +174,12 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 
 	failed := 0
 	var skipped []string
+	var optional []step
 	for i, st := range steps {
+		if st.optional {
+			optional = append(optional, st)
+			continue
+		}
 		if ctx.Err() != nil {
 			c.stats.Status = i18n.T("Cancelado")
 			return c.stats
@@ -190,10 +195,6 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 		}
 		kind, msg := Classify(err)
 		inv.AddError(model.ScanError{Project: projectID, Collector: st.name, Kind: kind, Message: msg})
-		if st.optional {
-			skipped = append(skipped, st.name)
-			continue
-		}
 		failed++
 		// If the very first call is refused, the rest will be too: stop early.
 		if i == 0 && kind != model.ErrOther {
@@ -204,6 +205,34 @@ func Project(ctx context.Context, svcs Services, projectID string, inv *model.In
 			}[kind]
 			return c.stats
 		}
+	}
+	// The optional modules only read what the Compute steps collected and
+	// call different APIs, so they run at the same time.
+	errs := make([]error, len(optional))
+	var wg sync.WaitGroup
+	for i, st := range optional {
+		if ctx.Err() != nil {
+			break
+		}
+		report(st.name)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = st.fn()
+		}()
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		c.stats.Status = i18n.T("Cancelado")
+		return c.stats
+	}
+	for i, st := range optional {
+		if errs[i] == nil {
+			continue
+		}
+		kind, msg := Classify(errs[i])
+		inv.AddError(model.ScanError{Project: projectID, Collector: st.name, Kind: kind, Message: msg})
+		skipped = append(skipped, st.name)
 	}
 	switch {
 	case failed > 0:

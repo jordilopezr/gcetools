@@ -24,6 +24,7 @@ import (
 	"gcetools/internal/profile"
 	"gcetools/internal/report"
 	"gcetools/internal/update"
+	"gcetools/internal/view"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -261,11 +262,34 @@ func (a *App) CancelScan() {
 	}
 }
 
-func (a *App) GetInventory() *model.Inventory {
+// InventorySummary describes the current inventory (sheets, row counts,
+// headline figures) without its rows; SheetRows sends one sheet at a time.
+// Nil when there is no inventory.
+func (a *App) InventorySummary() *view.Summary {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.inv == nil {
+		return nil
+	}
 	collect.Relabel(a.inv)
-	return a.inv
+	s := view.Summarize(a.inv)
+	return &s
+}
+
+// SheetRows returns the rows of one sheet of the current inventory, without
+// the VMs created by GKE, Dataproc, Dataflow or Batch when hideManaged.
+func (a *App) SheetRows(name string, hideManaged bool) ([]model.Row, error) {
+	a.mu.Lock()
+	inv := a.inv
+	a.mu.Unlock()
+	if inv == nil {
+		return nil, errors.New(i18n.T("no hay inventario: escanea o abre uno del historial"))
+	}
+	rows := view.Rows(inv, name, hideManaged)
+	if rows == nil {
+		return nil, fmt.Errorf(i18n.T("la pestaña %s no existe en este inventario"), name)
+	}
+	return rows, nil
 }
 
 // Export asks for a destination and writes the last inventory.
@@ -498,8 +522,9 @@ const HistoryPrefix = "history:"
 
 func (a *App) ListHistory() ([]history.Summary, error) { return history.List() }
 
-// OpenHistory loads a stored scan as the current inventory.
-func (a *App) OpenHistory(id string) (*model.Inventory, error) {
+// OpenHistory loads a stored scan as the current inventory and returns its
+// summary.
+func (a *App) OpenHistory(id string) (*view.Summary, error) {
 	inv, err := history.Load(id)
 	if err != nil {
 		return nil, err
@@ -508,7 +533,8 @@ func (a *App) OpenHistory(id string) (*model.Inventory, error) {
 	a.mu.Lock()
 	a.inv = inv
 	a.mu.Unlock()
-	return inv, nil
+	s := view.Summarize(inv)
+	return &s, nil
 }
 
 func (a *App) DeleteHistory(id string) error { return history.Delete(id) }

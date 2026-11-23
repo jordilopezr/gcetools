@@ -58,10 +58,6 @@ export function ExportReport() {
   return window['go']['main']['App']['ExportReport']();
 }
 
-export function GetInventory() {
-  return window['go']['main']['App']['GetInventory']();
-}
-
 export function HealthRules() {
   return window['go']['main']['App']['HealthRules']();
 }
@@ -72,6 +68,10 @@ export function HistoryDir() {
 
 export function HistorySnapshot(arg1) {
   return window['go']['main']['App']['HistorySnapshot'](arg1);
+}
+
+export function InventorySummary() {
+  return window['go']['main']['App']['InventorySummary']();
 }
 
 export function ListHistory() {
@@ -128,6 +128,10 @@ export function SaveProfile(arg1) {
 
 export function SetLanguage(arg1) {
   return window['go']['main']['App']['SetLanguage'](arg1);
+}
+
+export function SheetRows(arg1, arg2) {
+  return window['go']['main']['App']['SheetRows'](arg1, arg2);
 }
 
 export function StartScan(arg1, arg2) {

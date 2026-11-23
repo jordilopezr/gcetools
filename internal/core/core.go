@@ -32,7 +32,7 @@ import (
 // Version is overridden at release build time:
 //
 //	-ldflags "-X gcetools/internal/core.Version=1.2.3"
-var Version = "0.9.1"
+var Version = "0.9.2"
 
 type Engine struct {
 	Session *auth.Session
@@ -108,9 +108,12 @@ func AllModules() Modules {
 }
 
 type ScanOptions struct {
-	Concurrency int            `json:"concurrency"`
-	Health      health.Options `json:"health"`
-	Modules     Modules        `json:"modules"`
+	Concurrency int `json:"concurrency"`
+	// RPS overrides the requests per second per API for this scan (0 = the
+	// engine's own, 20 by default; Compute gets three times that).
+	RPS     float64        `json:"rps,omitempty"`
+	Health  health.Options `json:"health"`
+	Modules Modules        `json:"modules"`
 	// SaveHistory stores the result in the local history (the app does it,
 	// the CLI with --save-history); Profile labels that history entry.
 	SaveHistory bool   `json:"saveHistory"`
@@ -132,6 +135,9 @@ type Progress struct {
 func (e *Engine) Scan(ctx context.Context, projects []Project, opt ScanOptions, onProgress func(Progress)) (*model.Inventory, error) {
 	if opt.Concurrency <= 0 {
 		opt.Concurrency = 8
+	}
+	if opt.RPS > 0 {
+		e = &Engine{Session: e.Session, Client: NewHTTPClient(e.Session.TokenSource, opt.RPS)}
 	}
 	// Without cloud-platform these APIs refuse every call: switch them off
 	// and say why once, instead of one permission error per project.

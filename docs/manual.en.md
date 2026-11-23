@@ -213,7 +213,7 @@ A profile saves a scan configuration so you can repeat it with one click (or wit
 - the filter, the selected projects and the detection scope;
 - the modules, metrics days, currency, fast mode and actual cost;
 - the health rules and their thresholds;
-- the parallelism and the authentication method (for the CLI).
+- the parallelism, the requests per second and the authentication method (for the CLI).
 
 **Save profile** asks for a name; if it already exists, it's overwritten. The **Profile** selector applies a saved profile, and the trash icon deletes it after confirmation.
 
@@ -269,7 +269,8 @@ Details of each rule in [Health rules](#9-health-rules-ghealth).
 
 ### 6.8 Parallelism and scanning
 
-- **Parallelism:** how many projects are read at the same time (8 by default). More parallelism finishes sooner but makes more requests per second. gceTools rate-limits requests (20 per second) and retries transient errors.
+- **Parallelism:** how many projects are read at the same time (8 by default). More parallelism finishes sooner but makes more requests per second.
+- **Requests/s:** the limit of requests per second to each Google API (20 by default). The Compute API allows three times as many, because its quota is spread across the scanned projects. Lower it if quota errors appear in gErrors. gceTools retries transient errors. Within each project, OS and agents, metrics and recommendations are read at the same time.
 - **Scan (N):** starts scanning the N selected projects.
 
 During the scan you see:
@@ -493,7 +494,7 @@ CPU and memory (Cloud Monitoring); memory requires the Ops Agent.
 
 Project · VM · Zone · Status · Machine type · vCPU · RAM (GB) · Days · CPU avg (%) · CPU p95 (%) · CPU max (%) · RAM avg (%) · RAM p95 (%) · RAM max (%) · Ops Agent · Samples
 
-Values are calculated from hourly samples over the chosen period. **p95** is the value below which the metric stays 95% of the time: it's a better sizing indicator than the average. **Samples** is the number of hours with data.
+Cloud Monitoring computes the values over every sample in the chosen period (one per minute) and returns only the result, so the scan transfers almost no data even with thousands of VMs. **p95** is the value below which the metric stays 95% of the time: it's a better sizing indicator than the average. **Samples** is the number of hours with data. Up to 0.9.1 p95 was computed over hourly averages, which smooth out spikes; it now comes out somewhat higher on VMs with short spikes.
 
 #### gRecommend — Recommendations *(Recommendations module)*
 
@@ -847,7 +848,7 @@ gcetools-cli scan [options]
 | Option | Description | Default |
 |---|---|---|
 | `--concurrency` | Projects in parallel | 8 |
-| `--rps` | Maximum requests per second | 20 |
+| `--rps` | Requests per second to each API (Compute allows three times as many) | 20 |
 
 **Examples:**
 
