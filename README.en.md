@@ -85,7 +85,7 @@ In organizations with many projects, **fast mode** (Projects → **Fast mode (Cl
 - Reservations, commitments, sole-tenant nodes, quotas, project metadata and the optional modules (OS Config, Monitoring, Recommender) are still read per project, because CAI does not include them or lacks that data.
 - **Delay:** CAI can take a few minutes to reflect recent changes; gMetaData records that the scan used fast mode.
 - If CAI fails for a project (permissions, disabled API), that project is read through the Compute API and the reason is logged in gErrors.
-- It needs `roles/cloudasset.viewer` on the scope and the Cloud Asset API enabled in the quota project (or in the project of the service account or OAuth client).
+- It needs gcloud credentials (ADC), `roles/cloudasset.viewer` on the scope and the Cloud Asset API enabled in the quota project.
 
 ```bash
 gcetools-cli scan --discover organizations/123456 --fast --out inventory.xlsx
@@ -115,7 +115,7 @@ Every scan run from the app is saved automatically (you can turn it off in **His
 ### Profiles and discovery with Cloud Asset Inventory
 
 - **Profiles:** in Projects → **Save profile** you store the filter, selected projects, modules, currency, parallelism, requests per second, discovery scope and authentication method. Apply them from the "Profile" selector or with `--profile`. They hold no secrets: for a service account key only the file path is saved. They live in `profiles.json` inside the user config folder (`~/.config/gcetools` on Linux, `%AppData%\gcetools` on Windows, `~/Library/Application Support/gcetools` on macOS), with 0600 permissions.
-- **Detect projects with Compute:** a single Cloud Asset Inventory search over an organization or folder (`organizations/123`, `folders/456`) returns which projects have VMs, disks, snapshots, images, templates, reservations or commitments, and selects only those. In organizations with hundreds or thousands of projects it avoids scanning those that don't use Compute Engine. It needs `roles/cloudasset.viewer` on that scope and the Cloud Asset API enabled in the quota project (or in the service account's project).
+- **Detect projects with Compute:** a single Cloud Asset Inventory search over an organization or folder (`organizations/123`, `folders/456`) returns which projects have VMs, disks, snapshots, images, templates, reservations or commitments, and selects only those. In organizations with hundreds or thousands of projects it avoids scanning those that don't use Compute Engine. It needs gcloud credentials (ADC), `roles/cloudasset.viewer` on that scope and the Cloud Asset API enabled in the quota project.
 
 ```bash
 gcetools-cli scan --discover organizations/123456 --out inventory.json
@@ -205,15 +205,15 @@ Every package also includes `gcetools-cli`, the console version for scheduled ta
 On Linux:
 
 ```bash
-sudo apt install ./gcetools-0.8.0-linux-amd64.deb
+sudo apt install ./gcetools-0.9.3-linux-amd64.deb
 ```
 
 ```bash
-sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.9.3-linux-x86_64.rpm
 ```
 
 ```bash
-chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
+chmod +x gcetools-0.9.3-linux-x86_64.AppImage && ./gcetools-0.9.3-linux-x86_64.AppImage
 ```
 
 The `.deb` and `.rpm` install `gcetools` and `gcetools-cli` in `/usr/bin` and add gceTools to the applications menu. The AppImage does not bundle GTK or WebKitGTK: it uses the system ones.
@@ -321,7 +321,7 @@ For reference, a scan requests about 2 Monitoring series per VM (CPU and RAM): w
 - Minimum: `roles/compute.viewer` and `roles/browser` (at organization or folder level for a global view).
 - gTools: `roles/osconfig.inventoryViewer`, with the OS Config API enabled in the project and the agent on the VMs.
 - gPerf: `roles/monitoring.viewer`.
-- Discovery and fast mode with Cloud Asset Inventory: `roles/cloudasset.viewer` on the organization, folder or project.
+- Discovery and fast mode with Cloud Asset Inventory: `roles/cloudasset.viewer` on the organization, folder or project (gcloud credentials only).
 - Actual cost: `roles/bigquery.jobUser` on the billing table's project and `roles/bigquery.dataViewer` on its dataset.
 - gRecommend: `roles/recommender.computeViewer`. With user credentials Google requires a quota project: the ADC `quota_project_id` is used (`gcloud auth application-default set-quota-project <project>`), which must have the Recommender API enabled.
 - gSecurity with Shared VPC: the host project must be in the scan (with `roles/compute.viewer`) to assess Internet exposure for VMs in service projects.

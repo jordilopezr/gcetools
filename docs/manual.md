@@ -69,19 +69,19 @@ xattr -dr com.apple.quarantine /Applications/gceTools.app
 **Debian / Ubuntu:**
 
 ```bash
-sudo apt install ./gcetools-0.8.0-linux-amd64.deb
+sudo apt install ./gcetools-0.9.3-linux-amd64.deb
 ```
 
 **Fedora / RHEL / openSUSE:**
 
 ```bash
-sudo dnf install ./gcetools-0.8.0-linux-x86_64.rpm
+sudo dnf install ./gcetools-0.9.3-linux-x86_64.rpm
 ```
 
 **AppImage:**
 
 ```bash
-chmod +x gcetools-0.8.0-linux-x86_64.AppImage && ./gcetools-0.8.0-linux-x86_64.AppImage
+chmod +x gcetools-0.9.3-linux-x86_64.AppImage && ./gcetools-0.9.3-linux-x86_64.AppImage
 ```
 
 El `.deb` y el `.rpm` instalan `gcetools` y `gcetools-cli` en `/usr/bin` y añaden gceTools al menú de aplicaciones.
@@ -135,6 +135,8 @@ La opción recomendada: no hace falta instalar gcloud.
 3. El navegador muestra "Sesión iniciada"; ya puedes cerrar esa pestaña. La app se conecta sola.
 
 La sesión (un token de refresco) se guarda **en el llavero del sistema**: Credential Manager en Windows, Keychain en macOS o Secret Service (GNOME Keyring, KWallet) en Linux. Al volver a abrir gceTools ya estás conectado: aparece **Sesión guardada** con tu cuenta.
+
+Con este método no están disponibles el modo rápido, la detección de proyectos, las recomendaciones ni SO y agentes: ver [Módulos opcionales](#64-módulos-opcionales).
 
 - **Cerrar sesión** borra el token del llavero. También puedes revocar el acceso desde [tu cuenta de Google](https://myaccount.google.com/permissions).
 - **Cancelar**, mientras esperas al navegador, aborta el inicio de sesión.
@@ -200,7 +202,7 @@ Al entrar se listan todos los proyectos activos que ve la identidad, con su Proj
 
 ### 6.2 Detectar proyectos con Compute (Cloud Asset Inventory)
 
-En organizaciones grandes muchos proyectos no usan Compute Engine. Escribe un ámbito (`organizations/123456` o `folders/456`) y pulsa **Detectar proyectos con Compute**.
+En organizaciones grandes muchos proyectos no usan Compute Engine. Escribe un ámbito (`organizations/123456` o `folders/456`) y pulsa **Detectar proyectos con Compute**. Solo con credenciales de gcloud (ADC): con los demás métodos la app lo muestra desactivado ([Módulos opcionales](#64-módulos-opcionales)).
 
 - Una sola consulta a Cloud Asset Inventory devuelve qué proyectos tienen VMs, discos, snapshots, imágenes, templates, reservas o commitments.
 - Solo se seleccionan esos, y la tabla gana columnas con lo que encontró en cada uno: VMs (CAI), discos y otros.
@@ -217,7 +219,7 @@ Un perfil guarda una configuración de escaneo para repetirla con un clic (o con
 
 **Guardar perfil** pide un nombre; si ya existe, lo sobrescribe. El selector **Perfil** aplica uno guardado, y el icono de papelera lo elimina tras confirmar.
 
-Los perfiles **no guardan secretos**: de una clave de service account solo se guarda la ruta del archivo. Se almacenan en `profiles.json`, en la carpeta de configuración del usuario.
+Los perfiles **no guardan secretos**: de una clave de service account solo se guarda la ruta del archivo elegido en **Conexión** (o la que ya tenía el perfil). Se almacenan en `profiles.json`, en la carpeta de configuración del usuario.
 
 ### 6.4 Módulos opcionales
 
@@ -246,7 +248,7 @@ Lo que hay que saber:
 - **Se sigue leyendo por proyecto:** reservas, commitments, sole-tenant, cuotas, metadatos del proyecto (OS Login, claves SSH) y los módulos opcionales, porque CAI no los incluye o no tiene esos datos.
 - **Retraso:** CAI puede tardar unos minutos en reflejar cambios recientes. gMetaData indica que el escaneo usó el modo rápido.
 - **Respaldo:** si CAI falla en un proyecto (permisos, API deshabilitada), ese proyecto se lee con la Compute API y el motivo queda en gErrors.
-- **Permisos:** `roles/cloudasset.viewer` en el ámbito y la Cloud Asset API habilitada en el quota project, en el proyecto de la service account o en el del cliente OAuth.
+- **Permisos:** `roles/cloudasset.viewer` en el ámbito y la Cloud Asset API habilitada en el quota project, en el proyecto de la service account o en el del cliente OAuth. Además, solo funciona con credenciales de gcloud (ADC).
 
 ### 6.6 Coste real (BigQuery)
 
@@ -733,6 +735,7 @@ Cada escaneo de la app se guarda automáticamente en tu equipo como JSON comprim
 - **Con un escaneo seleccionado:** **Abrir en Inventario** lo carga como si acabaras de escanearlo, para verlo o exportarlo. **Comparar con el anterior** lo compara con el escaneo previo.
 - **Con dos seleccionados:** **Comparar** los compara entre sí.
 - **Eliminar del historial** borra los seleccionados, tras confirmar.
+- Si un escaneo no se puede guardar (disco lleno, permisos), la app lo avisa. Si el índice del historial se daña, se reconstruye a partir de los archivos, sin perder escaneos.
 
 Al abrir un escaneo antiguo, las cabeceras se muestran en el idioma activo.
 
@@ -965,7 +968,7 @@ Algunas APIs (Recommender, Cloud Asset Inventory, Cloud Billing Catalog) cargan 
 - **Service account:** su propio proyecto.
 - **Iniciar sesión con Google:** el proyecto del cliente OAuth (el de gceTools, o el de tu organización si usas uno propio).
 
-Ese proyecto debe tener habilitadas las APIs correspondientes.
+Ese proyecto debe tener habilitadas las APIs correspondientes. Recommender y Cloud Asset Inventory solo funcionan con credenciales de gcloud (ADC); con los demás métodos solo se usa el quota project para el catálogo de precios.
 
 ### 17.3 APIs que habilitar
 
@@ -1042,6 +1045,8 @@ Política completa: [PRIVACY.md](../PRIVACY.md).
 | Proyecto "Compute API deshabilitada" | El proyecto no usa Compute Engine | Normal; para no escanearlo, usa **Detectar proyectos con Compute** |
 | Proyecto "Sin permisos" | Falta `roles/compute.viewer` | Asigna el rol en el proyecto o en una carpeta superior |
 | Proyecto "OK (sin osconfig)", "OK (sin recommender)"… | El módulo no está disponible en ese proyecto (API deshabilitada o falta un permiso) | El motivo exacto está en gErrors |
+| "Sin permisos" en todos los proyectos con **Iniciar sesión con Google**, o "insufficient authentication scopes" en gErrors | En la pantalla de Google se desmarcó el permiso de Google Cloud, o la sesión es de una versión anterior a la 0.9 | Cierra sesión y vuelve a iniciarla aceptando todos los permisos; la app lo detecta y lo indica al conectar |
+| Modo rápido, detección, recomendaciones o SO y agentes desactivados, con el aviso "Solo con gcloud (ADC)" | Esas APIs solo aceptan el permiso completo `cloud-platform`, que gceTools no pide | Conéctate con **Credenciales de gcloud (ADC)** |
 | gRecommend vacío con credenciales de usuario | Falta quota project, o no tiene la Recommender API | `gcloud auth application-default set-quota-project <proyecto>` y habilita la API en él |
 | Error de Cloud Asset Inventory al detectar o en modo rápido | Falta `roles/cloudasset.viewer` en el ámbito o la API en el quota project | Asigna el rol o habilita la Cloud Asset API; el modo rápido recurre a la Compute API automáticamente |
 | gPerf sin datos de RAM | Las VMs no tienen Ops Agent | Instala Ops Agent; la regla `no-ops-agent` las señala |
