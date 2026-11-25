@@ -276,6 +276,8 @@ export const en: Record<string, string> = {
   'Versión {0}': 'Version {0}',
   'Licencia {0}': 'License {0}',
   'Sitio web': 'Website',
+  'Manual de uso': 'User manual',
+  'Cada pantalla, opción y comando explicados, con permisos IAM y solución de problemas': 'Every screen, option and command explained, with IAM permissions and troubleshooting',
   'Documentación, novedades y descargas': "Documentation, what's new and downloads",
   'Invítame a un café': 'Buy me a coffee',
   'gceTools es gratuito y de código abierto. Si te ahorra tiempo, puedes apoyar su desarrollo.': 'gceTools is free and open source. If it saves you time, you can support its development.',
