@@ -1,6 +1,6 @@
 # gceTools manual
 
-*Version 0.7 · [Español](manual.md)*
+*Version 0.9.3 · [Español](manual.md)*
 
 gceTools takes a complete inventory of Google Compute Engine, in the style of RVTools for VMware. It reads every project your identity can reach and presents the information in tabs: VMs, disks, networks, snapshots, costs, best-practice findings… From there you can export to Excel, CSV, JSON or an HTML report. There is a desktop application for Windows, macOS and Linux, and a command-line version for scheduled tasks.
 

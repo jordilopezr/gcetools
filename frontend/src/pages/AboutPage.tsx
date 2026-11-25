@@ -1,7 +1,7 @@
 import { api, type AboutInfo, type UpdateInfo } from '../lib/api'
 import { Icon } from '../components/ui'
 import appIcon from '../assets/gcetools-icon.svg'
-import { locale, t } from '../lib/i18n'
+import { getLang, locale, t } from '../lib/i18n'
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'done' | 'error'
@@ -41,6 +41,9 @@ const apiCosts = (): [string, string, string][] => [
   ['GitHub', t('Buscar actualizaciones'), t('Gratis')],
 ]
 
+// the user manual in the repo, in the UI language
+const manualURL = () => `https://github.com/jordilopezr/gcetools/blob/main/docs/${getLang() === 'en' ? 'manual.en.md' : 'manual.md'}`
+
 function fmtDate(iso?: string) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -71,6 +74,12 @@ export default function AboutPage({ about, update, onCheck, autoCheck, setAutoCh
           <span className="title-m">{t('Sitio web')}</span>
           <span className="body-m muted">{t('Documentación, novedades y descargas')}</span>
           <span className="label-l" style={{ color: 'var(--md-primary)' }}>{host(about?.website)} ↗</span>
+        </button>
+        <button className="method" onClick={() => api.openURL(manualURL())}>
+          <span className="method-icon"><Icon name="menu_book" /></span>
+          <span className="title-m">{t('Manual de uso')}</span>
+          <span className="body-m muted">{t('Cada pantalla, opción y comando explicados, con permisos IAM y solución de problemas')}</span>
+          <span className="label-l" style={{ color: 'var(--md-primary)' }}>github.com/jordilopezr/gcetools ↗</span>
         </button>
         <button className="method" onClick={() => about && api.openURL(about.donate)}>
           <span className="method-icon" style={{ background: 'var(--md-warning-container)', color: 'var(--md-on-warning-container)' }}>
