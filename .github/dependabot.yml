@@ -21,6 +21,11 @@ updates:
         update-types: [minor, patch]
       npm-major:
         update-types: [major]
+    ignore:
+      # typescript-eslint only supports typescript <6.1.0 (peer dependency);
+      # newer versions break `npm ci`. Remove once typescript-eslint supports them.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
 
   - package-ecosystem: github-actions
     directory: /
